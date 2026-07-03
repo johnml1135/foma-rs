@@ -7,4 +7,5 @@ assertions (
     {id w1-iface, kind @doing, author "brendan@necessary.nu", at 2026-07-03T13:20:34.414383Z}
     {id w1-constructions, kind @doing, author "brendan@necessary.nu", at 2026-07-03T13:47:37.20452Z}
     {id w1-apply-spelling, kind @doing, author "brendan@necessary.nu", at 2026-07-03T14:19:19.183825Z}
+    {id w1-algorithms, kind @doing, author "brendan@necessary.nu", at 2026-07-03T14:31:34.837013Z}
 )
