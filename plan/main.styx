@@ -205,6 +205,15 @@ children (
                 id w2-constructions
                 title "Translate constructions (FSM algebra)"
                 deps (w2-graph-algorithms)
+                sealed true
+                log (
+                    {
+                        at 2026-07-03T20:02:03.32003Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan complete)"
+                    }
+                )
             }
 
             {
