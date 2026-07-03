@@ -20,3 +20,4 @@ CMake*
 __pycache__/
 target/
 .nplan/
+!crates/foma/src/regex.rs
