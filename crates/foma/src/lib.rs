@@ -5,11 +5,17 @@
 //! mirror the C source files one-to-one and are added as each Wave-2
 //! concern lands.
 
+pub mod constructions;
+pub mod determinize;
 pub mod dynarray;
+pub mod extract;
 pub mod int_stack;
 pub mod mem;
+pub mod minimize;
 pub mod sigma;
+pub mod structures;
 pub mod stringhash;
+pub mod topsort;
 pub mod trie;
 pub mod types;
 pub mod utf8;
