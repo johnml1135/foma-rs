@@ -812,7 +812,7 @@
 
 > [spec:foma:sem:fomalib.fsm-complete-fn]
 > fsm_completes(net, COMPLETE): the identical completion algorithm described under
-> [spec:foma:sem:fomalib.fsm-complement-fn], except final flags are NOT toggled and the sink is
+> `[spec:foma:sem:fomalib.fsm-complement-fn]`, except final flags are NOT toggled and the sink is
 > non-final: a candidate is an existing non-final state with no arcs to other states, else a new
 > non-final state is appended. Result accepts the same language but has, for every state, an
 > outgoing arc for every sigma symbol >= 2 (IDENTITY added to sigma if missing, UNKNOWN removed).
@@ -1166,7 +1166,7 @@
 
 > [spec:foma:sem:fomalib.fsm-epsilon-remove-fn]
 > fsm_subset(net, EPSILON_REMOVE): shares the entire machinery of
-> [spec:foma:sem:fomalib.fsm-determinize-fn] (same pair alphabet, epsilon memoization, subset
+> `[spec:foma:sem:fomalib.fsm-determinize-fn]` (same pair alphabet, epsilon memoization, subset
 > hashing, in-place result) with two differences. (1) Additional fast path: if the machine contains
 > no EPSILON:EPSILON arc, is_epsilon_free is set to YES and net returned untouched (the
 > is_deterministic == YES early return and the already-deterministic fast path also apply). (2) In
@@ -1356,7 +1356,7 @@
 > FEXPORT char *fsm_get_arc_out(struct fsm_read_handle *handle)
 
 > [spec:foma:sem:fomalib.fsm-get-arc-out-fn]
-> Output-side counterpart of [spec:foma:sem:fomalib.fsm-get-arc-in-fn]: NULL if the cursor is unset,
+> Output-side counterpart of `[spec:foma:sem:fomalib.fsm-get-arc-in-fn]`: NULL if the cursor is unset,
 > else the borrowed sigma-list string for cursor->out; no bounds check for out == -1.
 
 > [spec:foma:def:fomalib.fsm-get-arc-source-fn]
@@ -1418,7 +1418,7 @@
 > FEXPORT int fsm_get_next_initial(struct fsm_read_handle *handle)
 
 > [spec:foma:sem:fomalib.fsm-get-next-initial-fn]
-> Identical mechanism to [spec:foma:sem:fomalib.fsm-get-next-final-fn] but over the handle's
+> Identical mechanism to `[spec:foma:sem:fomalib.fsm-get-next-final-fn]` but over the handle's
 > initials array: enumerates the net's start-state numbers in ascending order, returning -1 at
 > exhaustion (and on every call thereafter); own cursor, reset by fsm_read_reset.
 
@@ -1611,7 +1611,7 @@
 > fsm *fsm_kleene_plus(struct fsm *net)
 
 > [spec:foma:sem:fomalib.fsm-kleene-plus-fn]
-> Kleene plus A+: identical construction to [spec:foma:sem:fomalib.fsm-kleene-star-fn] except
+> Kleene plus A+: identical construction to `[spec:foma:sem:fomalib.fsm-kleene-star-fn]` except
 > the new start state 0 is NOT final (so the empty string is accepted only if A accepts it) and
 > finalcount is left unchanged. Consumes net.
 
@@ -1686,7 +1686,7 @@
 
 > [spec:foma:sem:fomalib.fsm-lexc-parse-file-fn]
 > Reads the whole file into memory with file_to_mem (see
-> [spec:foma:sem:fomalib.file-to-mem-fn]) and delegates to fsm_lexc_parse_string with the same
+> `[spec:foma:sem:fomalib.file-to-mem-fn]`) and delegates to fsm_lexc_parse_string with the same
 > verbose flag, returning its result. The file buffer is never freed (leak). There is no NULL
 > check: if file_to_mem fails, NULL is handed to the lexc scanner (undefined behavior).
 
@@ -1759,7 +1759,7 @@
 > fsm *fsm_lowerdeteps(struct fsm *net)
 
 > [spec:foma:sem:fomalib.fsm-lowerdeteps-fn]
-> Same as [spec:foma:sem:fomalib.fsm-lowerdet-fn] except arcs whose output is EPSILON (0) are
+> Same as `[spec:foma:sem:fomalib.fsm-lowerdet-fn]` except arcs whose output is EPSILON (0) are
 > left completely untouched (neither out relabeled nor the in IDENTITY->UNKNOWN replacement
 > applied); the per-state counter still starts at 3 and only advances on relabeled arcs. The
 > dummy-symbol padding computation still counts epsilon-output arcs in maxarc.
@@ -1885,7 +1885,7 @@
 > fsm *fsm_precedes(struct fsm *net1, struct fsm *net2)
 
 > [spec:foma:sem:fomalib.fsm-precedes-fn]
-> Mirror of [spec:foma:sem:fomalib.fsm-follows-fn]: returns ~$[net2 ?* net1], built literally
+> Mirror of `[spec:foma:sem:fomalib.fsm-follows-fn]`: returns ~$[net2 ?* net1], built literally
 > as fsm_complement(fsm_minimize(fsm_contains(fsm_minimize(fsm_concat(fsm_minimize(
 > fsm_copy(net2)), fsm_concat(fsm_universal(), fsm_minimize(fsm_copy(net1)))))))) — the
 > strings containing no occurrence of net2 followed (anywhere later) by an occurrence of net1.
@@ -2001,7 +2001,7 @@
 > Iterator over a multi-network foma binary file. fsrh is an opaque handle from
 > fsm_read_binary_file_multiple_init(filename), which slurps the whole (possibly gzipped) file
 > into memory with a read cursor. Each call parses the next concatenated network from the
-> buffer using the same wire format as [spec:foma:sem:fomalib.fsm-read-binary-file-fn] and
+> buffer using the same wire format as `[spec:foma:sem:fomalib.fsm-read-binary-file-fn]` and
 > returns it (the parsed net name string is freed, not leaked). When parsing fails or the
 > buffer is exhausted, returns NULL and frees the buffer and handle — the handle must not be
 > used again after a NULL return, and there is no way to abandon iteration early without
@@ -2098,7 +2098,7 @@
 
 > [spec:foma:sem:fomalib.fsm-read-spaced-text-file-fn]
 > Builds a network from a text file of space-separated symbol lines using the trie API
-> ([spec:foma:sem:fomalib.fsm-trie-init-fn] etc.). Reads the whole file with file_to_mem
+> (`[spec:foma:sem:fomalib.fsm-trie-init-fn]` etc.). Reads the whole file with file_to_mem
 > (NULL on open error or BOM). Loop: skip blank lines, take one line t1; if the immediately
 > following line t2 is missing or empty, t1 is a one-tape word — each space-separated token
 > becomes a sym:sym trie step, where token "0" means EPSILON:EPSILON and "%0" means the
@@ -2115,7 +2115,7 @@
 > [spec:foma:sem:fomalib.fsm-read-text-file-fn]
 > Builds an acceptor from a word list: reads the whole file with file_to_mem (NULL on open
 > error or BOM), splits it destructively at every '\n', and for each nonempty line calls
-> fsm_trie_add_word ([spec:foma:sem:fomalib.fsm-trie-add-word-fn]) — each word contributes a
+> fsm_trie_add_word (`[spec:foma:sem:fomalib.fsm-trie-add-word-fn]`) — each word contributes a
 > path of sym:sym arcs, one per UTF-8 character. A final line without trailing newline is
 > included. Frees the buffer and returns fsm_trie_done(th), the trie of all words.
 
@@ -2486,7 +2486,7 @@
 
 > [spec:foma:sem:fomalib.fsm-upper-fn]
 > Upper (input-side) projection, in place — exact mirror of
-> [spec:foma:sem:fomalib.fsm-lower-fn]: rebuilds the state array preserving state
+> `[spec:foma:sem:fomalib.fsm-lower-fn]`: rebuilds the state array preserving state
 > numbers/finality/start flags, relabeling every real arc to in:in with in == UNKNOWN (1)
 > mapped to IDENTITY (2). Old array freed; deterministic/pruned/minimized flags cleared
 > (others UNK); sigma_cleanup(net, 0); returns the same net, not determinized.
@@ -2496,7 +2496,7 @@
 
 > [spec:foma:sem:fomalib.fsm-write-binary-file-fn]
 > Serializes net to a gzip-compressed text file in the wire format of
-> [spec:foma:sem:fomalib.fsm-read-binary-file-fn]. Returns 1 if gzopen(filename, "wb") fails,
+> `[spec:foma:sem:fomalib.fsm-read-binary-file-fn]`. Returns 1 if gzopen(filename, "wb") fails,
 > else 0 after writing and closing (note: 0 = success). Emission: "##foma-net 1.0##\n",
 > "##props##\n", the 13-field props line (extras = is_completed | arcs_sorted_in<<2 |
 > arcs_sorted_out<<4; pathcount as %lld; net->name last — a name containing spaces corrupts
@@ -2536,7 +2536,7 @@
 > Loads every network from a (gzipped) multi-net foma binary file into the defined-networks
 > list. Prints "Loading definitions from %s." to stdout; if the file can't be slurped
 > (io_gz_file_to_mem returns 0) prints "File error." to stderr and returns 0. Otherwise
-> repeatedly parses networks (wire format of [spec:foma:sem:fomalib.fsm-read-binary-file-fn])
+> repeatedly parses networks (wire format of `[spec:foma:sem:fomalib.fsm-read-binary-file-fn]`)
 > until NULL, calling add_defined(def, net, name) for each: an existing definition with the
 > same name is replaced (its old net destroyed), otherwise the net is appended (the list's
 > dummy head entry filled first); names longer than 40 bytes (FSM_NAME_LEN) are rejected by
@@ -2603,7 +2603,7 @@
 
 > [spec:foma:sem:fomalib.save-defined-fn]
 > Writes all defined networks to one gzip file (the format of
-> [spec:foma:sem:fomalib.fsm-write-binary-file-fn], networks concatenated). def == NULL →
+> `[spec:foma:sem:fomalib.fsm-write-binary-file-fn]`, networks concatenated). def == NULL →
 > "No defined networks." on stderr, return 0. gzopen failure → error printf, return -1.
 > Prints "Writing definitions to file %s."; for each list entry: entries with a NULL net are
 > skipped with a message; otherwise the definition name is strncpy'd into net->name
@@ -2655,7 +2655,7 @@
 
 > [spec:foma:sem:fomalib.sh-find-string-fn]
 > Looks up a string in the intern hash: walks the bucket chain for sh_hashf(string) (see
-> [spec:foma:sem:fomalib.sh-add-string-fn] for the hash); a node whose stored string is NULL
+> `[spec:foma:sem:fomalib.sh-add-string-fn]` for the hash); a node whose stored string is NULL
 > (only possible for an unused bucket head) ends the search with NULL; a strcmp match sets
 > sh->lastvalue to the entry's stored value (retrievable via sh_get_value) and returns the
 > interned string pointer; chain exhaustion returns NULL.

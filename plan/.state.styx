@@ -4,4 +4,5 @@ assertions (
     {id w1-structures, kind @doing, author "brendan@necessary.nu", at 2026-07-03T00:38:47.336194Z}
     {id w1-fomalib-api, kind @doing, author "brendan@necessary.nu", at 2026-07-03T00:54:05.328867Z}
     {id w1-core-headers, kind @doing, author "brendan@necessary.nu", at 2026-07-03T10:45:05.262983Z}
+    {id w1-iface, kind @doing, author "brendan@necessary.nu", at 2026-07-03T13:20:34.414383Z}
 )
