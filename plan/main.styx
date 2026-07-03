@@ -145,6 +145,15 @@ children (
             {
                 id w2-scaffold
                 title "Cargo workspace, core header types (fsm/sigma/apply handles), porting conventions"
+                sealed true
+                log (
+                    {
+                        at 2026-07-03T15:30:20.396846Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan complete)"
+                    }
+                )
             }
 
             {
