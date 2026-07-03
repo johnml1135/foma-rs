@@ -15,4 +15,5 @@ assertions (
     {id w2-structures-dynarray, kind @complete, author "brendan@necessary.nu", at 2026-07-03T16:08:00.054531Z}
     {id w2-graph-algorithms, kind @complete, author "brendan@necessary.nu", at 2026-07-03T18:37:06.984988Z}
     {id w2-constructions, kind @complete, author "brendan@necessary.nu", at 2026-07-03T20:02:03.32003Z}
+    {id w2-flags-define-rewrite, kind @doing, author "brendan@necessary.nu", at 2026-07-03T20:02:15.238543Z}
 )

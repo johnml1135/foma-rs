@@ -7,12 +7,14 @@
 
 pub mod constructions;
 pub mod determinize;
+pub mod define;
 pub mod dynarray;
 pub mod coaccessible;
 pub mod extract;
 pub mod flags;
 pub mod int_stack;
 pub mod mem;
+pub mod regex;
 pub mod reverse;
 pub mod rewrite;
 pub mod minimize;
