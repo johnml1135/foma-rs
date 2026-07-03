@@ -175,6 +175,15 @@ children (
                 id w2-structures-dynarray
                 title "Translate structures, dynarray"
                 deps (w2-base-utils)
+                sealed true
+                log (
+                    {
+                        at 2026-07-03T16:08:00.054531Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan complete)"
+                    }
+                )
             }
 
             {
