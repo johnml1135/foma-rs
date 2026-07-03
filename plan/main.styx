@@ -13,46 +13,127 @@ children (
             {
                 id w1-fomalib-api
                 title "sem pass: fomalib.md (199 public API functions)"
+                sealed true
+                log (
+                    {
+                        at 2026-07-03T15:10:24.140525Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan complete)"
+                    }
+                )
             }
 
             {
                 id w1-core-headers
                 title "sem pass: foma.md + fomalibconf.md (188 internal API functions)"
+                sealed true
+                log (
+                    {
+                        at 2026-07-03T15:10:24.166903Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan complete)"
+                    }
+                )
             }
 
             {
                 id w1-iface
                 title "sem pass: iface.md (108 CLI interface functions)"
+                sealed true
+                log (
+                    {
+                        at 2026-07-03T15:10:24.192596Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan complete)"
+                    }
+                )
             }
 
             {
                 id w1-constructions
                 title "sem pass: constructions.md (71 FSM construction functions)"
+                sealed true
+                log (
+                    {
+                        at 2026-07-03T15:10:24.2159Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan complete)"
+                    }
+                )
             }
 
             {
                 id w1-apply-spelling
                 title "sem pass: apply.md + spelling.md (73 runtime apply/spellcheck functions)"
+                sealed true
+                log (
+                    {
+                        at 2026-07-03T15:10:24.239014Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan complete)"
+                    }
+                )
             }
 
             {
                 id w1-structures
                 title "sem pass: structures/dynarray/stack/int_stack/stringhash/trie/mem (120 data-structure functions)"
+                sealed true
+                log (
+                    {
+                        at 2026-07-03T15:10:24.105478Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan complete)"
+                    }
+                )
             }
 
             {
                 id w1-algorithms
                 title "sem pass: determinize/minimize/sigma/utf8/topsort/reverse/coaccessible/extract (72 algorithm functions)"
+                sealed true
+                log (
+                    {
+                        at 2026-07-03T15:10:24.261906Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan complete)"
+                    }
+                )
             }
 
             {
                 id w1-io-lexc
                 title "sem pass: io/lexcread/lexc/flookup/cgflookup (76 IO and lexc functions)"
+                sealed true
+                log (
+                    {
+                        at 2026-07-03T15:10:24.284118Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan complete)"
+                    }
+                )
             }
 
             {
                 id w1-rewrite-flags-define
                 title "sem pass: rewrite/flags/define (40 rewrite-rule and flag functions)"
+                sealed true
+                log (
+                    {
+                        at 2026-07-03T15:10:24.305672Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan complete)"
+                    }
+                )
             }
         )
     }
