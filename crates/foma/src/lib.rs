@@ -5,4 +5,11 @@
 //! mirror the C source files one-to-one and are added as each Wave-2
 //! concern lands.
 
+pub mod dynarray;
+pub mod int_stack;
+pub mod mem;
+pub mod sigma;
+pub mod stringhash;
+pub mod trie;
 pub mod types;
+pub mod utf8;

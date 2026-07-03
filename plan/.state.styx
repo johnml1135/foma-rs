@@ -11,4 +11,5 @@ assertions (
     {id w1-io-lexc, kind @complete, author "brendan@necessary.nu", at 2026-07-03T15:10:24.284118Z}
     {id w1-rewrite-flags-define, kind @complete, author "brendan@necessary.nu", at 2026-07-03T15:10:24.305672Z}
     {id w2-scaffold, kind @complete, author "brendan@necessary.nu", at 2026-07-03T15:30:20.396846Z}
+    {id w2-base-utils, kind @doing, author "brendan@necessary.nu", at 2026-07-03T15:30:54.118017Z}
 )
