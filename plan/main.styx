@@ -137,4 +137,74 @@ children (
             }
         )
     }
+
+    {
+        id wave-2-translate
+        title "Wave 2: translate — 1:1 bug-for-bug Rust port of all 1020 symbols"
+        children (
+            {
+                id w2-scaffold
+                title "Cargo workspace, core header types (fsm/sigma/apply handles), porting conventions"
+            }
+
+            {
+                id w2-base-utils
+                title "Translate mem, utf8, int_stack, stringhash, trie, sigma"
+                deps (w2-scaffold)
+            }
+
+            {
+                id w2-structures-dynarray
+                title "Translate structures, dynarray"
+                deps (w2-base-utils)
+            }
+
+            {
+                id w2-graph-algorithms
+                title "Translate determinize, minimize, topsort, reverse, coaccessible, extract"
+                deps (w2-structures-dynarray)
+            }
+
+            {
+                id w2-constructions
+                title "Translate constructions (FSM algebra)"
+                deps (w2-graph-algorithms)
+            }
+
+            {
+                id w2-flags-define-rewrite
+                title "Translate flags, define, rewrite"
+                deps (w2-constructions)
+            }
+
+            {
+                id w2-apply-spelling
+                title "Translate apply, spelling (runtime)"
+                deps (w2-constructions)
+            }
+
+            {
+                id w2-io
+                title "Translate io (binary/AT&T/prolog formats)"
+                deps (w2-structures-dynarray)
+            }
+
+            {
+                id w2-lexcread
+                title "Translate lexcread + lexc surface (wire nfst-lexc)"
+                deps (w2-constructions)
+            }
+
+            {
+                id w2-cli
+                title "Translate iface, foma CLI, stack, flookup, cgflookup (wire nfst-xre/nfst-xfst)"
+                deps (
+                    w2-apply-spelling
+                    w2-flags-define-rewrite
+                    w2-io
+                    w2-lexcread
+                )
+            }
+        )
+    }
 )
