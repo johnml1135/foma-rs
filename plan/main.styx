@@ -220,6 +220,15 @@ children (
                 id w2-flags-define-rewrite
                 title "Translate flags, define, rewrite"
                 deps (w2-constructions)
+                sealed true
+                log (
+                    {
+                        at 2026-07-03T23:01:52.077868Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan complete)"
+                    }
+                )
             }
 
             {
