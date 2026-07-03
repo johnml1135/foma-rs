@@ -8,9 +8,11 @@
 pub mod constructions;
 pub mod determinize;
 pub mod dynarray;
+pub mod coaccessible;
 pub mod extract;
 pub mod int_stack;
 pub mod mem;
+pub mod reverse;
 pub mod minimize;
 pub mod sigma;
 pub mod structures;

@@ -1,13 +1,210 @@
-//! foma/topsort.c — stubs only (per docs/port/rust-conventions.md).
+//! foma/topsort.c — literal (bug-for-bug) Wave-2 port per
+//! docs/port/rust-conventions.md. Sem rules: docs/spec/port/foma/topsort.md
+//! (per-file ids) plus the fomalib.h prototype ids.
 //!
-//! Called by structures.rs; the real port lands with the
-//! w2-graph-algorithms concern, which replaces this stub and adds the spec
-//! annotations. C: `struct fsm *fsm_topsort(struct fsm *net)` — sorts in
-//! place and returns the same net (consume-and-return convention).
+//! fsm_topsort renumbers states in topological order (Kahn's algorithm over
+//! inverse-arc counts) while counting accepting paths. invcount stays an
+//! `unsigned short` (u16) and silently wraps past 65535 in-arcs, exactly as
+//! in C; states unreachable from state 0 make the net be misreported as
+//! cyclic (documented quirk).
 
-use crate::types::Fsm;
+use crate::constructions::{add_fsm_arc, fsm_count};
+use crate::int_stack::{int_stack_clear, int_stack_isempty, int_stack_pop, int_stack_push};
+use crate::types::{Fsm, FsmState, PATHCOUNT_CYCLIC, PATHCOUNT_OVERFLOW};
 
+// [spec:foma:def:topsort.fsm-topsort-fn]
+// [spec:foma:sem:topsort.fsm-topsort-fn]
+// [spec:foma:def:fomalib.fsm-topsort-fn]
+// [spec:foma:sem:fomalib.fsm-topsort-fn]
 pub fn fsm_topsort(net: Box<Fsm>) -> Box<Fsm> {
-    let _ = net;
-    todo!("ported by w2-graph-algorithms")
+    /* We topologically sort the network by looking for a state          */
+    /* with inverse count 0. We then examine all the arcs from that      */
+    /* state, and decrease the target invcounts. If we find a new        */
+    /* state with invcount 0, we push that on the stack to be treated    */
+    /* If the graph is cyclic, one of two things will happen:            */
+
+    /* (1) We fail to find a state with invcount 0 before we've treated  */
+    /*     all states                                                    */
+    /* (2) A state under treatment has an arc to a state already treated */
+    /*     or itself (we mark a state as treated as soon as we start     */
+    /*     working on it).                                               */
+    /* Of course we also count the number of paths in the network.       */
+
+    let mut net = net;
+
+    /* C: if (net == NULL) { return NULL; } — a Box argument is never
+    NULL; NULL-able callers keep the check at the call site */
+
+    fsm_count(&mut net);
+
+    /* C: fsm = net->states — reads below index net.states directly */
+
+    let mut statemap: Vec<i32> = vec![-1; net.statecount as usize];
+    let mut order: Vec<i32> = vec![0; net.statecount as usize];
+    let mut pathcount: Vec<i64> = vec![0; net.statecount as usize];
+    /* C mallocs newnum uninitialized; only entries of treated states are
+    ever read back */
+    let mut newnum: Vec<i32> = vec![0; net.statecount as usize];
+    let mut invcount: Vec<u16> = vec![0; net.statecount as usize];
+    let mut treated: Vec<u8> = vec![0; net.statecount as usize];
+
+    /* the vec! initializers above subsume C's explicit init loop over
+    statemap/invcount/treated/order/pathcount */
+
+    let mut lc: i32 = 0;
+
+    /* goto cyclic → break 'cyclic (cleanup after the block, as in C) */
+    'cyclic: {
+        let mut i: i32 = 0;
+        while net.states[i as usize].state_no != -1 {
+            lc += 1;
+            if net.states[i as usize].target != -1 {
+                let target = net.states[i as usize].target;
+                /* unsigned short in-degree: >65535 in-arcs wraps silently */
+                invcount[target as usize] = invcount[target as usize].wrapping_add(1);
+                /* Do a fast check here to see if we have a selfloop */
+                if net.states[i as usize].state_no == target {
+                    net.pathcount = PATHCOUNT_CYCLIC;
+                    net.is_loop_free = 0;
+                    break 'cyclic;
+                }
+            }
+            if statemap[net.states[i as usize].state_no as usize] == -1 {
+                statemap[net.states[i as usize].state_no as usize] = i;
+            }
+            i += 1;
+        }
+
+        let mut treatcount = net.statecount;
+        int_stack_clear();
+        int_stack_push(0);
+        let mut grand_pathcount: i64 = 0;
+
+        pathcount[0] = 1;
+
+        let mut overflow: u8 = 0;
+        let mut i: i32 = 0;
+        while int_stack_isempty() == 0 {
+            /* Treat a state */
+            let curr_state = int_stack_pop();
+            treated[curr_state as usize] = 1;
+            order[i as usize] = curr_state;
+            newnum[curr_state as usize] = i;
+
+            treatcount -= 1;
+            let mut curr_fsm = statemap[curr_state as usize] as usize;
+            while net.states[curr_fsm].state_no == curr_state {
+                if net.states[curr_fsm].target != -1 {
+                    let target = net.states[curr_fsm].target;
+                    invcount[target as usize] = invcount[target as usize].wrapping_sub(1);
+
+                    /* Check if we overflow the path counter */
+
+                    if overflow == 0 {
+                        /* C: signed 64-bit addition; overflow observed as wrap */
+                        pathcount[target as usize] =
+                            pathcount[target as usize].wrapping_add(pathcount[curr_state as usize]);
+                        if pathcount[target as usize] < 0 {
+                            overflow = 1;
+                        }
+                    }
+
+                    /* Case (1) for cyclic */
+                    if treated[target as usize] == 1 {
+                        net.pathcount = PATHCOUNT_CYCLIC;
+                        net.is_loop_free = 0;
+                        break 'cyclic;
+                    }
+                    if invcount[target as usize] == 0 {
+                        int_stack_push(target);
+                    }
+                }
+                curr_fsm += 1;
+            }
+            i += 1;
+        }
+
+        /* Case (2) */
+        if treatcount > 0 {
+            net.pathcount = PATHCOUNT_CYCLIC;
+            net.is_loop_free = 0;
+            break 'cyclic;
+        }
+
+        /* C: malloc(sizeof(struct fsm_state) * (lc+1)), uninitialized;
+        written by add_fsm_arc below */
+        let mut new_fsm: Vec<FsmState> = vec![
+            FsmState {
+                state_no: 0,
+                r#in: 0,
+                out: 0,
+                target: 0,
+                final_state: 0,
+                start_state: 0,
+            };
+            (lc + 1) as usize
+        ];
+        let mut j: i32 = 0;
+        let mut i: i32 = 0;
+        while i < net.statecount {
+            let curr_state = order[i as usize];
+            let mut curr_fsm = statemap[curr_state as usize] as usize;
+
+            if net.states[curr_fsm].final_state == 1 && overflow == 0 {
+                grand_pathcount = grand_pathcount.wrapping_add(pathcount[curr_state as usize]);
+                if grand_pathcount < 0 {
+                    overflow = 1;
+                }
+            }
+
+            while net.states[curr_fsm].state_no == curr_state {
+                let newstate = if net.states[curr_fsm].state_no == -1 {
+                    -1
+                } else {
+                    newnum[net.states[curr_fsm].state_no as usize]
+                };
+                let newtarget = if net.states[curr_fsm].target == -1 {
+                    -1
+                } else {
+                    newnum[net.states[curr_fsm].target as usize]
+                };
+                let (r#in, out) = (
+                    net.states[curr_fsm].r#in as i32,
+                    net.states[curr_fsm].out as i32,
+                );
+                let (final_state, start_state) = (
+                    net.states[curr_fsm].final_state as i32,
+                    net.states[curr_fsm].start_state as i32,
+                );
+                add_fsm_arc(
+                    &mut new_fsm,
+                    j,
+                    newstate,
+                    r#in,
+                    out,
+                    newtarget,
+                    final_state,
+                    start_state,
+                );
+                j += 1;
+                curr_fsm += 1;
+            }
+            i += 1;
+        }
+
+        add_fsm_arc(&mut new_fsm, j, -1, -1, -1, -1, -1, -1);
+        /* net->states = new_fsm; ... free(fsm) — the old array is dropped
+        by the assignment */
+        net.states = new_fsm;
+        net.pathcount = grand_pathcount;
+        net.is_loop_free = 1;
+        if overflow == 1 {
+            net.pathcount = PATHCOUNT_OVERFLOW;
+        }
+    }
+
+    /* cyclic: free(statemap/order/pathcount/newnum/invcount/treated) —
+    dropped on return */
+    int_stack_clear();
+    net
 }
