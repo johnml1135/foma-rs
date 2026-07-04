@@ -391,10 +391,15 @@ pub struct FsmSigmaHash {
 }
 
 // [spec:foma:def:fomalibconf.fsm-read-binary-handle]
-// C: typedef void *fsm_read_binary_handle — an opaque handle (in practice an
-// io.c io_buf_handle pointer cast to void *). Kept as a literal opaque
-// pointer alias; the io concern owns the functions that create/consume it.
-pub type FsmReadBinaryHandle = *mut core::ffi::c_void;
+// C: typedef void *fsm_read_binary_handle — an opaque handle that, at every
+// foma call site, points to an io.c io_buf_handle. The literal port (owned by
+// the io concern) refines the raw void* into a thin owning wrapper around that
+// handle. io_buf_handle is declared inside io.c, so its Rust twin
+// (crate::io::IoBufHandle) lives in the io module.
+#[derive(Debug)]
+pub struct FsmReadBinaryHandle {
+    pub iobh: Box<crate::io::IoBufHandle>,
+}
 
 // [spec:foma:def:fomalibconf.fsm-construct-handle]
 #[derive(Debug, Clone)]
