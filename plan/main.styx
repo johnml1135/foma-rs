@@ -235,18 +235,45 @@ children (
                 id w2-apply-spelling
                 title "Translate apply, spelling (runtime)"
                 deps (w2-constructions)
+                sealed true
+                log (
+                    {
+                        at 2026-07-04T11:46:02.073469Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Todo → Done (nplan complete)"
+                    }
+                )
             }
 
             {
                 id w2-io
                 title "Translate io (binary/AT&T/prolog formats)"
                 deps (w2-structures-dynarray)
+                sealed true
+                log (
+                    {
+                        at 2026-07-04T11:46:02.101408Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Todo → Done (nplan complete)"
+                    }
+                )
             }
 
             {
                 id w2-lexcread
                 title "Translate lexcread + lexc surface (wire nfst-lexc)"
                 deps (w2-constructions)
+                sealed true
+                log (
+                    {
+                        at 2026-07-04T11:46:02.132901Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan complete)"
+                    }
+                )
             }
 
             {

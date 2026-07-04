@@ -1094,19 +1094,19 @@ pub fn io_net_read(iobh: &mut IoBufHandle) -> Option<(Box<Fsm>, String)> {
     }
 
     if buf == "##cmatrix##" {
-        /* BLOCKED: cmatrix_init lives in foma/spelling.c → spelling.rs, owned by
-        another Wave-2 concern (not yet landed). The concern boundary forbids
-        stubbing it here, so this branch diverges. Literal C body to reproduce
-        once cmatrix_init exists:
-            cmatrix_init(net);
-            cm = net->medlookup->confusion_matrix;
-            for (;;) {
-                io_gets(iobh, buf);
-                if (buf[0] == '#') break;
-                sscanf(buf, "%i", &i);   // *cm = i; cm++
+        crate::spelling::cmatrix_init(&mut net);
+        let mut cm = 0usize;
+        loop {
+            io_gets(iobh, buf);
+            if buf.starts_with('#') {
+                break;
             }
-        (No bounds check on cm in C — a matrix overrun writes OOB.) */
-        todo!("io.io-net-read-fn ##cmatrix## branch depends on cmatrix_init (spelling concern)");
+            let val: i32 = buf.trim().parse().unwrap_or(0);
+            /* DEVIATION from C (no bounds check on cm; a matrix overrun writes
+            OOB — Rust panics on the index instead) */
+            net.medlookup.as_mut().unwrap().confusion_matrix[cm] = val;
+            cm += 1;
+        }
     }
     if buf != "##end##" {
         print!("File format error!\n");
