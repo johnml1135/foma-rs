@@ -6,3 +6,17 @@ license.workspace = true
 
 [dependencies]
 flate2 = { workspace = true }
+nfst-lexc = { workspace = true }
+nfst-xre = { workspace = true }
+
+[[bin]]
+name = "flookup"
+path = "src/bin/flookup.rs"
+
+[[bin]]
+name = "cgflookup"
+path = "src/bin/cgflookup.rs"
+
+[[bin]]
+name = "foma"
+path = "src/bin/foma.rs"

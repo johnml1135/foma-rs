@@ -656,7 +656,11 @@ pub struct StackEntry {
     pub ah: Option<Box<ApplyHandle>>,
     pub amedh: Option<Box<ApplyMedHandle>>,
     pub fsm: Option<Box<Fsm>>,
-    pub next: Option<Box<StackEntry>>,
-    // DEVIATION from C (doubly-linked back-pointer aliases nodes owned via `next`; safe Rust cannot hold both — the stack concern must maintain backward traversal without populating this as a second owner)
-    pub previous: Option<Box<StackEntry>>,
+    // DEVIATION from C (the doubly-linked list is stored in a thread_local arena
+    // in crate::stack; `next`/`previous` are arena indices — "struct stack_entry *"
+    // pointer walks become index walks — not owning Box pointers, since safe Rust
+    // cannot express a Box that is both forward-owned via `next` and back-aliased
+    // via `previous`. None ↔ NULL. See crate::stack for the sentinel discipline.)
+    pub next: Option<usize>,
+    pub previous: Option<usize>,
 }

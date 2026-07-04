@@ -17,16 +17,19 @@
 use std::cell::RefCell;
 
 use crate::constructions::{add_fsm_arc, fsm_update_flags};
+use crate::define::{G_DEFINES, add_defined};
 use crate::determinize::fsm_determinize;
+use crate::io::file_to_mem;
 use crate::mem::{G_LEXC_ALIGN, G_VERBOSE};
 use crate::minimize::fsm_minimize;
+use crate::regex::fsm_parse_regex;
 use crate::sigma::{
     sigma_add, sigma_add_special, sigma_cleanup, sigma_create, sigma_find, sigma_find_number,
     sigma_max, sigma_sort,
 };
 use crate::structures::{fsm_create, fsm_empty_set};
 use crate::topsort::fsm_topsort;
-use crate::types::{EPSILON, Fsm, FsmState, IDENTITY, Sigma, UNK, UNKNOWN};
+use crate::types::{DefinedNetworks, EPSILON, Fsm, FsmState, IDENTITY, Sigma, UNK, UNKNOWN};
 use crate::utf8::{utf8skip, utf8strlen};
 
 const SIGMA_HASH_TABLESIZE: usize = 3079;
@@ -1590,7 +1593,10 @@ pub fn lexc_to_fsm() -> Box<Fsm> {
         let mut fsm: Vec<FsmState> = vec![default_line; (linecount + 1) as usize];
         let mut i = 0i32;
         for j in 0..statecount {
-            let (state, sfinal, sstart) = sa[j];
+            /* sa[num] was stored as (state, start, final); C calls
+            add_fsm_arc(..., s[j].final, s[j].start), so bind so that
+            `sfinal` = the final flag and `sstart` = the start flag. */
+            let (state, sstart, sfinal) = sa[j];
             if lx.state_arena[state].trans.is_none() {
                 add_fsm_arc(
                     &mut fsm,
@@ -1704,4 +1710,220 @@ pub fn lexc_trim(s: &mut [u8]) {
         j += 1;
     }
     s[j] = s[i];
+}
+
+/* ------------------------------------------------------------------ */
+/* lexc lexer driver (foma/lexc.l): fsm_lexc_parse_string / _file      */
+/* ------------------------------------------------------------------ */
+
+/* lexc.l: #define SOURCE_LEXICON 0 / #define TARGET_LEXICON 1 */
+const SOURCE_LEXICON: i32 = 0;
+const TARGET_LEXICON: i32 = 1;
+
+/// Build a NUL-terminated byte buffer from a symbol string, exactly as the C
+/// lexer's `lexctext` reaches the lexcread API (used for lexicon names and
+/// continuations, which the C passes through `lexc_trim` — already trimmed by
+/// nfst-lexc — and NOT through `%` de-escaping).
+fn to_cbuf(s: &str) -> Vec<u8> {
+    let mut v = s.as_bytes().to_vec();
+    v.push(0);
+    v
+}
+
+/// Re-escape a de-escaped nfst-lexc identifier back into the `%`-escaped form
+/// the C lexer's `lexctext` would have carried into `lexc_set_current_word` /
+/// `lexc_add_mc` (both of which run `lexc_deescape_string` themselves).
+///
+/// nfst-lexc already stripped `%X`→`X`, and encoded `%0` (foma's escaped
+/// literal zero) as the marker `@ZERO@`. Its NAME_CH set excludes `< % ! ; : "`
+/// and whitespace, so any of those in the stored string can only have come from
+/// an escape — but of those only `%` and `:` are meaningful to the two API
+/// functions (`:` is the pair delimiter, `%` the escape char), so only they
+/// need re-escaping. `@ZERO@` is mapped back to `%0`. Trailing NUL slack is
+/// appended so the in-place `lexc_deescape_string` never reads past the end.
+fn foma_reescape(s: &str) -> Vec<u8> {
+    let mut out = Vec::with_capacity(s.len() + 4);
+    let mut rest = s;
+    while !rest.is_empty() {
+        if let Some(r) = rest.strip_prefix("@ZERO@") {
+            out.extend_from_slice(b"%0");
+            rest = r;
+            continue;
+        }
+        let c = rest.chars().next().unwrap();
+        match c {
+            '%' => out.extend_from_slice(b"%%"),
+            ':' => out.extend_from_slice(b"%:"),
+            _ => {
+                let mut buf = [0u8; 4];
+                out.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
+            }
+        }
+        rest = &rest[c.len_utf8()..];
+    }
+    out.extend_from_slice(&[0u8; 4]);
+    out
+}
+
+// [spec:foma:def:fomalib.fsm-lexc-parse-string-fn]
+// [spec:foma:sem:fomalib.fsm-lexc-parse-string-fn]
+pub fn fsm_lexc_parse_string(string: &str, verbose: i32) -> Option<Box<Fsm>> {
+    use std::io::Write;
+    /* The `verbose` parameter is ignored, exactly as in C (the warnings key off
+    the global g_verbose, read inside lexc_number_states/lexc_to_fsm). */
+    let _ = verbose;
+
+    /* olddefines = g_defines. The C never repoints g_defines, so the save is a
+    no-op and any Definitions-section nets persist in g_defines after the call;
+    reproduced by taking the box out (so nested fsm_parse_regex sees the same
+    registry via the passed parameter, not the thread_local) and restoring it. */
+    let mut olddefines: Option<Box<DefinedNetworks>> =
+        G_DEFINES.with(|d| d.borrow_mut().take());
+
+    /* lexentries = -1; lexclineno = 1; lexc_init() */
+    let mut lexentries: i32 = -1;
+    lexc_init();
+
+    /* lexclex(): the flex scanner is replaced by nfst-lexc; its return code is
+    modelled as `syntax_error` (the C returns 1 on the <*>(.) error rule). */
+    let mut syntax_error = false;
+
+    match nfst_lexc::parse(string) {
+        Ok(file) => {
+            let f = &file.value;
+
+            /* foma's lexc.l has no NOFLAGS section: a "NOFLAGS" token hits the
+            <*>(.) syntax-error rule. nfst-lexc accepts it (an HFST feature), so
+            reject here to stay faithful (see report). */
+            if !f.noflags.is_empty() {
+                eprintln!("***lexc: NOFLAGS section is not supported by foma");
+                G_DEFINES.with(|d| *d.borrow_mut() = olddefines.take());
+                return None;
+            }
+
+            /* <MCS>{NONRESERVED}+ { lexc_add_mc(lexctext); } */
+            for m in &f.multichars {
+                let mut sym = foma_reescape(&m.value.0);
+                lexc_add_mc(&mut sym);
+            }
+
+            /* <DEFREGEX>[\073] { if (my_yyparse(...,g_defines,...)==0)
+                 add_defined(g_defines, fsm_topsort(fsm_minimize(current_parse)),
+                             tempstr); } */
+            for d in &f.definitions {
+                let body = nfst_xre::pretty_print(&d.value.body);
+                if let Some(net) = fsm_parse_regex(&body, olddefines.as_deref_mut(), None) {
+                    let net = fsm_topsort(net);
+                    if let Some(defs) = olddefines.as_deref_mut() {
+                        add_defined(defs, Some(net), &d.value.name);
+                    }
+                }
+            }
+
+            for lex in &f.lexicons {
+                /* <*>(LEXICON|Lexicon){SPACE}+{NONRESERVED}+ */
+                if lexentries != -1 {
+                    print!("{}, ", lexentries);
+                }
+                print!("{}...", lex.value.name);
+                let _ = std::io::stdout().flush();
+                lexentries = 0;
+                let name = to_cbuf(&lex.value.name);
+                lexc_set_current_lexicon(&name, SOURCE_LEXICON);
+
+                for entry in &lex.value.entries {
+                    /* The gloss ("info" string) is discarded by the C lexer
+                    (EATUPINFO state), so entry.value.gloss is ignored. */
+                    match &entry.value.spec {
+                        nfst_lexc::EntrySpec::Empty => {
+                            /* No word token: current word stays the epsilon left
+                            by the preceding lexc_clear_current_word. */
+                        }
+                        nfst_lexc::EntrySpec::String(s) => {
+                            let mut w = foma_reescape(s);
+                            lexc_set_current_word(&mut w);
+                        }
+                        nfst_lexc::EntrySpec::Pair { upper, lower } => {
+                            /* Rebuild the raw `upper:lower` token the C matched:
+                            re-escape each side, join with a bare `:` so
+                            lexc_set_current_word splits it back. */
+                            let mut w = foma_reescape(upper);
+                            let padlen = w.len() - 4;
+                            w.truncate(padlen);
+                            w.push(b':');
+                            w.extend_from_slice(&foma_reescape(lower));
+                            lexc_set_current_word(&mut w);
+                        }
+                        nfst_lexc::EntrySpec::Regex(xre) => {
+                            /* <REGEX>[\076] { if (my_yyparse(...)==0)
+                                 lexc_set_network(current_parse); } */
+                            let r = nfst_xre::pretty_print(xre);
+                            if let Some(net) =
+                                fsm_parse_regex(&r, olddefines.as_deref_mut(), None)
+                            {
+                                lexc_set_network(net);
+                            }
+                        }
+                    }
+
+                    /* The continuation token drives the target lexicon + word:
+                    lexc_trim; lexc_set_current_lexicon(TARGET); lexc_add_word();
+                    lexc_clear_current_word(); lexentries++. */
+                    let cont = to_cbuf(&entry.value.continuation);
+                    lexc_set_current_lexicon(&cont, TARGET_LEXICON);
+                    lexc_add_word();
+                    lexc_clear_current_word();
+                    lexentries += 1;
+                    if lexentries % 10000 == 0 {
+                        print!("{}...", lexentries);
+                        let _ = std::io::stdout().flush();
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            /* The C prints "\n***Syntax error on line %i column %i at '%s'\n"
+            and returns 1; line/column/text are not recoverable from nfst-lexc,
+            so emit its first diagnostic instead (see report). lexc_to_fsm is
+            still called below, as in C. */
+            syntax_error = true;
+            let msg = e
+                .diagnostics
+                .first()
+                .map(|d| d.message.clone())
+                .unwrap_or_else(|| "syntax error".to_string());
+            eprintln!("\n***Syntax error: {}", msg);
+        }
+    }
+
+    /* if (lexclex() != 1) { if (lexentries != -1) printf("%i\n", lexentries); } */
+    if !syntax_error && lexentries != -1 {
+        println!("{}", lexentries);
+    }
+
+    /* g_defines = olddefines */
+    G_DEFINES.with(|d| *d.borrow_mut() = olddefines.take());
+
+    /* return lexc_to_fsm() */
+    Some(lexc_to_fsm())
+}
+
+// [spec:foma:def:fomalib.fsm-lexc-parse-file-fn]
+// [spec:foma:sem:fomalib.fsm-lexc-parse-file-fn]
+pub fn fsm_lexc_parse_file(filename: &str, verbose: i32) -> Option<Box<Fsm>> {
+    /* mystring = file_to_mem(filename); return fsm_lexc_parse_string(mystring,
+    verbose). The C never frees mystring (documented leak); here the buffer is a
+    Vec that drops at scope end — an observable no-op. */
+    let mystring = match file_to_mem(filename) {
+        Some(v) => v,
+        /* C has no NULL check and hands NULL to the scanner (undefined
+        behavior); file_to_mem already printed the error. DEVIATION from C: a
+        null pointer cannot be reconstructed safely, so return None. */
+        None => return None,
+    };
+    /* file_to_mem appends a terminating NUL; strip it (and any BOM-free tail of
+    trailing NULs) before handing the text to the parser. */
+    let end = mystring.iter().position(|&b| b == 0).unwrap_or(mystring.len());
+    let text = String::from_utf8_lossy(&mystring[..end]);
+    fsm_lexc_parse_string(&text, verbose)
 }

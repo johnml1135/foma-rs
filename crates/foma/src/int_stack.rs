@@ -173,3 +173,13 @@ pub fn int_stack_isfull() -> i32 {
 // fomalibconf.int-stack-status-fn) but no definition exists anywhere in the
 // C sources — it is a dead prototype and is deliberately NOT ported (no
 // implementation is invented for it).
+
+/* Dead prototype: declared in fomalibconf.h but never defined in any C
+source. Calling it in C is a link error. DEVIATION from C (panics to
+preserve the never-callable contract). */
+
+// [spec:foma:def:fomalibconf.int-stack-status-fn]
+// [spec:foma:sem:fomalibconf.int-stack-status-fn]
+pub fn int_stack_status() -> i32 {
+    panic!("int_stack_status: dead prototype in C foma (declared, never defined; link error)");
+}

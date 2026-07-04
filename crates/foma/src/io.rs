@@ -1454,3 +1454,13 @@ pub fn file_to_mem(name: &str) -> Option<Vec<u8>> {
     content.push(0);
     Some(content)
 }
+
+/* Dead prototype: declared in fomalib.h but never defined in any C source.
+Calling it in C is a link error. DEVIATION from C (panics to preserve the
+never-callable contract). */
+
+// [spec:foma:def:fomalib.save-stack-att-fn]
+// [spec:foma:sem:fomalib.save-stack-att-fn]
+pub fn save_stack_att() -> i32 {
+    panic!("save_stack_att: dead prototype in C foma (declared, never defined; link error)");
+}

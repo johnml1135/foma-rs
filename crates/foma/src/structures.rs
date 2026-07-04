@@ -1500,3 +1500,20 @@ pub fn fsm_logical_eq(string1: &str, string2: &str) -> Box<Fsm> {
         ),
     )
 }
+
+/* Dead prototypes: declared in fomalib.h but never defined in any C source.
+Calling them in C is a link error. DEVIATION from C (Rust has no
+declaration-without-definition; these panic to preserve the never-callable
+contract). */
+
+// [spec:foma:def:fomalib.fsm-find-ambiguous-fn]
+// [spec:foma:sem:fomalib.fsm-find-ambiguous-fn]
+pub fn fsm_find_ambiguous(_net: Box<Fsm>) -> Box<Fsm> {
+    panic!("fsm_find_ambiguous: dead prototype in C foma (declared, never defined; link error)");
+}
+
+// [spec:foma:def:fomalib.fsm-mark-ambiguous-fn]
+// [spec:foma:sem:fomalib.fsm-mark-ambiguous-fn]
+pub fn fsm_mark_ambiguous(_net: Box<Fsm>) -> Box<Fsm> {
+    panic!("fsm_mark_ambiguous: dead prototype in C foma (declared, never defined; link error)");
+}
