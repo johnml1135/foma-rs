@@ -285,6 +285,15 @@ children (
                     w2-io
                     w2-lexcread
                 )
+                sealed true
+                log (
+                    {
+                        at 2026-07-04T18:47:20.274291Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan complete)"
+                    }
+                )
             }
         )
     }
