@@ -1927,3 +1927,792 @@ pub fn fsm_lexc_parse_file(filename: &str, verbose: i32) -> Option<Box<Fsm>> {
     let text = String::from_utf8_lossy(&mystring[..end]);
     fsm_lexc_parse_string(&text, verbose)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::apply::{
+        apply_down, apply_init, apply_lower_words, apply_up, apply_upper_words, apply_words,
+    };
+
+    /* ---- helpers -------------------------------------------------------- */
+
+    /// NUL-terminated buffer for a lexicon/continuation name (no de-escape).
+    fn cbuf(s: &str) -> Vec<u8> {
+        let mut v = s.as_bytes().to_vec();
+        v.push(0);
+        v
+    }
+
+    /// NUL-terminated word buffer with trailing slack so the in-place
+    /// de-escapers (which may read name[i+1] past a trailing escape) stay in
+    /// bounds.
+    fn wbuf(s: &str) -> Vec<u8> {
+        let mut v = s.as_bytes().to_vec();
+        v.extend_from_slice(&[0u8; 8]);
+        v
+    }
+
+    /// Compile a lexc source string (verbose off is irrelevant — g_verbose is a
+    /// separate global; the parse string ignores its own `verbose` arg).
+    fn compile(src: &str) -> Box<Fsm> {
+        fsm_lexc_parse_string(src, 0).expect("compile produced a net")
+    }
+
+    fn lower_all(net: &Fsm) -> Vec<String> {
+        let mut h = apply_init(net);
+        let mut v = Vec::new();
+        let mut r = apply_lower_words(&mut h);
+        while let Some(s) = r {
+            v.push(s);
+            r = apply_lower_words(&mut h);
+        }
+        v.sort();
+        v.dedup();
+        v
+    }
+
+    fn upper_all(net: &Fsm) -> Vec<String> {
+        let mut h = apply_init(net);
+        let mut v = Vec::new();
+        let mut r = apply_upper_words(&mut h);
+        while let Some(s) = r {
+            v.push(s);
+            r = apply_upper_words(&mut h);
+        }
+        v.sort();
+        v.dedup();
+        v
+    }
+
+    fn words_all(net: &Fsm) -> Vec<String> {
+        let mut h = apply_init(net);
+        let mut v = Vec::new();
+        let mut r = apply_words(&mut h);
+        while let Some(s) = r {
+            v.push(s);
+            r = apply_words(&mut h);
+        }
+        v.sort();
+        v.dedup();
+        v
+    }
+
+    fn down_one(net: &Fsm, w: &str) -> Option<String> {
+        let mut h = apply_init(net);
+        apply_down(&mut h, Some(w))
+    }
+
+    fn up_one(net: &Fsm, w: &str) -> Option<String> {
+        let mut h = apply_init(net);
+        apply_up(&mut h, Some(w))
+    }
+
+    /* Drive one word entry Root -> "#" through the public trie API. */
+    fn add_word_entry(word: &str) {
+        let mut buf = wbuf(word);
+        lexc_set_current_word(&mut buf);
+        lexc_set_current_lexicon(&cbuf("#"), TARGET_LEXICON);
+        lexc_add_word();
+        lexc_clear_current_word();
+    }
+
+    /* ---- end-to-end (fsm_lexc_parse_string + apply) --------------------- */
+
+    // Root + `#` termination, identity words, continuation-class LIFO trie:
+    // exercises the whole driver (init -> set_current_lexicon/word -> add_word
+    // -> clear -> to_fsm -> number_states -> merge_states -> cleanup).
+    // [spec:foma:sem:fomalib.fsm-lexc-parse-string-fn/test]
+    // [spec:foma:sem:lexcread.lexc-to-fsm-fn/test]
+    // [spec:foma:sem:lexc.lexc-to-fsm-fn/test]
+    #[test]
+    fn e2e_basic_root_and_hash() {
+        let net = compile("LEXICON Root\ncat # ;\ndog # ;\n");
+        assert_eq!(lower_all(&net), vec!["cat", "dog"]);
+        assert_eq!(upper_all(&net), vec!["cat", "dog"]);
+    }
+
+    // A cross-lexicon continuation (Root -> N) concatenates prefixes.
+    // [spec:foma:sem:lexcread.lexc-set-current-lexicon-fn/test]
+    // [spec:foma:sem:lexc.lexc-set-current-lexicon-fn/test]
+    #[test]
+    fn e2e_continuation_class() {
+        let net = compile("LEXICON Root\nbig N ;\nLEXICON N\ncat # ;\ndog # ;\n");
+        assert_eq!(lower_all(&net), vec!["bigcat", "bigdog"]);
+    }
+
+    // Pair entry `cat:dog`: upper and lower projections differ.
+    // [spec:foma:sem:lexcread.lexc-set-current-word-fn/test]
+    // [spec:foma:sem:lexc.lexc-set-current-word-fn/test]
+    #[test]
+    fn e2e_pair_entry() {
+        let net = compile("LEXICON Root\ncat:dog # ;\n");
+        assert_eq!(upper_all(&net), vec!["cat"]);
+        assert_eq!(lower_all(&net), vec!["dog"]);
+        assert_eq!(down_one(&net, "cat").as_deref(), Some("dog"));
+        assert_eq!(up_one(&net, "dog").as_deref(), Some("cat"));
+    }
+
+    // Multichar symbols declared + longest-first tokenization: `+PlPoss` must
+    // win over its prefix `+Pl` (mc list is kept in decreasing length order).
+    // [spec:foma:sem:lexcread.lexc-add-mc-fn/test]
+    // [spec:foma:sem:lexc.lexc-add-mc-fn/test]
+    #[test]
+    fn e2e_multichar_longest_first() {
+        let net = compile(
+            "Multichar_Symbols +Pl +PlPoss\nLEXICON Root\nx+Pl # ;\ny+PlPoss # ;\n",
+        );
+        assert_eq!(upper_all(&net), vec!["x+Pl", "y+PlPoss"]);
+    }
+
+    // `%`-escape: `a%:b` is the literal three-symbol string a : b (identity),
+    // not a pair split at the colon.
+    // [spec:foma:sem:lexcread.lexc-find-delim-fn/test]
+    // [spec:foma:sem:lexcread.lexc-deescape-string-fn/test]
+    #[test]
+    fn e2e_percent_escape_colon() {
+        let net = compile("LEXICON Root\na%:b # ;\n");
+        assert_eq!(upper_all(&net), vec!["a:b"]);
+        assert_eq!(lower_all(&net), vec!["a:b"]);
+    }
+
+    // `0` as epsilon: `a:0` = a:eps, `0:b` = eps:b — projections drop epsilon.
+    // [spec:foma:sem:lexcread.lexc-string-to-tokens-fn/test]
+    #[test]
+    fn e2e_zero_is_epsilon() {
+        let net = compile("LEXICON Root\na:0 # ;\n0:b # ;\n");
+        assert_eq!(upper_all(&net), vec!["", "a"]);
+        assert_eq!(lower_all(&net), vec!["", "b"]);
+    }
+
+    // `< regex >` entry: the parsed net is spliced between source and target.
+    // [spec:foma:sem:lexcread.lexc-set-network-fn/test]
+    // [spec:foma:sem:lexc.lexc-set-network-fn/test]
+    // [spec:foma:sem:lexcread.lexc-add-network-fn/test]
+    #[test]
+    fn e2e_regex_entry() {
+        let net = compile("LEXICON Root\n< a (b) c > # ;\n");
+        assert_eq!(words_all(&net), vec!["abc", "ac"]);
+    }
+
+    // `< a ? >` (identity/unknown) plus a later word `b` introducing a new
+    // symbol: lexc_update_unknowns patches the @-arc so `ab` is also matched.
+    // [spec:foma:sem:lexcread.lexc-update-unknowns-fn/test]
+    #[test]
+    fn e2e_regex_unknown_symbols() {
+        let net = compile("LEXICON Root\n< a ? > # ;\nb # ;\n");
+        let low = lower_all(&net);
+        // C `read lexc` gives 4 paths: b, aa, ab, a@ (@ = other/unknown).
+        assert_eq!(low.len(), 4);
+        assert!(low.contains(&"aa".to_string()));
+        assert!(low.contains(&"ab".to_string()));
+        assert!(low.contains(&"b".to_string()));
+    }
+
+    // Definitions section + use inside a `< regex >` entry. As in the REPL,
+    // g_defines is an initialized (dummy-head) registry before parsing.
+    // [spec:foma:sem:fomalib.fsm-lexc-parse-string-fn/test]
+    #[test]
+    fn e2e_definitions_section() {
+        crate::define::G_DEFINES
+            .with(|d| *d.borrow_mut() = Some(crate::define::defined_networks_init()));
+        let net = compile("Definitions\nV = a | e | i | o | u ;\nLEXICON Root\n< V V > # ;\n");
+        assert_eq!(words_all(&net).len(), 25);
+    }
+
+    // Info ("gloss") string is discarded by the lexer (EATUPINFO).
+    // [spec:foma:sem:lexc.lexc-add-word-fn/test]
+    #[test]
+    fn e2e_infostring_discarded() {
+        let net = compile("LEXICON Root\ncat # \"a feline\" ;\n");
+        assert_eq!(lower_all(&net), vec!["cat"]);
+    }
+
+    // Undefined continuation class: the net is still built (the dead-end
+    // lexicon has has_outgoing==0 so number_states makes it final).
+    // [spec:foma:sem:lexcread.lexc-number-states-fn/test]
+    #[test]
+    fn e2e_undefined_continuation() {
+        let net = compile("LEXICON Root\ncat Nonexistent ;\ndog # ;\n");
+        assert_eq!(lower_all(&net), vec!["cat", "dog"]);
+    }
+
+    // No Root lexicon: the first-mentioned lexicon becomes the start state.
+    // [spec:foma:sem:lexcread.lexc-number-states-fn/test]
+    #[test]
+    fn e2e_no_root_lexicon() {
+        let net = compile("LEXICON First\nhi # ;\n");
+        assert_eq!(lower_all(&net), vec!["hi"]);
+    }
+
+    // `#` never reached -> fsm_empty_set() (0 paths).
+    // [spec:foma:sem:lexcread.lexc-to-fsm-fn/test]
+    // [spec:foma:sem:lexc.lexc-to-fsm-fn/test]
+    #[test]
+    fn e2e_hash_never_reached_empty() {
+        let net = compile("LEXICON Root\ncat Root ;\n");
+        assert_eq!(net.finalcount, 0);
+        assert_eq!(lower_all(&net), Vec::<String>::new());
+    }
+
+    /* ---- fsm_lexc_parse_file -------------------------------------------- */
+
+    // Parse via a temp file; a nonexistent path returns None (DEVIATION: C
+    // hands NULL to the scanner).
+    // [spec:foma:sem:fomalib.fsm-lexc-parse-file-fn/test]
+    #[test]
+    fn parse_file_roundtrip_and_missing() {
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("foma_lexc_test_{}.lexc", std::process::id()));
+        std::fs::write(&path, "LEXICON Root\ncat # ;\n").unwrap();
+        let net = fsm_lexc_parse_file(path.to_str().unwrap(), 0).expect("file parsed");
+        assert_eq!(lower_all(&net), vec!["cat"]);
+        std::fs::remove_file(&path).ok();
+
+        assert!(fsm_lexc_parse_file("/no/such/foma/lexc/file.xyz", 0).is_none());
+    }
+
+    /* ---- direct API: hashing -------------------------------------------- */
+
+    // djb2 with signed-char sign extension, % 3079. Values derived offline.
+    // [spec:foma:sem:lexcread.lexc-symbol-hash-fn/test]
+    #[test]
+    fn symbol_hash_signed_char() {
+        assert_eq!(lexc_symbol_hash(b"a\0"), 2167);
+        assert_eq!(lexc_symbol_hash(b"cat\0"), 686);
+        assert_eq!(lexc_symbol_hash(b"+Noun\0"), 211);
+        assert_eq!(lexc_symbol_hash(b"\0"), 2302);
+        // High byte (0xC3 0xA9 = "é"): signed-char extension gives 1551, not
+        // the unsigned-byte value 1018 — pins the sign-extension quirk.
+        assert_eq!(lexc_symbol_hash(&[0xC3, 0xA9, 0]), 1551);
+    }
+
+    // PJW-style suffix fold over cwordin|cwordout<<8, no table modulus.
+    // [spec:foma:sem:lexcread.lexc-suffix-hash-fn/test]
+    #[test]
+    fn suffix_hash_values() {
+        LEXC.with_borrow_mut(|lx| {
+            lx.cwordin[0] = 3;
+            lx.cwordin[1] = 4;
+            lx.cwordin[2] = -1;
+            lx.cwordout[0] = 3;
+            lx.cwordout[1] = 4;
+            lx.cwordout[2] = -1;
+            assert_eq!(lexc_suffix_hash(lx, 0), 13364);
+            assert_eq!(lexc_suffix_hash(lx, 1), 1028);
+            lx.cwordin[0] = 5;
+            lx.cwordin[1] = -1;
+            lx.cwordout[0] = 7;
+            lx.cwordout[1] = -1;
+            assert_eq!(lexc_suffix_hash(lx, 0), 1797);
+        });
+    }
+
+    // Add/find in the sigma hashtable: head fill, chain append (no dedup ->
+    // shadowed entry), find returns the head match, miss -> -1.
+    // [spec:foma:sem:lexcread.lexc-add-sigma-hash-fn/test]
+    // [spec:foma:sem:lexcread.lexc-find-sigma-hash-fn/test]
+    #[test]
+    fn sigma_hash_add_find_shadow() {
+        lexc_init();
+        LEXC.with_borrow_mut(|lx| {
+            assert_eq!(lexc_find_sigma_hash(lx, b"a\0"), -1);
+            lexc_add_sigma_hash(lx, b"a\0", 7);
+            lexc_add_sigma_hash(lx, b"a\0", 99); // shadow appended to tail
+            let bucket = lexc_symbol_hash(b"a\0") as usize;
+            assert_eq!(lx.hashtable[bucket].symbol.as_deref(), Some("a"));
+            assert_eq!(lx.hashtable[bucket].sigma_number, 7);
+            assert!(lx.hashtable[bucket].next.is_some());
+            assert_eq!(lexc_find_sigma_hash(lx, b"a\0"), 7); // head wins
+            assert_eq!(lexc_find_sigma_hash(lx, b"zzz\0"), -1);
+        });
+    }
+
+    /* ---- direct API: string helpers ------------------------------------- */
+
+    // First unescaped delimiter; escape protects the next byte; a lone
+    // trailing escape does not skip.
+    // [spec:foma:sem:lexcread.lexc-find-delim-fn/test]
+    #[test]
+    fn find_delim_cases() {
+        assert_eq!(lexc_find_delim(b"a:b\0", b':', b'%'), Some(1));
+        assert_eq!(lexc_find_delim(b"a%:b\0\0", b':', b'%'), None);
+        assert_eq!(lexc_find_delim(b"ab\0", b':', b'%'), None);
+        assert_eq!(lexc_find_delim(b"a%\0", b':', b'%'), None);
+    }
+
+    // De-escape quirks: escaped char kept literally; mode-1 '0' -> 0xff marker;
+    // mode-0 unescaped '0' silently deleted; trailing escape truncates.
+    // [spec:foma:sem:lexcread.lexc-deescape-string-fn/test]
+    #[test]
+    fn deescape_string_quirks() {
+        let mut a = wbuf("a%:b");
+        lexc_deescape_string(&mut a, b'%', 1);
+        assert_eq!(cstr(&a), b"a:b");
+
+        let mut b = wbuf("a0b");
+        lexc_deescape_string(&mut b, b'%', 1); // mode 1: 0 -> 0xff
+        assert_eq!(cstr(&b), &[b'a', 0xff, b'b']);
+
+        let mut c = wbuf("a0b");
+        lexc_deescape_string(&mut c, b'%', 0); // mode 0: 0 deleted
+        assert_eq!(cstr(&c), b"ab");
+
+        let mut d = wbuf("ab%"); // trailing escape swallows the NUL
+        lexc_deescape_string(&mut d, b'%', 1);
+        assert_eq!(cstr(&d), b"ab");
+    }
+
+    // Always NUL-terminates; stops early on a copied NUL; writes len+1 bytes.
+    // [spec:foma:sem:lexcread.mystrncpy-fn/test]
+    #[test]
+    fn mystrncpy_terminates() {
+        let mut dst = [0xAAu8; 8];
+        mystrncpy(&mut dst, b"cat", 3);
+        assert_eq!(&dst[..4], b"cat\0");
+        let mut dst2 = [0xAAu8; 8];
+        mystrncpy(&mut dst2, b"hi\0zz", 5);
+        assert_eq!(&dst2[..3], b"hi\0");
+    }
+
+    // lexc_trim: strip trailing ;/=/space/tab, then leading space/tab/nl;
+    // empty / all-trimmable input must not underrun (bounded at 0).
+    // [spec:foma:sem:lexc.lexc-trim-fn/test]
+    #[test]
+    fn trim_cases() {
+        let mut a = wbuf("  cat ;;  ");
+        lexc_trim(&mut a);
+        assert_eq!(cstr(&a), b"cat");
+        let mut e = wbuf("");
+        lexc_trim(&mut e); // no underrun
+        assert_eq!(cstr(&e), b"");
+        let mut f = wbuf("===");
+        lexc_trim(&mut f);
+        assert_eq!(cstr(&f), b"");
+    }
+
+    /* ---- direct API: tokenization --------------------------------------- */
+
+    // Multichar longest-first, %-marked epsilon (0xff), and fresh-sigma
+    // numbering (first regular symbol = 3).
+    // [spec:foma:sem:lexcread.lexc-string-to-tokens-fn/test]
+    // [spec:foma:sem:lexcread.lexc-find-mc-fn/test]
+    // [spec:foma:sem:lexc.lexc-find-mc-fn/test]
+    #[test]
+    fn string_to_tokens_multichar_and_epsilon() {
+        lexc_init();
+        // register +Pl (len 3) then +PlPoss (len 7): mc list -> longest first
+        lexc_add_mc(&mut wbuf("+Pl")); // sigma 3
+        lexc_add_mc(&mut wbuf("+PlPoss")); // sigma 4
+        assert_eq!(lexc_find_mc(b"+Pl\0"), 1);
+        assert_eq!(lexc_find_mc(b"+Nope\0"), 0);
+        LEXC.with_borrow_mut(|lx| {
+            // mc list head is the longest symbol
+            let head = lx.mc.unwrap();
+            assert_eq!(lx.mc_arena[head].symbol.as_deref(), Some("+PlPoss"));
+
+            let mut arr = [0i32; 1000];
+            lexc_string_to_tokens(lx, b"+PlPoss", &mut arr);
+            assert_eq!(&arr[..2], &[4, -1]); // longest match wins
+
+            let mut arr2 = [0i32; 1000];
+            lexc_string_to_tokens(lx, b"+Plx", &mut arr2); // +Pl then new 'x'=5
+            assert_eq!(&arr2[..3], &[3, 5, -1]);
+
+            // 0xff marker -> EPSILON(0)
+            let mut arr3 = [0i32; 1000];
+            lexc_string_to_tokens(lx, &[b'a', 0xff, b'a'], &mut arr3);
+            assert_eq!(arr3[1], EPSILON);
+        });
+    }
+
+    // Malformed UTF-8 (leading 0x80) -> utf8skip == -1 -> i never advances ->
+    // intarr overflow (DEVIATION: C corrupts memory, Rust panics on OOB).
+    // [spec:foma:sem:lexcread.lexc-string-to-tokens-fn/test]
+    #[test]
+    #[should_panic]
+    fn string_to_tokens_infinite_loop_panics() {
+        lexc_init();
+        LEXC.with_borrow_mut(|lx| {
+            let mut arr = [0i32; 1000];
+            lexc_string_to_tokens(lx, &[0x80u8, 0], &mut arr);
+        });
+    }
+
+    /* ---- direct API: alignment ------------------------------------------ */
+
+    // Tail-pad the shorter side with EPSILON; empty:empty -> single eps pair.
+    // [spec:foma:sem:lexcread.lexc-pad-fn/test]
+    #[test]
+    fn pad_shapes() {
+        LEXC.with_borrow_mut(|lx| {
+            lx.cwordin[..3].copy_from_slice(&[3, 4, -1]);
+            lx.cwordout[..2].copy_from_slice(&[5, -1]);
+            lexc_pad(lx);
+            assert_eq!(&lx.cwordin[..3], &[3, 4, -1]);
+            assert_eq!(&lx.cwordout[..3], &[5, EPSILON, -1]);
+
+            lx.cwordin[0] = -1;
+            lx.cwordout[0] = -1;
+            lexc_pad(lx);
+            assert_eq!(&lx.cwordin[..2], &[EPSILON, -1]);
+            assert_eq!(&lx.cwordout[..2], &[EPSILON, -1]);
+        });
+    }
+
+    // Min-edit alignment: unequal symbols never substitute (cost 100), so
+    // a->b becomes eps:b, a:eps; equal symbols align on the diagonal.
+    // [spec:foma:sem:lexcread.lexc-medpad-fn/test]
+    #[test]
+    fn medpad_shapes() {
+        LEXC.with_borrow_mut(|lx| {
+            lx.cwordin[..2].copy_from_slice(&[3, -1]);
+            lx.cwordout[..2].copy_from_slice(&[4, -1]);
+            lexc_medpad(lx);
+            assert_eq!(&lx.cwordin[..3], &[EPSILON, 3, -1]);
+            assert_eq!(&lx.cwordout[..3], &[4, EPSILON, -1]);
+
+            lx.cwordin[..3].copy_from_slice(&[3, 4, -1]);
+            lx.cwordout[..3].copy_from_slice(&[3, 4, -1]);
+            lexc_medpad(lx);
+            assert_eq!(&lx.cwordin[..3], &[3, 4, -1]);
+            assert_eq!(&lx.cwordout[..3], &[3, 4, -1]);
+        });
+    }
+
+    /* ---- direct API: set_current_word ----------------------------------- */
+
+    // Pair split at unescaped ':', carity=2, identity copy for carity=1.
+    // [spec:foma:sem:lexcread.lexc-set-current-word-fn/test]
+    // [spec:foma:sem:lexc.lexc-set-current-word-fn/test]
+    // [spec:foma:sem:lexcread.lexc-clear-current-word-fn/test]
+    // [spec:foma:sem:lexc.lexc-clear-current-word-fn/test]
+    #[test]
+    fn set_current_word_pair_and_identity() {
+        lexc_init();
+        lexc_set_current_word(&mut wbuf("cat:dog"));
+        LEXC.with_borrow(|lx| {
+            assert_eq!(lx.carity, 2);
+            assert_eq!(&lx.cwordin[..4], &[3, 4, 5, -1]); // c a t
+            assert_eq!(&lx.cwordout[..4], &[6, 7, 8, -1]); // d o g
+        });
+        lexc_clear_current_word();
+        LEXC.with_borrow(|lx| {
+            assert_eq!(&lx.cwordin[..2], &[EPSILON, -1]);
+            assert_eq!(lx.current_entry, WORD_ENTRY);
+        });
+        lexc_set_current_word(&mut wbuf("cat"));
+        LEXC.with_borrow(|lx| {
+            assert_eq!(lx.carity, 1);
+            assert_eq!(&lx.cwordin[..4], &[3, 4, 5, -1]);
+            assert_eq!(&lx.cwordout[..4], &[3, 4, 5, -1]); // identity copy
+        });
+    }
+
+    /* ---- direct API: lexicons & states ---------------------------------- */
+
+    // init resets the tables; create/reuse a lexicon; source vs target; a dead
+    // lexicon lookup.
+    // [spec:foma:sem:lexcread.lexc-init-fn/test]
+    // [spec:foma:sem:lexc.lexc-init-fn/test]
+    // [spec:foma:sem:lexcread.lexc-set-current-lexicon-fn/test]
+    // [spec:foma:sem:lexc.lexc-set-current-lexicon-fn/test]
+    // [spec:foma:sem:lexcread.lexc-add-state-fn/test]
+    // [spec:foma:sem:lexcread.lexc-find-lex-state-fn/test]
+    // [spec:foma:sem:lexc.lexc-find-lex-state-fn/test]
+    #[test]
+    fn init_and_set_current_lexicon() {
+        lexc_init();
+        LEXC.with_borrow(|lx| {
+            assert_eq!(lx.hashtable.len(), SIGMA_HASH_TABLESIZE);
+            assert_eq!(lx.mchash.len(), 256 * 256);
+            assert!(lx.lexsigma.is_some());
+            assert_eq!(lx.lexc_statecount, 0);
+            assert_eq!(lx.hashtable[0].sigma_number, -1);
+        });
+        assert!(lexc_find_lex_state(b"Root\0").is_none());
+        lexc_set_current_lexicon(&cbuf("Root"), SOURCE_LEXICON);
+        LEXC.with_borrow(|lx| {
+            // one lexstate + one state registered; clexicon set, has_outgoing=1
+            assert_eq!(lx.lexstates_arena.len(), 1);
+            assert_eq!(lx.lexc_statecount, 1);
+            let l = lx.clexicon.unwrap();
+            assert_eq!(lx.lexstates_arena[l].has_outgoing, 1);
+            assert_eq!(lx.lexstates_arena[l].name.as_deref(), Some("Root"));
+        });
+        assert!(lexc_find_lex_state(b"Root\0").is_some());
+        // target reuse of a fresh name creates a second lexicon
+        lexc_set_current_lexicon(&cbuf("N"), TARGET_LEXICON);
+        LEXC.with_borrow(|lx| {
+            assert_eq!(lx.lexstates_arena.len(), 2);
+            assert_eq!(lx.lexstates_arena[lx.ctarget.unwrap()].has_outgoing, 0);
+        });
+        // re-selecting Root as source reuses the same lexstate (no growth)
+        lexc_set_current_lexicon(&cbuf("Root"), SOURCE_LEXICON);
+        LEXC.with_borrow(|lx| assert_eq!(lx.lexstates_arena.len(), 2));
+    }
+
+    // Prefix sharing (trie): a second word sharing a prefix follows existing
+    // transitions and adds no new state.
+    // [spec:foma:sem:lexcread.lexc-add-word-fn/test]
+    // [spec:foma:sem:lexc.lexc-add-word-fn/test]
+    #[test]
+    fn add_word_prefix_sharing() {
+        lexc_init();
+        lexc_set_current_lexicon(&cbuf("Root"), SOURCE_LEXICON);
+        add_word_entry("cat");
+        let after_cat = LEXC.with_borrow(|lx| lx.state_arena.len());
+        add_word_entry("car"); // shares "ca" prefix -> no new state
+        let after_car = LEXC.with_borrow(|lx| lx.state_arena.len());
+        assert_eq!(after_cat, after_car);
+        // followed prefix states were demoted to mergeable == 0
+        LEXC.with_borrow(|lx| {
+            let root = lx.lexstates_arena[lx.clexicon.unwrap()].state;
+            let t = lx.state_arena[root].trans.unwrap();
+            let s1 = lx.trans_arena[t].target; // 'c' target
+            assert_eq!(lx.state_arena[s1].mergeable, 0);
+        });
+    }
+
+    /* ---- direct API: eq_paths ------------------------------------------- */
+
+    // Identical single-arc suffix chains ending in the same lexstate compare
+    // equal; a label mismatch compares unequal.
+    // [spec:foma:sem:lexcread.lexc-eq-paths-fn/test]
+    #[test]
+    fn eq_paths_match_and_mismatch() {
+        LEXC.with_borrow_mut(|lx| {
+            // lexicon terminal state (index 0)
+            lx.lexstates_arena.push(Lexstates {
+                name: Some("#".into()),
+                state: 0,
+                next: None,
+                targeted: 0,
+                has_outgoing: 0,
+            });
+            let dest = push_state(lx, Some(0));
+            let a = push_chain(lx, 5, 5, dest); // (5:5) -> dest
+            let b = push_chain(lx, 5, 5, dest);
+            let c = push_chain(lx, 6, 6, dest); // different label
+            assert_eq!(lexc_eq_paths(lx, a, b), 1);
+            assert_eq!(lexc_eq_paths(lx, a, c), 0);
+        });
+    }
+
+    // Null trans deref: eq_paths on two non-lexicon states with no transition
+    // panics (DEVIATION: C dereferences NULL).
+    // [spec:foma:sem:lexcread.lexc-eq-paths-fn/test]
+    #[test]
+    #[should_panic]
+    fn eq_paths_null_trans_panics() {
+        LEXC.with_borrow_mut(|lx| {
+            let a = push_state(lx, None);
+            let b = push_state(lx, None);
+            lexc_eq_paths(lx, a, b);
+        });
+    }
+
+    /* ---- direct API: merge_states --------------------------------------- */
+
+    // Suffix merge shrinks the trie: cat + bat share tail "at", so two suffix
+    // states are marked deleted (mergeable == 2); language preserved.
+    // [spec:foma:sem:lexcread.lexc-merge-states-fn/test]
+    #[test]
+    fn merge_states_shared_suffix() {
+        lexc_init();
+        lexc_set_current_lexicon(&cbuf("Root"), SOURCE_LEXICON);
+        add_word_entry("cat");
+        add_word_entry("bat");
+        LEXC.with_borrow_mut(|lx| {
+            lexc_merge_states(lx);
+            let deleted = lx
+                .state_arena
+                .iter()
+                .filter(|s| s.mergeable == 2)
+                .count();
+            assert_eq!(deleted, 2); // the "at" and "t" states of one branch
+        });
+        // whole compile still yields both words
+        let net = compile("LEXICON Root\ncat # ;\nbat # ;\n");
+        assert_eq!(lower_all(&net), vec!["bat", "cat"]);
+    }
+
+    // DEVIATION repro: when the deleted cell is the statelist head, C assigns
+    // `statelist = s` (the freed cell) not `s->next`; the arena keeps that head
+    // deterministically with its `next` intact ("usually works").
+    // [spec:foma:sem:lexcread.lexc-merge-states-fn/test]
+    #[test]
+    fn merge_states_head_use_after_free_repro() {
+        LEXC.with_borrow_mut(|lx| {
+            // lexicon terminal DEST = state 0
+            lx.lexstates_arena.push(Lexstates {
+                name: Some("#".into()),
+                state: 0,
+                next: None,
+                targeted: 0,
+                has_outgoing: 0,
+            });
+            let dest = push_state(lx, Some(0)); // 0
+            // survivor chain X0 -(a)-> X1 -(b)-> DEST
+            let x1 = push_suffix(lx, 20, 1, dest, 2, 2); // state 2, dist 1
+            let x0 = push_suffix(lx, 10, 2, x1, 1, 1); // state 1, dist 2
+            // loser chain Y0 -(a)-> Y1 -(b)-> DEST (same labels/hashes)
+            let y1 = push_suffix(lx, 20, 1, dest, 2, 2); // dist 1
+            let y0 = push_suffix(lx, 10, 2, y1, 1, 1); // dist 2
+
+            // statelist head = Y1 (a loser-chain interior node)
+            let head = push_sl(lx, y1); // cell 0
+            let c_x0 = push_sl(lx, x0); // cell 1
+            let c_x1 = push_sl(lx, x1); // cell 2
+            let c_y0 = push_sl(lx, y0); // cell 3
+            let c_dest = push_sl(lx, dest); // cell 4
+            lx.statelist_arena[head].next = Some(c_x0);
+            lx.statelist_arena[c_x0].next = Some(c_x1);
+            lx.statelist_arena[c_x1].next = Some(c_y0);
+            lx.statelist_arena[c_y0].next = Some(c_dest);
+            lx.statelist = Some(head);
+            lx.maxlen = 2;
+
+            lexc_merge_states(lx);
+
+            // loser chain deleted, survivor kept, redirect recorded
+            assert_eq!(lx.state_arena[y0].mergeable, 2);
+            assert_eq!(lx.state_arena[y1].mergeable, 2);
+            assert_eq!(lx.state_arena[x0].mergeable, 1);
+            assert_eq!(lx.state_arena[y0].merge_with, x0);
+            // the head still points at the "freed" cell, next intact
+            assert_eq!(lx.statelist, Some(head));
+            assert_eq!(lx.statelist_arena[head].next, Some(c_x0));
+            // the interior loser cell was unlinked (X1 -> DEST)
+            assert_eq!(lx.statelist_arena[c_x1].next, Some(c_dest));
+        });
+    }
+
+    /* ---- direct API: number_states -------------------------------------- */
+
+    // "#"-collision quirk: smax is Root's list position, not the state count,
+    // so when Root is not the first-created state, "#" gets a number that
+    // collides with one assigned sequentially.
+    // [spec:foma:sem:lexcread.lexc-number-states-fn/test]
+    #[test]
+    fn number_states_hash_collision_bug() {
+        LEXC.with_borrow_mut(|lx| {
+            // three lexicon states: First(0), Root(1), #(2)
+            for (i, nm) in ["First", "Root", "#"].iter().enumerate() {
+                lx.lexstates_arena.push(Lexstates {
+                    name: Some((*nm).into()),
+                    state: i,
+                    next: None,
+                    targeted: 1,
+                    has_outgoing: 1,
+                });
+                let s = push_state(lx, Some(i));
+                assert_eq!(s, i);
+            }
+            lx.lexstates_arena[2].has_outgoing = 0; // '#' is a target-only leaf
+            // statelist order [#, Root, First] (reverse creation)
+            let c_h = push_sl(lx, 2);
+            let c_r = push_sl(lx, 1);
+            let c_f = push_sl(lx, 0);
+            lx.statelist_arena[c_h].next = Some(c_r);
+            lx.statelist_arena[c_r].next = Some(c_f);
+            lx.statelist = Some(c_h);
+            // link lexstates list so the warning loop has something to walk
+            lx.lexstates = Some(0);
+
+            lexc_number_states(lx);
+
+            assert_eq!(lx.hasfinal, 1);
+            assert_eq!(lx.state_arena[1].number, 0); // Root
+            // smax = Root's position = 2, so '#' = smax-1 = 1 ...
+            assert_eq!(lx.state_arena[2].number, 1);
+            // ... and First is numbered sequentially to the SAME value (bug)
+            assert_eq!(lx.state_arena[0].number, 1);
+        });
+    }
+
+    /* ---- direct API: cleanup -------------------------------------------- */
+
+    // Frees every compile table (arenas emptied), lexsigma left for the net.
+    // [spec:foma:sem:lexcread.lexc-cleanup-fn/test]
+    #[test]
+    fn cleanup_empties_arenas() {
+        lexc_init();
+        lexc_set_current_lexicon(&cbuf("Root"), SOURCE_LEXICON);
+        add_word_entry("cat");
+        LEXC.with_borrow_mut(|lx| {
+            assert!(!lx.state_arena.is_empty());
+            lexc_cleanup(lx);
+            assert!(lx.state_arena.is_empty());
+            assert!(lx.trans_arena.is_empty());
+            assert!(lx.statelist_arena.is_empty());
+            assert!(lx.lexstates_arena.is_empty());
+            assert!(lx.mc_arena.is_empty());
+            assert!(lx.hashtable.is_empty());
+            assert!(lx.mchash.is_empty());
+            assert_eq!(lx.statelist, None);
+        });
+    }
+
+    /* ---- arena construction helpers (tests only) ------------------------ */
+
+    fn push_state(lx: &mut Lexc, lexstate: Option<usize>) -> usize {
+        let idx = lx.state_arena.len();
+        lx.state_arena.push(States {
+            trans: None,
+            lexstate,
+            number: -1,
+            hashval: 0,
+            mergeable: 0,
+            distance: 0,
+            merge_with: idx,
+        });
+        idx
+    }
+
+    /* One mergeable suffix state carrying a single (in:out) arc to `target`. */
+    fn push_suffix(
+        lx: &mut Lexc,
+        hashval: u32,
+        distance: u16,
+        target: usize,
+        r#in: i16,
+        out: i16,
+    ) -> usize {
+        let sidx = lx.state_arena.len();
+        lx.state_arena.push(States {
+            trans: None,
+            lexstate: None,
+            number: -1,
+            hashval,
+            mergeable: 1,
+            distance,
+            merge_with: sidx,
+        });
+        let tidx = lx.trans_arena.len();
+        lx.trans_arena.push(Trans {
+            r#in,
+            out,
+            target,
+            next: None,
+        });
+        lx.state_arena[sidx].trans = Some(tidx);
+        sidx
+    }
+
+    /* A one-arc chain state (mergeable, distance 1) to a lexicon `target`. */
+    fn push_chain(lx: &mut Lexc, r#in: i16, out: i16, target: usize) -> usize {
+        push_suffix(lx, 0, 1, target, r#in, out)
+    }
+
+    fn push_sl(lx: &mut Lexc, state: usize) -> usize {
+        let idx = lx.statelist_arena.len();
+        lx.statelist_arena.push(Statelist {
+            state,
+            next: None,
+            start: 0,
+            r#final: 0,
+        });
+        idx
+    }
+}
