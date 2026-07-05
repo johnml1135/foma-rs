@@ -23,4 +23,5 @@ assertions (
     {id w3-base-utils, kind @complete, author "brendan@necessary.nu", at 2026-07-04T23:19:27.560381Z}
     {id w3-structures-dynarray, kind @complete, author "brendan@necessary.nu", at 2026-07-04T23:19:27.587368Z}
     {id w3-graph-algorithms, kind @complete, author "brendan@necessary.nu", at 2026-07-04T23:19:27.613258Z}
+    {id w3-constructions, kind @doing, author "brendan@necessary.nu", at 2026-07-04T23:19:52.899752Z}
 )
