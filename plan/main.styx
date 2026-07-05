@@ -389,11 +389,29 @@ children (
             {
                 id w3-io
                 title "Tests: io formats round-trip (~27 fns)"
+                sealed true
+                log (
+                    {
+                        at 2026-07-05T00:30:29.656132Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan complete)"
+                    }
+                )
             }
 
             {
                 id w3-lexcread
                 title "Tests: lexcread + lexc parse (~28 fns)"
+                sealed true
+                log (
+                    {
+                        at 2026-07-05T00:30:29.696161Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Todo → Done (nplan complete)"
+                    }
+                )
             }
 
             {

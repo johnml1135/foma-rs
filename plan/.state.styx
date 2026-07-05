@@ -26,5 +26,6 @@ assertions (
     {id w3-constructions, kind @complete, author "brendan@necessary.nu", at 2026-07-05T00:03:13.606394Z}
     {id w3-flags-define-rewrite, kind @complete, author "brendan@necessary.nu", at 2026-07-05T00:03:13.633174Z}
     {id w3-apply-spelling, kind @complete, author "brendan@necessary.nu", at 2026-07-05T00:03:13.657251Z}
-    {id w3-io, kind @doing, author "brendan@necessary.nu", at 2026-07-05T00:07:51.497776Z}
+    {id w3-io, kind @complete, author "brendan@necessary.nu", at 2026-07-05T00:30:29.656132Z}
+    {id w3-lexcread, kind @complete, author "brendan@necessary.nu", at 2026-07-05T00:30:29.696161Z}
 )
