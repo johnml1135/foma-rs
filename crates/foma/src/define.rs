@@ -268,3 +268,156 @@ pub fn add_defined(def: &mut DefinedNetworks, net: Option<Box<Fsm>>, string: &st
     d.net = Some(net);
     0
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::constructions::fsm_symbol;
+
+    /* Names in list order (dummy head included), skipping cleared nodes. */
+    fn net_names(def: &DefinedNetworks) -> Vec<String> {
+        let mut v = Vec::new();
+        let mut d = Some(def);
+        while let Some(n) = d {
+            if let Some(name) = &n.name {
+                v.push(name.clone());
+            }
+            d = n.next.as_deref();
+        }
+        v
+    }
+
+    /* Total node count (including cleared/dummy nodes). */
+    fn node_count(def: &DefinedNetworks) -> usize {
+        let mut c = 0;
+        let mut d = Some(def);
+        while let Some(n) = d {
+            c += 1;
+            d = n.next.as_deref();
+        }
+        c
+    }
+
+    fn has_sym(net: &Fsm, sym: &str) -> bool {
+        let mut s = net.sigma.as_deref();
+        while let Some(node) = s {
+            if node.symbol.as_deref() == Some(sym) {
+                return true;
+            }
+            s = node.next.as_deref();
+        }
+        false
+    }
+
+    // [spec:foma:sem:define.defined-networks-init-fn/test]
+    // [spec:foma:sem:fomalib.defined-networks-init-fn/test]
+    // [spec:foma:sem:define.defined-functions-init-fn/test]
+    // [spec:foma:sem:fomalib.defined-functions-init-fn/test]
+    #[test]
+    fn defined_init_dummy_head() {
+        let dn = defined_networks_init();
+        assert!(dn.name.is_none() && dn.net.is_none() && dn.next.is_none());
+        let df = defined_functions_init();
+        assert!(df.name.is_none() && df.regex.is_none() && df.next.is_none());
+        assert_eq!(df.numargs, 0);
+    }
+
+    // [spec:foma:sem:define.add-defined-fn/test]
+    // [spec:foma:sem:fomalib.add-defined-fn/test]
+    // [spec:foma:sem:define.find-defined-fn/test]
+    // [spec:foma:sem:fomalib.find-defined-fn/test]
+    #[test]
+    fn add_find_defined_nets() {
+        let mut def = defined_networks_init();
+        /* First add fills the dummy head; subsequent adds splice in
+        immediately after the head, so a,b,c inserts as [a, c, b]. */
+        assert_eq!(add_defined(&mut def, Some(fsm_symbol("A")), "a"), 0);
+        assert_eq!(add_defined(&mut def, Some(fsm_symbol("B")), "b"), 0);
+        assert_eq!(add_defined(&mut def, Some(fsm_symbol("C")), "c"), 0);
+        assert_eq!(net_names(&def), vec!["a", "c", "b"]);
+
+        /* find_defined returns the registry's own net (borrowed). */
+        assert!(has_sym(find_defined(&mut def, "b").unwrap(), "B"));
+        assert!(find_defined(&mut def, "zzz").is_none());
+
+        /* Redefinition returns 1 and replaces the net in place. */
+        assert_eq!(add_defined(&mut def, Some(fsm_symbol("A2")), "a"), 1);
+        assert!(has_sym(find_defined(&mut def, "a").unwrap(), "A2"));
+        assert_eq!(net_names(&def), vec!["a", "c", "b"], "redefinition adds no node");
+
+        /* net == None is a no-op returning 0. */
+        assert_eq!(add_defined(&mut def, None, "q"), 0);
+        assert!(find_defined(&mut def, "q").is_none());
+
+        /* Name longer than FSM_NAME_LEN (40) returns -1 without storing. */
+        let long = "x".repeat(41);
+        assert_eq!(add_defined(&mut def, Some(fsm_symbol("Z")), &long), -1);
+        assert!(find_defined(&mut def, &long).is_none());
+        /* Exactly 40 bytes is accepted. */
+        let ok40 = "y".repeat(40);
+        assert_eq!(add_defined(&mut def, Some(fsm_symbol("Z")), &ok40), 0);
+        assert!(find_defined(&mut def, &ok40).is_some());
+    }
+
+    // [spec:foma:sem:define.remove-defined-fn/test]
+    // [spec:foma:sem:fomalib.remove-defined-fn/test]
+    #[test]
+    fn remove_defined_cases() {
+        let mut def = defined_networks_init();
+        add_defined(&mut def, Some(fsm_symbol("A")), "a");
+        add_defined(&mut def, Some(fsm_symbol("B")), "b");
+        add_defined(&mut def, Some(fsm_symbol("C")), "c");
+        /* list order: a, c, b */
+
+        /* Remove a non-head node (predecessor splices it out). */
+        assert_eq!(remove_defined(&mut def, Some("c")), 0);
+        assert_eq!(net_names(&def), vec!["a", "b"]);
+        /* Removing an absent name returns 1. */
+        assert_eq!(remove_defined(&mut def, Some("zzz")), 1);
+        /* Remove the head when it has a successor: successor moves into head. */
+        assert_eq!(remove_defined(&mut def, Some("a")), 0);
+        assert_eq!(net_names(&def), vec!["b"]);
+        /* Remove the head when it is the only node: back to empty dummy. */
+        assert_eq!(remove_defined(&mut def, Some("b")), 0);
+        assert!(net_names(&def).is_empty());
+        assert!(def.name.is_none() && def.net.is_none() && def.next.is_none());
+
+        /* Undefine-all quirk: nodes remain in the list (count unchanged) but
+        their name/net payloads are cleared, so the registry reads as empty. */
+        let mut def2 = defined_networks_init();
+        add_defined(&mut def2, Some(fsm_symbol("A")), "a");
+        add_defined(&mut def2, Some(fsm_symbol("B")), "b");
+        assert_eq!(node_count(&def2), 2);
+        assert_eq!(remove_defined(&mut def2, None), 0);
+        assert_eq!(node_count(&def2), 2, "nodes remain after undefine-all");
+        assert!(net_names(&def2).is_empty(), "payloads cleared");
+        assert!(find_defined(&mut def2, "a").is_none());
+    }
+
+    // [spec:foma:sem:define.add-defined-function-fn/test]
+    // [spec:foma:sem:fomalib.add-defined-function-fn/test]
+    // [spec:foma:sem:define.find-defined-function-fn/test]
+    // [spec:foma:sem:fomalib.find-defined-function-fn/test]
+    #[test]
+    fn add_find_defined_functions() {
+        let mut deff = defined_functions_init();
+        /* (name, numargs) is the key: same name, different arity is a new node. */
+        assert_eq!(add_defined_function(&mut deff, "@f", "a b", 2), 0);
+        assert_eq!(add_defined_function(&mut deff, "@f", "c d", 1), 0);
+        assert_eq!(find_defined_function(&deff, "@f", 2), Some("a b"));
+        assert_eq!(find_defined_function(&deff, "@f", 1), Some("c d"));
+        /* Arity mismatch / unknown name are not found. */
+        assert_eq!(find_defined_function(&deff, "@f", 3), None);
+        assert_eq!(find_defined_function(&deff, "@g", 2), None);
+
+        /* Redefinition (same name+numargs) replaces the regex and returns 1.
+        Drive the g_verbose "redefined %s@%i)" message path (stderr, not
+        asserted here). */
+        crate::mem::G_VERBOSE.with(|v| v.set(1));
+        assert_eq!(add_defined_function(&mut deff, "@f", "x y", 2), 1);
+        crate::mem::G_VERBOSE.with(|v| v.set(0));
+        assert_eq!(find_defined_function(&deff, "@f", 2), Some("x y"));
+        /* The arity-1 overload is untouched. */
+        assert_eq!(find_defined_function(&deff, "@f", 1), Some("c d"));
+    }
+}

@@ -844,3 +844,305 @@ pub fn flag_twosided(mut net: Box<Fsm>) -> Box<Fsm> {
     net.is_minimized = UNK;
     fsm_topsort(fsm_minimize(net))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::apply::{apply_init, apply_words};
+    use crate::constructions::fsm_symbol;
+    use crate::regex::fsm_parse_regex;
+    use crate::types::{
+        FLAG_CLEAR, FLAG_DISALLOW, FLAG_EQUAL, FLAG_NEGATIVE, FLAG_POSITIVE, FLAG_REQUIRE,
+        FLAG_UNIFY,
+    };
+
+    /* All symbols in a net's sigma (excluding the -1 sentinel), by symbol text. */
+    fn sigma_syms(net: &Fsm) -> Vec<String> {
+        let mut v = Vec::new();
+        let mut s = net.sigma.as_deref();
+        while let Some(node) = s {
+            if node.number != -1 {
+                if let Some(sym) = &node.symbol {
+                    v.push(sym.clone());
+                }
+            }
+            s = node.next.as_deref();
+        }
+        v.sort();
+        v
+    }
+
+    /* Map a sigma number to its symbol text; EPSILON prints as "0". */
+    fn num_to_sym(net: &Fsm, n: i16) -> String {
+        if n as i32 == EPSILON {
+            return "0".to_string();
+        }
+        let mut s = net.sigma.as_deref();
+        while let Some(node) = s {
+            if node.number == n as i32 {
+                return node.symbol.clone().unwrap_or_default();
+            }
+            s = node.next.as_deref();
+        }
+        format!("#{}", n)
+    }
+
+    /* Multiset of (in,out) arc labels as symbol text. */
+    fn arc_labels(net: &Fsm) -> Vec<(String, String)> {
+        let mut v: Vec<(String, String)> = net
+            .states
+            .iter()
+            .take_while(|l| l.state_no != -1)
+            .filter(|l| l.target != -1)
+            .map(|l| (num_to_sym(net, l.r#in), num_to_sym(net, l.out)))
+            .collect();
+        v.sort();
+        v
+    }
+
+    /* Enumerate the whole (finite) language via apply_words. */
+    fn all_words(net: &Fsm) -> Vec<String> {
+        let mut h = apply_init(net);
+        let mut v = Vec::new();
+        let mut r = apply_words(&mut h);
+        while let Some(s) = r {
+            v.push(s);
+            r = apply_words(&mut h);
+        }
+        v.sort();
+        v.dedup();
+        v
+    }
+
+    // [spec:foma:sem:flags.flag-check-fn/test]
+    // [spec:foma:sem:fomalibconf.flag-check-fn/test]
+    #[test]
+    fn flag_check_dfa() {
+        /* U/P/N/E require both attribute and value */
+        assert_eq!(flag_check("@U.F.V@"), 1);
+        assert_eq!(flag_check("@P.F.V@"), 1);
+        assert_eq!(flag_check("@N.F.V@"), 1);
+        assert_eq!(flag_check("@E.F.V@"), 1);
+        /* R/D value optional */
+        assert_eq!(flag_check("@R.F@"), 1);
+        assert_eq!(flag_check("@D.F@"), 1);
+        assert_eq!(flag_check("@R.F.V@"), 1);
+        assert_eq!(flag_check("@D.F.V@"), 1);
+        /* C never takes a value */
+        assert_eq!(flag_check("@C.X@"), 1);
+        /* Quirk: '@' is an ordinary ND byte in the mandatory first field of
+        U/P/N/E, so this is accepted despite the interior '@' */
+        assert_eq!(flag_check("@U.a@b.c@"), 1);
+
+        /* Rejections */
+        assert_eq!(flag_check(""), 0);
+        assert_eq!(flag_check("a"), 0);
+        assert_eq!(flag_check("@Z.F.V@"), 0, "bad operator letter");
+        assert_eq!(flag_check("@U.F@"), 0, "U needs a value field");
+        assert_eq!(flag_check("@C.X.Y@"), 0, "C may not take a value");
+        assert_eq!(flag_check("@R.F.V.W@"), 0, "at most two fields");
+        assert_eq!(flag_check("@U.F.V@x"), 0, "must end right after '@'");
+    }
+
+    // [spec:foma:sem:flags.flag-get-type-fn/test]
+    // [spec:foma:sem:fomalibconf.flag-get-type-fn/test]
+    // [spec:foma:sem:flags.flag-get-name-fn/test]
+    // [spec:foma:sem:fomalibconf.flag-get-name-fn/test]
+    // [spec:foma:sem:flags.flag-get-value-fn/test]
+    // [spec:foma:sem:fomalibconf.flag-get-value-fn/test]
+    #[test]
+    fn flag_field_extractors() {
+        assert_eq!(flag_get_type("@U.F.V@"), FLAG_UNIFY);
+        assert_eq!(flag_get_type("@C.X@"), FLAG_CLEAR);
+        assert_eq!(flag_get_type("@D.F@"), FLAG_DISALLOW);
+        assert_eq!(flag_get_type("@N.F.V@"), FLAG_NEGATIVE);
+        assert_eq!(flag_get_type("@P.F.V@"), FLAG_POSITIVE);
+        assert_eq!(flag_get_type("@R.A@"), FLAG_REQUIRE);
+        assert_eq!(flag_get_type("@E.F.V@"), FLAG_EQUAL);
+        assert_eq!(flag_get_type("@Z.x@"), 0);
+
+        assert_eq!(flag_get_name("@U.FEAT.VAL@").as_deref(), Some("FEAT"));
+        assert_eq!(flag_get_name("@R.A@").as_deref(), Some("A"));
+
+        assert_eq!(flag_get_value("@U.FEAT.VAL@").as_deref(), Some("VAL"));
+        /* valueless flags yield NULL */
+        assert_eq!(flag_get_value("@R.A@"), None);
+        assert_eq!(flag_get_value("@C.X@"), None);
+        assert_eq!(flag_get_value("@D.F@"), None);
+    }
+
+    // [spec:foma:sem:flags.flag-type-to-char-fn/test]
+    // [spec:foma:sem:flags.flag-create-symbol-fn/test]
+    #[test]
+    fn flag_create_symbol_builds_symbol() {
+        assert_eq!(flag_type_to_char(FLAG_UNIFY), Some("U"));
+        assert_eq!(flag_type_to_char(FLAG_CLEAR), Some("C"));
+        assert_eq!(flag_type_to_char(FLAG_DISALLOW), Some("D"));
+        assert_eq!(flag_type_to_char(FLAG_NEGATIVE), Some("N"));
+        assert_eq!(flag_type_to_char(FLAG_POSITIVE), Some("P"));
+        assert_eq!(flag_type_to_char(FLAG_REQUIRE), Some("R"));
+        assert_eq!(flag_type_to_char(FLAG_EQUAL), Some("E"));
+        assert_eq!(flag_type_to_char(999), None);
+
+        /* "@" + type + "." + name + "." + value + "@" */
+        let n = flag_create_symbol(FLAG_UNIFY, "F", Some("V"));
+        assert_eq!(sigma_syms(&n), vec!["@U.F.V@".to_string()]);
+        /* value omitted when NULL */
+        let n = flag_create_symbol(FLAG_REQUIRE, "A", None);
+        assert_eq!(sigma_syms(&n), vec!["@R.A@".to_string()]);
+        /* value omitted when empty */
+        let n = flag_create_symbol(FLAG_POSITIVE, "F", Some(""));
+        assert_eq!(sigma_syms(&n), vec!["@P.F@".to_string()]);
+    }
+
+    // [spec:foma:sem:flags.flag-build-fn/test]
+    // [spec:foma:sem:fomalib.flag-build-fn/test]
+    #[test]
+    fn flag_build_rows() {
+        /* Different attribute names -> NONE immediately */
+        assert_eq!(flag_build(FLAG_UNIFY, "F", Some("1"), FLAG_UNIFY, "G", Some("1")), NONE);
+
+        /* U rows (first matching row wins) */
+        assert_eq!(flag_build(FLAG_UNIFY, "F", Some("1"), FLAG_POSITIVE, "F", Some("1")), SUCCEED);
+        assert_eq!(flag_build(FLAG_UNIFY, "F", Some("1"), FLAG_CLEAR, "F", None), SUCCEED);
+        assert_eq!(flag_build(FLAG_UNIFY, "F", Some("1"), FLAG_UNIFY, "F", Some("2")), FAIL);
+        assert_eq!(flag_build(FLAG_UNIFY, "F", Some("1"), FLAG_POSITIVE, "F", Some("2")), FAIL);
+        assert_eq!(flag_build(FLAG_UNIFY, "F", Some("1"), FLAG_NEGATIVE, "F", Some("1")), FAIL);
+        /* U vs U equal value is explicitly NONE */
+        assert_eq!(flag_build(FLAG_UNIFY, "F", Some("1"), FLAG_UNIFY, "F", Some("1")), NONE);
+
+        /* R valueless */
+        assert_eq!(flag_build(FLAG_REQUIRE, "F", None, FLAG_UNIFY, "F", Some("1")), SUCCEED);
+        assert_eq!(flag_build(FLAG_REQUIRE, "F", None, FLAG_POSITIVE, "F", Some("1")), SUCCEED);
+        assert_eq!(flag_build(FLAG_REQUIRE, "F", None, FLAG_NEGATIVE, "F", Some("1")), SUCCEED);
+        assert_eq!(flag_build(FLAG_REQUIRE, "F", None, FLAG_CLEAR, "F", None), FAIL);
+        /* R with value */
+        assert_eq!(flag_build(FLAG_REQUIRE, "F", Some("1"), FLAG_POSITIVE, "F", Some("1")), SUCCEED);
+        assert_eq!(flag_build(FLAG_REQUIRE, "F", Some("1"), FLAG_POSITIVE, "F", Some("2")), FAIL);
+
+        /* D valueless */
+        assert_eq!(flag_build(FLAG_DISALLOW, "F", None, FLAG_CLEAR, "F", None), SUCCEED);
+        assert_eq!(flag_build(FLAG_DISALLOW, "F", None, FLAG_POSITIVE, "F", Some("1")), FAIL);
+        /* D with value */
+        assert_eq!(flag_build(FLAG_DISALLOW, "F", Some("1"), FLAG_POSITIVE, "F", Some("2")), SUCCEED);
+        assert_eq!(flag_build(FLAG_DISALLOW, "F", Some("1"), FLAG_NEGATIVE, "F", Some("1")), SUCCEED);
+        assert_eq!(flag_build(FLAG_DISALLOW, "F", Some("1"), FLAG_POSITIVE, "F", Some("1")), FAIL);
+
+        /* Any ftype of C/N/P/E yields NONE (masks the flag_eliminate `|` bug) */
+        assert_eq!(flag_build(FLAG_POSITIVE, "F", Some("1"), FLAG_UNIFY, "F", Some("1")), NONE);
+        assert_eq!(flag_build(FLAG_NEGATIVE, "F", Some("1"), FLAG_UNIFY, "F", Some("1")), NONE);
+        assert_eq!(flag_build(FLAG_EQUAL, "F", Some("1"), FLAG_UNIFY, "F", Some("1")), NONE);
+        assert_eq!(flag_build(FLAG_CLEAR, "F", None, FLAG_UNIFY, "F", Some("1")), NONE);
+    }
+
+    // [spec:foma:sem:flags.flag-extract-fn/test]
+    #[test]
+    fn flag_extract_from_sigma() {
+        let net = fsm_parse_regex(r#""@U.F.1@" a "@R.G@""#, None, None).unwrap();
+        let flags = flag_extract(&net);
+        /* Collect (type, name, value) triples; non-flag "a" is excluded. */
+        let mut got: Vec<(i32, Option<String>, Option<String>)> = Vec::new();
+        let mut f = flags.as_deref();
+        while let Some(fl) = f {
+            got.push((fl.r#type, fl.name.clone(), fl.value.clone()));
+            f = fl.next.as_deref();
+        }
+        got.sort();
+        assert_eq!(
+            got,
+            vec![
+                (FLAG_UNIFY, Some("F".to_string()), Some("1".to_string())),
+                (FLAG_REQUIRE, Some("G".to_string()), None),
+            ]
+        );
+        /* A net with no flag symbols yields the empty list. */
+        let plain = fsm_parse_regex("a b c", None, None).unwrap();
+        assert!(flag_extract(&plain).is_none());
+    }
+
+    // [spec:foma:sem:flags.flag-purge-fn/test]
+    #[test]
+    fn flag_purge_targeted() {
+        /* Purge only attribute F; G survives. */
+        let mut net = fsm_parse_regex(r#""@U.F.1@" a "@U.G.1@""#, None, None).unwrap();
+        flag_purge(&mut net, Some("F"));
+        let syms = sigma_syms(&net);
+        assert!(!syms.contains(&"@U.F.1@".to_string()), "F symbol removed from sigma");
+        assert!(syms.contains(&"@U.G.1@".to_string()), "G symbol kept");
+        /* The F arc became epsilon; the G arc is unchanged. */
+        let labels = arc_labels(&net);
+        assert!(labels.iter().any(|(i, o)| i == "@U.G.1@" && o == "@U.G.1@"));
+        assert!(!labels.iter().any(|(i, _)| i == "@U.F.1@"));
+        assert_eq!(net.is_deterministic, NO);
+        assert_eq!(net.is_minimized, NO);
+        assert_eq!(net.is_epsilon_free, NO);
+
+        /* name == None purges every flag. */
+        let mut net2 = fsm_parse_regex(r#""@U.F.1@" a "@U.G.1@""#, None, None).unwrap();
+        flag_purge(&mut net2, None);
+        let syms2 = sigma_syms(&net2);
+        assert!(!syms2.contains(&"@U.F.1@".to_string()));
+        assert!(!syms2.contains(&"@U.G.1@".to_string()));
+        assert!(syms2.contains(&"a".to_string()));
+    }
+
+    // [spec:foma:sem:flags.flag-eliminate-fn/test]
+    // [spec:foma:sem:fomalib.flag-eliminate-fn/test]
+    #[test]
+    fn flag_eliminate_end_to_end() {
+        /* U/R/D flags. Surviving paths (verified against C foma):
+           @P.F.1@ a @U.F.1@ -> "a" (U unify equal), the @P.F.2@ b @U.F.1@ path
+           fails (U unify unequal); @P.G.1@ c @R.G@ -> "c" (R require satisfied),
+           d @R.G@ fails (nothing set G); e @D.H@ -> "e" (D disallow, H unset),
+           @P.H.1@ f @D.H@ fails (D disallow but H set). */
+        let src = r#"["@P.F.1@" a "@U.F.1@"] | ["@P.F.2@" b "@U.F.1@"] | ["@P.G.1@" c "@R.G@"] | [d "@R.G@"] | [e "@D.H@"] | ["@P.H.1@" f "@D.H@"]"#;
+        let net = fsm_parse_regex(src, None, None).unwrap();
+        let result = flag_eliminate(net, None);
+        /* The `|`-for-`&` type-mask bug is masked here: flag_build classifies
+        nothing for non-U/R/D flags, so the observable result is the correctly
+        flag-filtered language. */
+        assert_eq!(all_words(&result), vec!["a", "c", "e"]);
+        /* No flag symbols remain in sigma. */
+        for s in sigma_syms(&result) {
+            assert_eq!(flag_check(&s), 0, "no flag symbols remain: {}", s);
+        }
+
+        /* Eliminating a single named attribute leaves the other flags' effect. */
+        let net2 = fsm_parse_regex(
+            r#"["@P.F.1@" a "@U.F.1@"] | ["@P.F.2@" b "@U.F.1@"]"#,
+            None,
+            None,
+        )
+        .unwrap();
+        let result2 = flag_eliminate(net2, Some("F"));
+        assert_eq!(all_words(&result2), vec!["a"]);
+    }
+
+    // [spec:foma:sem:flags.flag-twosided-fn/test]
+    // [spec:foma:sem:fomalib.flag-twosided-fn/test]
+    #[test]
+    fn flag_twosided_arc_split() {
+        /* Pure repair: a flag:epsilon arc gains the flag on the output tape
+        (newarcs == 0, change == 1). */
+        let net = fsm_parse_regex(r#""@U.F.1@":0"#, None, None).unwrap();
+        let net = flag_twosided(net);
+        assert_eq!(
+            arc_labels(&net),
+            vec![("@U.F.1@".to_string(), "@U.F.1@".to_string())]
+        );
+
+        /* Arc splitting: flag:real (in is a flag, out a real symbol, in != out)
+        splits into flag:flag then epsilon:real via a fresh intermediate state. */
+        let net = fsm_parse_regex(r#""@U.F.1@":a"#, None, None).unwrap();
+        let net = flag_twosided(net);
+        assert_eq!(
+            arc_labels(&net),
+            vec![
+                ("0".to_string(), "a".to_string()),
+                ("@U.F.1@".to_string(), "@U.F.1@".to_string()),
+            ]
+        );
+        /* Three states on the split path (start -> S -> final). */
+        assert_eq!(net.statecount, 3);
+    }
+}

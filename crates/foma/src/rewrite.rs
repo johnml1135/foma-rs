@@ -1318,3 +1318,303 @@ pub fn rewrite_epextend(rb: &mut RewriteBatch) -> Box<Fsm> {
     }
     fsm_copy(rb.epextend.as_deref_mut().unwrap())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        RewriteBatch, fsm_clear_contexts, fsm_rewrite, rewr_contains, rewrite_add_special_syms,
+        rewrite_align,
+    };
+    use crate::apply::{apply_down, apply_init, apply_up, apply_words};
+    use crate::constructions::{fsm_intersect, fsm_symbol, fsm_union};
+    use crate::minimize::fsm_minimize;
+    use crate::regex::fsm_parse_regex;
+    use crate::structures::{
+        fsm_copy, fsm_empty_set, fsm_empty_string, fsm_identity, fsm_isempty,
+    };
+    use crate::types::{
+        ARROW_RIGHT, Fsm, Fsmcontexts, Fsmrules, OP_TWO_LEVEL_REPLACE, RewriteSet,
+    };
+
+    /* All lower-side outputs of `word` (apply down), sorted+deduped. */
+    fn down_all(net: &Fsm, word: &str) -> Vec<String> {
+        let mut h = apply_init(net);
+        let mut v = Vec::new();
+        let mut r = apply_down(&mut h, Some(word));
+        while let Some(s) = r {
+            v.push(s);
+            r = apply_down(&mut h, None);
+        }
+        v.sort();
+        v.dedup();
+        v
+    }
+
+    /* All upper-side inputs mapping to `word` (apply up). */
+    fn up_all(net: &Fsm, word: &str) -> Vec<String> {
+        let mut h = apply_init(net);
+        let mut v = Vec::new();
+        let mut r = apply_up(&mut h, Some(word));
+        while let Some(s) = r {
+            v.push(s);
+            r = apply_up(&mut h, None);
+        }
+        v.sort();
+        v.dedup();
+        v
+    }
+
+    /* Whole (finite) accepted language via apply_words. */
+    fn all_words(net: &Fsm) -> Vec<String> {
+        let mut h = apply_init(net);
+        let mut v = Vec::new();
+        let mut r = apply_words(&mut h);
+        while let Some(s) = r {
+            v.push(s);
+            r = apply_words(&mut h);
+        }
+        v.sort();
+        v.dedup();
+        v
+    }
+
+    /* A minimal rewrite_batch (num_rules == 0) for direct-call tests, built the
+    same way fsm_rewrite bootstraps rb. */
+    fn mini_rb() -> RewriteBatch {
+        let mut rb = RewriteBatch {
+            rewrite_set: None,
+            rulenames: None,
+            isyms: None,
+            any: None,
+            iopen: None,
+            iclose: None,
+            itape: None,
+            any4tape: None,
+            epextend: None,
+            num_rules: 0,
+            namestrings: Vec::new(),
+        };
+        rb.isyms = Some(fsm_minimize(fsm_union(
+            fsm_symbol("@I@"),
+            fsm_union(
+                fsm_symbol("@I[]@"),
+                fsm_union(fsm_symbol("@I[@"), fsm_symbol("@I]@")),
+            ),
+        )));
+        rb.rulenames = Some(fsm_empty_set());
+        let mut any = fsm_identity();
+        rewrite_add_special_syms(&rb, Some(&mut any));
+        rb.any = Some(any);
+        rb
+    }
+
+    // Simple obligatory replacement `a -> b`. Drives the whole compiler:
+    // rewrite_cp -> rewrite_align -> rewrite_tape_m_to_n_of_k / rewrite_itape;
+    // Base uses rewrite_any_4tape and Outside; the ARROW_RIGHT obligatory
+    // constraint is C = rewr_unrewritten(left), subtracted via rewr_contains;
+    // rule sigmas get rewrite_add_special_syms; rb torn down by rewrite_cleanup.
+    // [spec:foma:sem:rewrite.fsm-rewrite-fn/test]
+    // [spec:foma:sem:fomalib.fsm-rewrite-fn/test]
+    // [spec:foma:sem:rewrite.rewrite-cp-fn/test]
+    // [spec:foma:sem:rewrite.rewrite-itape-fn/test]
+    // [spec:foma:sem:rewrite.rewrite-any-4tape-fn/test]
+    // [spec:foma:sem:rewrite.rewrite-tape-m-to-n-of-k-fn/test]
+    // [spec:foma:sem:rewrite.rewr-unrewritten-fn/test]
+    // [spec:foma:sem:rewrite.rewrite-add-special-syms-fn/test]
+    // [spec:foma:sem:rewrite.rewrite-cleanup-fn/test]
+    #[test]
+    fn rewrite_simple_replacement() {
+        let net = fsm_parse_regex("a -> b", None, None).unwrap();
+        assert_eq!(down_all(&net, "aaa"), vec!["bbb"]);
+        assert_eq!(down_all(&net, "bab"), vec!["bbb"]);
+        assert_eq!(down_all(&net, ""), vec![""]);
+        /* Every {a,b}^3 upper string maps down to "bbb". */
+        assert_eq!(up_all(&net, "bbb").len(), 8);
+        /* No upper string produces a lower "a" (a is obligatorily rewritten). */
+        assert_eq!(up_all(&net, "bab"), Vec::<String>::new());
+    }
+
+    // Optional replacement `a (->) b`: both a and b are valid outputs (the
+    // obligatory unrewritten constraint is skipped for ARROW_OPTIONAL).
+    // [spec:foma:sem:rewrite.fsm-rewrite-fn/test]
+    // [spec:foma:sem:fomalib.fsm-rewrite-fn/test]
+    #[test]
+    fn rewrite_optional() {
+        let net = fsm_parse_regex("a (->) b", None, None).unwrap();
+        assert_eq!(down_all(&net, "a"), vec!["a", "b"]);
+    }
+
+    // Contextual rule with an upper context `a -> b || l _ r` (OP_UPWARD_REPLACE
+    // -> rewrite_upper for both context sides; rewr_context_restrict).
+    // [spec:foma:sem:rewrite.rewrite-upper-fn/test]
+    // [spec:foma:sem:rewrite.rewr-context-restrict-fn/test]
+    #[test]
+    fn rewrite_contextual_upper() {
+        let net = fsm_parse_regex("a -> b || l _ r", None, None).unwrap();
+        assert_eq!(down_all(&net, "lar"), vec!["lbr"]);
+        assert_eq!(down_all(&net, "aaa"), vec!["aaa"]);
+        assert_eq!(down_all(&net, "lara"), vec!["lbra"]);
+    }
+
+    // Contextual rule with a lower context `a -> b \/ l _ r` (OP_DOWNWARD_REPLACE
+    // -> rewrite_lower for both context sides).
+    // [spec:foma:sem:rewrite.rewrite-lower-fn/test]
+    #[test]
+    fn rewrite_contextual_lower() {
+        let net = fsm_parse_regex("a -> b \\/ l _ r", None, None).unwrap();
+        assert_eq!(down_all(&net, "lar"), vec!["lbr"]);
+        assert_eq!(down_all(&net, "aar"), vec!["aar"]);
+    }
+
+    // Longest-match `a+ @-> x`: the whole run collapses to one x; rewr_notleftmost
+    // and rewr_notlongest supply the longest-match violation constraints.
+    // [spec:foma:sem:rewrite.rewr-notleftmost-fn/test]
+    // [spec:foma:sem:rewrite.rewr-notlongest-fn/test]
+    #[test]
+    fn rewrite_longest_match() {
+        let net = fsm_parse_regex("a+ @-> x", None, None).unwrap();
+        assert_eq!(down_all(&net, "aaa"), vec!["x"]);
+        assert_eq!(down_all(&net, "aaba"), vec!["xbx"]);
+    }
+
+    // Shortest-match `a+ @> x`: each single a becomes x; rewr_notshortest.
+    // [spec:foma:sem:rewrite.rewr-notshortest-fn/test]
+    #[test]
+    fn rewrite_shortest_match() {
+        let net = fsm_parse_regex("a+ @> x", None, None).unwrap();
+        assert_eq!(down_all(&net, "aaa"), vec!["xxx"]);
+    }
+
+    // Epenthesis `[..] -> x`: inserts x at every position (dotted rule ->
+    // rewrite_epextend flanking constraint).
+    // [spec:foma:sem:rewrite.rewrite-epextend-fn/test]
+    #[test]
+    fn rewrite_epenthesis() {
+        let net = fsm_parse_regex("[..] -> x", None, None).unwrap();
+        assert_eq!(down_all(&net, ""), vec!["x"]);
+        assert_eq!(down_all(&net, "ab"), vec!["xaxbx"]);
+    }
+
+    // Markup rule `a -> b ... c`: a is kept, b inserted before, c after
+    // (rewrite_cp_markup -> rewrite_align_markup).
+    // [spec:foma:sem:rewrite.rewrite-cp-markup-fn/test]
+    // [spec:foma:sem:rewrite.rewrite-align-markup-fn/test]
+    #[test]
+    fn rewrite_markup() {
+        let net = fsm_parse_regex("a -> b ... c", None, None).unwrap();
+        assert_eq!(down_all(&net, "a"), vec!["bac"]);
+        assert_eq!(down_all(&net, "aa"), vec!["bacbac"]);
+    }
+
+    // Transducer-center rule (rules->right == NULL): the center a:b is flattened
+    // by rewrite_cp_transducer, then split into upper=a / lower=b and compiled
+    // like `a -> b`. Not reachable from the regex grammar, so built by hand.
+    // [spec:foma:sem:rewrite.rewrite-cp-transducer-fn/test]
+    #[test]
+    fn rewrite_transducer_center() {
+        let center = fsm_parse_regex("a:b", None, None).unwrap();
+        let rule = Box::new(Fsmrules {
+            left: Some(center),
+            right: None,
+            right2: None,
+            cross_product: None,
+            next: None,
+            arrow_type: ARROW_RIGHT,
+            dotted: 0,
+        });
+        let mut rs = RewriteSet {
+            rewrite_rules: Some(rule),
+            rewrite_contexts: None,
+            next: None,
+            rule_direction: 0,
+        };
+        let net = fsm_rewrite(&mut rs);
+        assert_eq!(down_all(&net, "a"), vec!["b"]);
+        assert_eq!(down_all(&net, "aa"), vec!["bb"]);
+        assert_eq!(down_all(&net, "b"), vec!["b"]);
+        assert_eq!(up_all(&net, "b"), vec!["a", "b"]);
+    }
+
+    // Two-level context (rule_direction == OP_TWO_LEVEL_REPLACE): the contexts
+    // are compiled by rewrite_two_level. Not reachable from the regex grammar,
+    // so built by hand with identity contexts l / r, which behave like a normal
+    // `a -> b || l _ r`.
+    // [spec:foma:sem:rewrite.rewrite-two-level-fn/test]
+    #[test]
+    fn rewrite_two_level_context() {
+        let rule = Box::new(Fsmrules {
+            left: Some(fsm_symbol("a")),
+            right: Some(fsm_symbol("b")),
+            right2: None,
+            cross_product: None,
+            next: None,
+            arrow_type: ARROW_RIGHT,
+            dotted: 0,
+        });
+        let ctx = Box::new(Fsmcontexts {
+            left: Some(fsm_symbol("l")),
+            right: Some(fsm_symbol("r")),
+            next: None,
+            cpleft: None,
+            cpright: None,
+        });
+        let mut rs = RewriteSet {
+            rewrite_rules: Some(rule),
+            rewrite_contexts: Some(ctx),
+            next: None,
+            rule_direction: OP_TWO_LEVEL_REPLACE,
+        };
+        let net = fsm_rewrite(&mut rs);
+        assert_eq!(down_all(&net, "lar"), vec!["lbr"]);
+        assert_eq!(down_all(&net, "aar"), vec!["aar"]);
+    }
+
+    // rewrite_align on a tiny pair (a, b): flattened 2-tape alternating encoding
+    // of the pair — the single flat word "a" "b".
+    // [spec:foma:sem:rewrite.rewrite-align-fn/test]
+    #[test]
+    fn rewrite_align_tiny_pair() {
+        let net = rewrite_align(fsm_symbol("a"), fsm_symbol("b"));
+        assert_eq!(all_words(&net), vec!["ab"]);
+    }
+
+    // rewr_contains builds Any4 . lang . Any4 with NO complement (despite the
+    // "NotContain" comment): for a nonempty lang the empty string is NOT in the
+    // result, whereas the complement would contain it.
+    // [spec:foma:sem:rewrite.rewr-contains-fn/test]
+    #[test]
+    fn rewr_contains_no_complement() {
+        let mut rb = mini_rb();
+        let mut net = rewr_contains(&mut rb, fsm_symbol("a"));
+        assert_eq!(fsm_isempty(&mut net), 0, "containment language is non-empty");
+        let mut probe = fsm_intersect(fsm_copy(&mut net), fsm_empty_string());
+        assert_eq!(
+            fsm_isempty(&mut probe),
+            1,
+            "empty string not accepted -> no complement was taken"
+        );
+    }
+
+    // fsm_clear_contexts: None is a no-op; a non-empty list is consumed (its
+    // nets destroyed) without panic.
+    // [spec:foma:sem:rewrite.fsm-clear-contexts-fn/test]
+    // [spec:foma:sem:fomalib.fsm-clear-contexts-fn/test]
+    #[test]
+    fn clear_contexts() {
+        fsm_clear_contexts(None);
+        let ctx = Box::new(Fsmcontexts {
+            left: Some(fsm_symbol("l")),
+            right: Some(fsm_symbol("r")),
+            next: Some(Box::new(Fsmcontexts {
+                left: Some(fsm_symbol("x")),
+                right: None,
+                next: None,
+                cpleft: Some(fsm_symbol("c")),
+                cpright: None,
+            })),
+            cpleft: None,
+            cpright: None,
+        });
+        fsm_clear_contexts(Some(ctx));
+    }
+}
