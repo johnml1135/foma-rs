@@ -1967,3 +1967,610 @@ fn flag_find_immut<'a>(list: &'a Option<Box<FlagList>>, name: &str) -> Option<&'
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::regex::fsm_parse_regex;
+    use crate::structures::fsm_sort_arcs;
+    use crate::types::{APPLY_INDEX_INPUT, APPLY_INDEX_OUTPUT};
+
+    /* Build a fresh, minimized net from a regex (the Wave-2 pipeline). */
+    fn parse(rx: &str) -> Box<Fsm> {
+        fsm_parse_regex(rx, None, None).expect("regex should compile")
+    }
+
+    /* Full result-set enumeration via the iterator protocol: first call passes
+    the word, subsequent NULL-resume calls drain the remaining paths. */
+    fn drain_down(net: &Fsm, word: &str) -> Vec<String> {
+        let mut h = apply_init(net);
+        let mut out = Vec::new();
+        let mut r = apply_down(&mut h, Some(word));
+        while let Some(s) = r {
+            out.push(s);
+            r = apply_down(&mut h, None);
+        }
+        out
+    }
+    fn drain_up(net: &Fsm, word: &str) -> Vec<String> {
+        let mut h = apply_init(net);
+        let mut out = Vec::new();
+        let mut r = apply_up(&mut h, Some(word));
+        while let Some(s) = r {
+            out.push(s);
+            r = apply_up(&mut h, None);
+        }
+        out
+    }
+
+    fn signum(net: &Fsm, symbol: &str) -> i32 {
+        let mut s = net.sigma.as_deref();
+        while let Some(x) = s {
+            if x.symbol.as_deref() == Some(symbol) {
+                return x.number;
+            }
+            s = x.next.as_deref();
+        }
+        -1
+    }
+
+    // [spec:foma:sem:apply.apply-init-fn/test]
+    // [spec:foma:sem:fomalib.apply-init-fn/test]
+    #[test]
+    fn apply_init_sets_defaults() {
+        let net = parse("a:b");
+        let h = apply_init(&net);
+        assert_eq!(h.obey_flags, 1);
+        assert_eq!(h.show_flags, 0);
+        assert_eq!(h.print_space, 0);
+        assert_eq!(h.print_pairs, 0);
+        assert_eq!(h.separator.as_deref(), Some(":"));
+        assert_eq!(h.epsilon_symbol.as_deref(), Some("0"));
+        assert_eq!(h.outstringtop, DEFAULT_OUTSTRING_SIZE as i32);
+        assert_eq!(h.outstring.len(), DEFAULT_OUTSTRING_SIZE);
+        assert_eq!(h.printcount, 1);
+        assert_eq!(h.iterator, 0);
+        assert_eq!(h.apply_stack_top, DEFAULT_STACK_SIZE as i32);
+        assert_eq!(apply_stack_isempty(&h), 1);
+    }
+
+    // [spec:foma:sem:apply.apply-create-statemap-fn/test]
+    #[test]
+    fn create_statemap_builds_line_tables() {
+        // a:b => state 0 --a:b--> 1 (final); one dummy line for state 1.
+        let net = parse("a:b");
+        let mut h = apply_init(&net);
+        // rebuild directly to pin the function under test
+        apply_create_statemap(&mut h, &net);
+        let sc = net.statecount as usize;
+        assert_eq!(h.statemap.len(), sc);
+        assert_eq!(h.numlines.len(), sc);
+        assert_eq!(h.marks.len(), sc);
+        // state 0 is the start state; its first line is line 0.
+        assert_eq!(h.statemap[0], 0);
+        // every state contributes at least one line (arcless states a dummy).
+        for s in 0..sc {
+            assert!(h.numlines[s] >= 1);
+        }
+    }
+
+    // [spec:foma:sem:apply.apply-create-sigarray-fn/test]
+    #[test]
+    fn create_sigarray_builds_sigs_and_reserved() {
+        let net = parse(r#""abc" | a"#);
+        let h = apply_init(&net);
+        // multichar symbol "abc" and single "a" are installed by number.
+        let abc = signum(&net, "abc");
+        let a = signum(&net, "a");
+        assert_eq!(h.sigs[abc as usize].symbol.as_deref(), Some("abc"));
+        assert_eq!(h.sigs[abc as usize].length, 3);
+        assert_eq!(h.sigs[a as usize].symbol.as_deref(), Some("a"));
+        assert_eq!(h.sigs[a as usize].length, 1);
+        // reserved displays.
+        assert_eq!(h.sigs[EPSILON as usize].symbol.as_deref(), Some("0"));
+        assert_eq!(h.sigs[UNKNOWN as usize].symbol.as_deref(), Some("?"));
+        assert_eq!(h.sigs[IDENTITY as usize].symbol.as_deref(), Some("@"));
+        // no flag diacritics in this net.
+        assert_eq!(h.has_flags, 0);
+    }
+
+    // [spec:foma:sem:apply.apply-create-sigmatch-fn/test]
+    // [spec:foma:sem:apply.apply-add-sigma-trie-fn/test]
+    #[test]
+    fn sigmatch_longest_leftmost_multichar() {
+        // "abc" is a genuine multichar sigma symbol; "a" is a prefix of its bytes.
+        let net = parse(r#""abc" | a"#);
+        let abc = signum(&net, "abc");
+        let a = signum(&net, "a");
+        let mut h = apply_init(&net);
+        h.mode = DOWN;
+        h.instring = b"aabc".to_vec();
+        apply_create_sigmatch(&mut h);
+        assert_eq!(h.current_instring_length, 4);
+        // position 0: only "a" matches (1 byte)
+        assert_eq!(h.sigmatch_array[0].signumber, a);
+        assert_eq!(h.sigmatch_array[0].consumes, 1);
+        // position 1: longest-leftmost picks "abc" (3 bytes) over "a"
+        assert_eq!(h.sigmatch_array[1].signumber, abc);
+        assert_eq!(h.sigmatch_array[1].consumes, 3);
+    }
+
+    // [spec:foma:sem:apply.apply-match-length-fn/test]
+    // [spec:foma:sem:apply.apply-match-str-fn/test]
+    #[test]
+    fn match_length_and_str() {
+        let net = parse(r#""abc" | a"#);
+        let abc = signum(&net, "abc");
+        let a = signum(&net, "a");
+        let mut h = apply_init(&net);
+        h.mode = DOWN;
+        h.instring = b"abc".to_vec();
+        apply_create_sigmatch(&mut h);
+        h.ipos = 0;
+        // token at 0 is "abc": matches abc (consumes 3), not a, epsilon consumes 0.
+        assert_eq!(apply_match_length(&h, abc), 3);
+        assert_eq!(apply_match_length(&h, a), -1);
+        assert_eq!(apply_match_length(&h, EPSILON), 0);
+        assert_eq!(apply_match_str(&mut h, abc, 0), 3);
+        assert_eq!(apply_match_str(&mut h, a, 0), -1);
+        assert_eq!(apply_match_str(&mut h, EPSILON, 0), 0);
+        // input exhausted
+        assert_eq!(apply_match_length(&h, abc), 3);
+        h.ipos = 3;
+        assert_eq!(apply_match_length(&h, abc), -1);
+    }
+
+    // [spec:foma:sem:apply.apply-down-fn/test]
+    // [spec:foma:sem:fomalib.apply-down-fn/test]
+    // [spec:foma:sem:apply.apply-up-fn/test]
+    // [spec:foma:sem:fomalib.apply-up-fn/test]
+    // [spec:foma:sem:apply.apply-updown-fn/test]
+    // [spec:foma:sem:apply.apply-net-fn/test]
+    // [spec:foma:sem:apply.apply-follow-next-arc-fn/test]
+    // [spec:foma:sem:apply.apply-append-fn/test]
+    // [spec:foma:sem:apply.apply-return-string-fn/test]
+    // [spec:foma:sem:apply.apply-mark-state-fn/test]
+    // [spec:foma:sem:apply.apply-at-last-arc-fn/test]
+    // [spec:foma:sem:apply.apply-set-iptr-fn/test]
+    #[test]
+    fn apply_down_up_transducer() {
+        let net = parse("a:b");
+        assert_eq!(drain_down(&net, "a"), vec!["b".to_string()]);
+        assert_eq!(drain_up(&net, "b"), vec!["a".to_string()]);
+        // input not in the relation yields nothing.
+        assert!(drain_down(&net, "x").is_empty());
+        assert!(drain_up(&net, "a").is_empty());
+    }
+
+    // [spec:foma:sem:apply.apply-skip-this-arc-fn/test]
+    // [spec:foma:sem:apply.apply-stack-pop-fn/test]
+    #[test]
+    fn cascade_multiple_results_backtrack() {
+        // Two paths on the same input exercise backtracking (pop + skip-arc).
+        let net = parse("{cat}:{dog} | {cat}:{cot}");
+        let mut got = drain_down(&net, "cat");
+        got.sort();
+        assert_eq!(got, vec!["cot".to_string(), "dog".to_string()]);
+    }
+
+    // [spec:foma:sem:apply.apply-append-fn/test]
+    #[test]
+    fn epsilon_output_path() {
+        // a:0 -> lower side is epsilon (empty output).
+        let net = parse("a:0");
+        assert_eq!(drain_down(&net, "a"), vec!["".to_string()]);
+    }
+
+    // [spec:foma:sem:apply.apply-follow-next-arc-fn/test]
+    #[test]
+    fn unknown_identity_application() {
+        // a:b | ? : an out-of-alphabet input matches the ? (IDENTITY) arc.
+        let net = parse("a:b | ?");
+        assert_eq!(drain_down(&net, "z"), vec!["z".to_string()]);
+        // 'a' matches both the a:b arc and the ? (as IDENTITY) arc.
+        let mut got = drain_down(&net, "a");
+        got.sort();
+        assert_eq!(got, vec!["a".to_string(), "b".to_string()]);
+    }
+
+    // [spec:foma:sem:apply.apply-words-fn/test]
+    // [spec:foma:sem:fomalib.apply-words-fn/test]
+    // [spec:foma:sem:apply.apply-upper-words-fn/test]
+    // [spec:foma:sem:fomalib.apply-upper-words-fn/test]
+    // [spec:foma:sem:apply.apply-lower-words-fn/test]
+    // [spec:foma:sem:fomalib.apply-lower-words-fn/test]
+    // [spec:foma:sem:apply.apply-enumerate-fn/test]
+    #[test]
+    fn words_enumeration_order() {
+        let net = parse("{ab}|{cd}|a");
+        let mut h = apply_init(&net);
+        let mut words = Vec::new();
+        let mut r = apply_words(&mut h);
+        while let Some(s) = r {
+            words.push(s);
+            r = apply_words(&mut h);
+        }
+        // C foma yields this exact order on a small acyclic net.
+        assert_eq!(words, vec!["a".to_string(), "ab".to_string(), "cd".to_string()]);
+
+        // upper/lower words on a transducer: both sides differ.
+        let tnet = parse("{ab}:{xy}|{cd}");
+        let mut hu = apply_init(&tnet);
+        let mut upper = Vec::new();
+        let mut r = apply_upper_words(&mut hu);
+        while let Some(s) = r {
+            upper.push(s);
+            r = apply_upper_words(&mut hu);
+        }
+        assert_eq!(upper, vec!["ab".to_string(), "cd".to_string()]);
+        let mut hl = apply_init(&tnet);
+        let mut lower = Vec::new();
+        let mut r = apply_lower_words(&mut hl);
+        while let Some(s) = r {
+            lower.push(s);
+            r = apply_lower_words(&mut hl);
+        }
+        // C foma yields the lower side in this order (xy before cd).
+        assert_eq!(lower, vec!["xy".to_string(), "cd".to_string()]);
+    }
+
+    // [spec:foma:sem:apply.apply-reset-enumerator-fn/test]
+    // [spec:foma:sem:fomalib.apply-reset-enumerator-fn/test]
+    #[test]
+    fn reset_enumerator_restarts() {
+        let net = parse("{ab}|{cd}|a");
+        let mut h = apply_init(&net);
+        let collect = |h: &mut ApplyHandle| {
+            let mut v = Vec::new();
+            let mut r = apply_words(h);
+            while let Some(s) = r {
+                v.push(s);
+                r = apply_words(h);
+            }
+            v
+        };
+        let first = collect(&mut h);
+        assert!(!first.is_empty());
+        // reset zeroes the iterator so enumeration restarts from scratch...
+        apply_reset_enumerator(&mut h);
+        assert_eq!(h.iterator, 0);
+        // ...yielding the same list again (without reset the second pass would
+        // resume the exhausted search and yield nothing).
+        let second = collect(&mut h);
+        assert_eq!(first, second);
+    }
+
+    // [spec:foma:sem:apply.apply-random-words-fn/test]
+    // [spec:foma:sem:fomalib.apply-random-words-fn/test]
+    // [spec:foma:sem:apply.apply-random-lower-fn/test]
+    // [spec:foma:sem:fomalib.apply-random-lower-fn/test]
+    // [spec:foma:sem:apply.apply-random-upper-fn/test]
+    // [spec:foma:sem:fomalib.apply-random-upper-fn/test]
+    #[test]
+    fn random_words_are_wellformed() {
+        // srand reseeds from time; assert only well-formedness — a word from the
+        // language, never the "???" no-result marker.
+        let net = parse("{cat}|{dog}");
+        let mut h = apply_init(&net);
+        for _ in 0..16 {
+            let w = apply_random_words(&mut h).expect("random word");
+            assert!(w == "cat" || w == "dog", "unexpected random word {:?}", w);
+            assert_ne!(w, "???");
+        }
+        let mut hl = apply_init(&net);
+        for _ in 0..16 {
+            let w = apply_random_lower(&mut hl).expect("random lower");
+            assert!(w == "cat" || w == "dog");
+        }
+        let mut hu = apply_init(&net);
+        for _ in 0..16 {
+            let w = apply_random_upper(&mut hu).expect("random upper");
+            assert!(w == "cat" || w == "dog");
+        }
+    }
+
+    // [spec:foma:sem:apply.apply-set-print-pairs-fn/test]
+    // [spec:foma:sem:fomalib.apply-set-print-pairs-fn/test]
+    // [spec:foma:sem:apply.apply-set-separator-fn/test]
+    // [spec:foma:sem:fomalib.apply-set-separator-fn/test]
+    #[test]
+    fn set_print_pairs_and_separator() {
+        let net = parse("a:b");
+        let mut h = apply_init(&net);
+        apply_set_print_pairs(&mut h, 1);
+        assert_eq!(h.print_pairs, 1);
+        let mut r = apply_down(&mut h, Some("a"));
+        let mut got = Vec::new();
+        while let Some(s) = r {
+            got.push(s);
+            r = apply_down(&mut h, None);
+        }
+        assert_eq!(got, vec!["<a:b>".to_string()]);
+
+        // custom separator changes the pair rendering.
+        let mut h2 = apply_init(&net);
+        apply_set_print_pairs(&mut h2, 1);
+        apply_set_separator(&mut h2, "/");
+        assert_eq!(h2.separator.as_deref(), Some("/"));
+        let mut r = apply_down(&mut h2, Some("a"));
+        let mut got = Vec::new();
+        while let Some(s) = r {
+            got.push(s);
+            r = apply_down(&mut h2, None);
+        }
+        assert_eq!(got, vec!["<a/b>".to_string()]);
+    }
+
+    // [spec:foma:sem:apply.apply-set-print-space-fn/test]
+    // [spec:foma:sem:fomalib.apply-set-print-space-fn/test]
+    // [spec:foma:sem:apply.apply-set-space-symbol-fn/test]
+    // [spec:foma:sem:fomalib.apply-set-space-symbol-fn/test]
+    #[test]
+    fn set_print_space_and_space_symbol() {
+        let net = parse("{ab}");
+        let mut h = apply_init(&net);
+        apply_set_print_space(&mut h, 1);
+        assert_eq!(h.print_space, 1);
+        assert_eq!(h.space_symbol.as_deref(), Some(" "));
+        let mut r = apply_down(&mut h, Some("ab"));
+        let mut got = Vec::new();
+        while let Some(s) = r {
+            got.push(s);
+            r = apply_down(&mut h, None);
+        }
+        // one space appended after every emitted symbol.
+        assert_eq!(got, vec!["a b ".to_string()]);
+
+        // space_symbol setter also turns print_space on.
+        let mut h2 = apply_init(&net);
+        apply_set_space_symbol(&mut h2, "_");
+        assert_eq!(h2.print_space, 1);
+        assert_eq!(h2.space_symbol.as_deref(), Some("_"));
+        let mut r = apply_down(&mut h2, Some("ab"));
+        let mut got = Vec::new();
+        while let Some(s) = r {
+            got.push(s);
+            r = apply_down(&mut h2, None);
+        }
+        assert_eq!(got, vec!["a_b_".to_string()]);
+    }
+
+    // [spec:foma:sem:apply.apply-set-epsilon-fn/test]
+    // [spec:foma:sem:fomalib.apply-set-epsilon-fn/test]
+    #[test]
+    fn set_epsilon_symbol() {
+        // a:0 word rendering shows the epsilon display on the lower side.
+        let net = parse("a:0");
+        let mut h = apply_init(&net);
+        apply_set_epsilon(&mut h, "[]");
+        assert_eq!(h.epsilon_symbol.as_deref(), Some("[]"));
+        assert_eq!(h.sigs[EPSILON as usize].symbol.as_deref(), Some("[]"));
+        let mut words = Vec::new();
+        let mut r = apply_words(&mut h);
+        while let Some(s) = r {
+            words.push(s);
+            r = apply_words(&mut h);
+        }
+        assert_eq!(words, vec!["a:[]".to_string()]);
+    }
+
+    // [spec:foma:sem:apply.apply-set-obey-flags-fn/test]
+    // [spec:foma:sem:fomalib.apply-set-obey-flags-fn/test]
+    // [spec:foma:sem:apply.apply-set-show-flags-fn/test]
+    // [spec:foma:sem:fomalib.apply-set-show-flags-fn/test]
+    // [spec:foma:sem:apply.apply-mark-flagstates-fn/test]
+    #[test]
+    fn flag_diacritics_end_to_end() {
+        let net =
+            parse(r#"[a "@U.F.1@" | b "@U.F.2@"] [c "@R.F.1@" | d "@R.F.2@"]"#);
+        let h = apply_init(&net);
+        assert_eq!(h.has_flags, 1);
+        // states with flag arcs are recorded in flagstates.
+        assert!(!h.flagstates.is_empty());
+        assert!(h.flagstates.iter().any(|&b| b != 0));
+
+        // obey on (default), show off: consistent path "ac" survives with flags
+        // rendered as empty; "ad" (U.F.1 then R.F.2) is inconsistent -> nothing.
+        assert_eq!(drain_down(&net, "ac"), vec!["ac".to_string()]);
+        assert!(drain_down(&net, "ad").is_empty());
+
+        // show-flags on renders the diacritics literally.
+        let net2 = parse(r#"[a "@U.F.1@"] [c "@R.F.1@"]"#);
+        let mut hs = apply_init(&net2);
+        apply_set_show_flags(&mut hs, 1);
+        let mut r = apply_down(&mut hs, Some("ac"));
+        let mut got = Vec::new();
+        while let Some(s) = r {
+            got.push(s);
+            r = apply_down(&mut hs, None);
+        }
+        assert_eq!(got, vec!["a@U.F.1@c@R.F.1@".to_string()]);
+
+        // obey off makes flag arcs freely traversable, so "ad" now passes.
+        let mut ho = apply_init(&net);
+        apply_set_obey_flags(&mut ho, 0);
+        let mut r = apply_down(&mut ho, Some("ad"));
+        let mut got = Vec::new();
+        while let Some(s) = r {
+            got.push(s);
+            r = apply_down(&mut ho, None);
+        }
+        assert_eq!(got, vec!["ad".to_string()]);
+    }
+
+    // [spec:foma:sem:apply.apply-check-flag-fn/test]
+    // [spec:foma:sem:apply.apply-clear-flags-fn/test]
+    #[test]
+    fn check_flag_dispatch() {
+        let net = parse(r#"[a "@U.F.1@"] [c "@R.F.1@"]"#);
+        let mut h = apply_init(&net);
+        // U.F.1 on an unset feature stores the value and succeeds.
+        assert_eq!(apply_check_flag(&mut h, FLAG_UNIFY, Some("F"), Some("1")), SUCCEED);
+        // same value unifies; different value fails.
+        assert_eq!(apply_check_flag(&mut h, FLAG_UNIFY, Some("F"), Some("1")), SUCCEED);
+        assert_eq!(apply_check_flag(&mut h, FLAG_UNIFY, Some("F"), Some("2")), FAIL);
+        // R.F requires a value present -> succeed while set.
+        assert_eq!(apply_check_flag(&mut h, FLAG_REQUIRE, Some("F"), None), SUCCEED);
+        // D.F.1 disallows the currently-set value -> fail; a different value ok.
+        assert_eq!(apply_check_flag(&mut h, FLAG_DISALLOW, Some("F"), Some("1")), FAIL);
+        assert_eq!(apply_check_flag(&mut h, FLAG_DISALLOW, Some("F"), Some("9")), SUCCEED);
+        // C.F clears the value -> R.F now fails (nothing set).
+        assert_eq!(apply_check_flag(&mut h, FLAG_CLEAR, Some("F"), None), SUCCEED);
+        assert_eq!(apply_check_flag(&mut h, FLAG_REQUIRE, Some("F"), None), FAIL);
+        // P.F.5 sets; clear_flags resets, so REQUIRE fails again.
+        assert_eq!(apply_check_flag(&mut h, FLAG_POSITIVE, Some("F"), Some("5")), SUCCEED);
+        assert_eq!(apply_check_flag(&mut h, FLAG_REQUIRE, Some("F"), None), SUCCEED);
+        apply_clear_flags(&mut h);
+        assert_eq!(apply_check_flag(&mut h, FLAG_REQUIRE, Some("F"), None), FAIL);
+    }
+
+    // [spec:foma:sem:apply.apply-check-flag-fn/test]
+    #[test]
+    #[should_panic]
+    fn check_flag_unregistered_name_panics() {
+        // DEVIATION: C dereferences NULL for an unregistered feature; the port
+        // panics via .expect (unreachable in practice).
+        let net = parse(r#"[a "@U.F.1@"]"#);
+        let mut h = apply_init(&net);
+        apply_check_flag(&mut h, FLAG_UNIFY, Some("NOPE"), Some("1"));
+    }
+
+    // [spec:foma:sem:apply.apply-add-flag-fn/test]
+    #[test]
+    fn add_flag_dedups_and_appends() {
+        let net = parse(r#"[a "@U.F.1@"]"#);
+        let mut h = apply_init(&net);
+        let count = |h: &ApplyHandle, name: &str| -> usize {
+            let mut n = 0;
+            let mut cur = h.flag_list.as_deref();
+            while let Some(node) = cur {
+                if node.name.as_deref() == Some(name) {
+                    n += 1;
+                }
+                cur = node.next.as_deref();
+            }
+            n
+        };
+        // "F" already registered by create_sigarray; adding again is a no-op.
+        assert_eq!(count(&h, "F"), 1);
+        apply_add_flag(&mut h, Some("F".to_string()));
+        assert_eq!(count(&h, "F"), 1);
+        // a fresh feature is appended.
+        apply_add_flag(&mut h, Some("G".to_string()));
+        assert_eq!(count(&h, "G"), 1);
+    }
+
+    // [spec:foma:sem:apply.apply-stack-isempty-fn/test]
+    // [spec:foma:sem:apply.apply-stack-clear-fn/test]
+    // [spec:foma:sem:apply.apply-stack-push-fn/test]
+    // [spec:foma:sem:apply.apply-stack-pop-fn/test]
+    #[test]
+    fn stack_push_pop_roundtrip() {
+        let net = parse("a:b");
+        let mut h = apply_init(&net);
+        apply_stack_clear(&mut h);
+        assert_eq!(apply_stack_isempty(&h), 1);
+        // push records curr_ptr/ipos/opos; pop restores them.
+        h.curr_ptr = 0;
+        h.ipos = 5;
+        h.opos = 7;
+        h.iptr = None;
+        h.state_has_index = 0;
+        apply_stack_push(&mut h, 0, None, None, 0);
+        assert_eq!(apply_stack_isempty(&h), 0);
+        assert_eq!(h.apply_stack_ptr, 1);
+        h.ipos = 99;
+        h.opos = 99;
+        apply_stack_pop(&mut h);
+        assert_eq!(h.ptr, 0);
+        assert_eq!(h.ipos, 5);
+        assert_eq!(h.opos, 7);
+        assert_eq!(apply_stack_isempty(&h), 1);
+    }
+
+    // [spec:foma:sem:apply.apply-force-clear-stack-fn/test]
+    #[test]
+    fn force_clear_stack_empties() {
+        let net = parse("a:b");
+        let mut h = apply_init(&net);
+        h.curr_ptr = 0;
+        h.ipos = 0;
+        h.opos = 0;
+        apply_stack_push(&mut h, 0, None, None, 0);
+        assert_eq!(apply_stack_isempty(&h), 0);
+        apply_force_clear_stack(&mut h);
+        assert_eq!(apply_stack_isempty(&h), 1);
+        assert_eq!(h.iterator, 0);
+        assert_eq!(h.iterate_old, 0);
+    }
+
+    // [spec:foma:sem:apply.apply-binarysearch-fn/test]
+    // [spec:foma:sem:apply.apply-at-last-arc-fn/test]
+    #[test]
+    fn binary_search_on_sorted_arcs() {
+        // Shared-prefix net; sorting the input side enables the binsearch path.
+        let mut net = parse("{cat}|{car}|{can}");
+        fsm_sort_arcs(&mut net, 1);
+        assert_eq!(net.arcs_sorted_in, 1);
+        // apply_down sets h.binsearch = 1 from arcs_sorted_in.
+        let mut h = apply_init(&net);
+        let mut r = apply_down(&mut h, Some("cat"));
+        assert_eq!(h.binsearch, 1);
+        let mut got = Vec::new();
+        while let Some(s) = r {
+            got.push(s);
+            r = apply_down(&mut h, None);
+        }
+        assert_eq!(got, vec!["cat".to_string()]);
+        assert_eq!(drain_down(&net, "car"), vec!["car".to_string()]);
+        assert_eq!(drain_down(&net, "can"), vec!["can".to_string()]);
+        assert!(drain_down(&net, "cax").is_empty());
+    }
+
+    // [spec:foma:sem:apply.apply-index-fn/test]
+    // [spec:foma:sem:fomalib.apply-index-fn/test]
+    // [spec:foma:sem:apply.apply-set-iptr-fn/test]
+    // [spec:foma:sem:apply.apply-clear-index-fn/test]
+    // [spec:foma:sem:apply.apply-clear-index-list-fn/test]
+    #[test]
+    fn indexed_application_matches_unindexed() {
+        let net = parse("a:b | c:d");
+        let base_down = drain_down(&net, "a");
+        assert_eq!(base_down, vec!["b".to_string()]);
+
+        // Build an input index; indexed application returns identical results.
+        let mut h = apply_init(&net);
+        apply_index(&mut h, APPLY_INDEX_INPUT, 0, 1 << 30, 0);
+        assert!(!h.index_in.is_empty());
+        let mut r = apply_down(&mut h, Some("a"));
+        assert_eq!(h.indexed, 1);
+        let mut got = Vec::new();
+        while let Some(s) = r {
+            got.push(s);
+            r = apply_down(&mut h, None);
+        }
+        assert_eq!(got, base_down);
+
+        // apply_clear_index releases both indexes.
+        apply_index(&mut h, APPLY_INDEX_OUTPUT, 0, 1 << 30, 0);
+        assert!(!h.index_out.is_empty());
+        apply_clear_index(&mut h);
+        assert!(h.index_in.is_empty());
+        assert!(h.index_out.is_empty());
+
+        // A too-small memory limit builds no index at all.
+        let mut h2 = apply_init(&net);
+        apply_index(&mut h2, APPLY_INDEX_INPUT, 0, 0, 0);
+        assert!(h2.index_in.is_empty());
+    }
+
+    // [spec:foma:sem:apply.apply-clear-fn/test]
+    // [spec:foma:sem:fomalib.apply-clear-fn/test]
+    #[test]
+    fn apply_clear_consumes_handle() {
+        let net = parse("a:b");
+        let h = apply_init(&net);
+        // Destroys the handle and everything it owns without panicking.
+        apply_clear(h);
+    }
+}

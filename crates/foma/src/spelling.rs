@@ -1240,3 +1240,393 @@ pub fn cmatrix_set_cost(net: &mut Fsm, r#in: Option<&str>, out: Option<&str>, co
     let cm = &mut net.medlookup.as_mut().unwrap().confusion_matrix;
     cm[(i * maxsigma + o) as usize] = cost;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::regex::fsm_parse_regex;
+    use crate::structures::fsm_sort_arcs;
+    use crate::types::Sigma;
+
+    /* Minimized net from a regex, arcs sorted so each state's lines are
+    contiguous (apply_med requires it). */
+    fn parse_sorted(rx: &str) -> Box<Fsm> {
+        let mut net = fsm_parse_regex(rx, None, None).expect("regex should compile");
+        fsm_sort_arcs(&mut net, 1);
+        net
+    }
+
+    /* Full A* result-set: first call passes the word, NULL-resume drains the
+    remaining matches. Returns (dictionary-side, aligned-input, cost) triples. */
+    fn med_all(
+        h: &mut ApplyMedHandle,
+        word: &str,
+    ) -> Vec<(String, String, i32)> {
+        let mut out = Vec::new();
+        let mut r = apply_med(h, Some(word));
+        while let Some(s) = r {
+            let ins = apply_med_get_instring(h).unwrap();
+            let cost = apply_med_get_cost(h);
+            out.push((s, ins, cost));
+            r = apply_med(h, None);
+        }
+        out
+    }
+
+    // [spec:foma:sem:spelling.print-sym-fn/test]
+    #[test]
+    fn print_sym_linear_scan() {
+        let sig = Sigma {
+            number: 4,
+            symbol: Some("abc".to_string()),
+            next: Some(Box::new(Sigma {
+                number: 3,
+                symbol: Some("a".to_string()),
+                next: None,
+            })),
+        };
+        assert_eq!(print_sym(4, Some(&sig)), Some("abc"));
+        assert_eq!(print_sym(3, Some(&sig)), Some("a"));
+        assert_eq!(print_sym(99, Some(&sig)), None);
+    }
+
+    // [spec:foma:sem:spelling.letterbits-add-fn/test]
+    // [spec:foma:sem:spelling.letterbits-union-fn/test]
+    // [spec:foma:sem:spelling.letterbits-copy-fn/test]
+    #[test]
+    fn letterbits_primitives() {
+        // 2 states, 1 byte per state.
+        let mut buf = vec![0u8; 2];
+        letterbits_add(0, 3, &mut buf, 1);
+        letterbits_add(0, 5, &mut buf, 1);
+        assert_eq!(buf[0], (1 << 3) | (1 << 5)); // 40
+        // union OR's state 0 into state 1.
+        letterbits_union(1, 0, &mut buf, 1);
+        assert_eq!(buf[1], 40);
+        // add another bit to state 0, then copy overwrites state 1 entirely.
+        letterbits_add(0, 0, &mut buf, 1);
+        assert_eq!(buf[0], 41);
+        letterbits_copy(0, 1, &mut buf, 1);
+        assert_eq!(buf[1], 41);
+    }
+
+    // [spec:foma:sem:spelling.apply-med-init-fn/test]
+    // [spec:foma:sem:fomalib.apply-med-init-fn/test]
+    #[test]
+    fn med_init_defaults() {
+        let net = parse_sorted("{cat}");
+        let medh = apply_med_init(&net);
+        assert_eq!(medh.med_limit, MED_DEFAULT_LIMIT); // 4
+        assert_eq!(medh.med_cutoff, MED_DEFAULT_CUTOFF); // 15
+        assert_eq!(medh.med_max_heap_size, MED_DEFAULT_MAX_HEAP_SIZE);
+        assert_eq!(medh.agenda[0].f, -1); // permanent heap sentinel
+        assert_eq!(medh.astarcount, 1);
+        assert_eq!(medh.heapcount, 0);
+        // sigma is {a,c,t} => sigma_max 5, maxsigma 6.
+        assert_eq!(medh.maxsigma, 6);
+        assert!(!medh.state_array.is_empty());
+        assert!(medh.sigmahash.is_some());
+        // no confusion matrix on a bare net.
+        assert!(!medh.hascm);
+    }
+
+    // [spec:foma:sem:spelling.fsm-create-letter-lookup-fn/test]
+    // [spec:foma:sem:fomalib.fsm-create-letter-lookup-fn/test]
+    #[test]
+    fn letter_lookup_bitsets() {
+        // {cat}: state 0 -c-> 1 -a-> 2 -t-> 3(final). sigma a=3,c=4,t=5.
+        let net = parse_sorted("{cat}");
+        let medh = apply_med_init(&net);
+        assert_eq!(medh.maxdepth, 2);
+        assert_eq!(medh.bytes_per_letter_array, 1);
+        // letterbits[v] = all labels reachable from v (n = infinity):
+        //  state 0 can still see a,c,t; state 1 a,t; state 2 t; final none.
+        assert_eq!(medh.letterbits, vec![56u8, 40, 32, 0]);
+        // nletterbits[v] = labels within maxdepth (2) transitions.
+        assert_eq!(medh.nletterbits, vec![24u8, 40, 32, 0]);
+    }
+
+    // [spec:foma:sem:spelling.calculate-h-fn/test]
+    #[test]
+    fn calculate_h_heuristic() {
+        let net = parse_sorted("{cat}");
+        let medh = apply_med_init(&net);
+        // sentinel at currpos -> 0.
+        assert_eq!(calculate_h(&medh, &[-1], 0, 0), 0);
+        // 'c' (sigma 4) is reachable from state 0 -> costs nothing extra.
+        assert_eq!(calculate_h(&medh, &[4, -1], 0, 0), 0);
+        // from the final state 3 nothing is reachable -> each suffix symbol costs 1.
+        assert_eq!(calculate_h(&medh, &[3, -1], 0, 3), 1);
+        // every occurrence counts.
+        assert_eq!(calculate_h(&medh, &[3, 3, -1], 0, 3), 2);
+    }
+
+    // [spec:foma:sem:spelling.node-insert-fn/test]
+    // [spec:foma:sem:spelling.node-delete-min-fn/test]
+    #[test]
+    fn heap_ordering() {
+        let net = parse_sorted("{cat}");
+        let mut medh = apply_med_init(&net);
+        // Insert three nodes: (f=2,wp=0), (f=1,wp=1), (f=1,wp=3).
+        assert_eq!(node_insert(&mut medh, 0, 0, 2, 0, 0, 0, -1), 1); // agenda idx 1
+        assert_eq!(node_insert(&mut medh, 1, 0, 1, 0, 0, 0, -1), 1); // agenda idx 2
+        assert_eq!(node_insert(&mut medh, 3, 0, 1, 0, 0, 0, -1), 1); // agenda idx 3
+        // Priority: smaller f first; ties prefer larger wordpos.
+        assert_eq!(node_delete_min(&mut medh), Some(3)); // f1,wp3
+        assert_eq!(node_delete_min(&mut medh), Some(2)); // f1,wp1
+        assert_eq!(node_delete_min(&mut medh), Some(1)); // f2
+        assert_eq!(node_delete_min(&mut medh), None); // exhausted
+    }
+
+    // [spec:foma:sem:spelling.apply-med-fn/test]
+    // [spec:foma:sem:fomalib.apply-med-fn/test]
+    // [spec:foma:sem:spelling.print-match-fn/test]
+    // [spec:foma:sem:spelling.apply-med-get-cost-fn/test]
+    // [spec:foma:sem:fomalib.apply-med-get-cost-fn/test]
+    // [spec:foma:sem:spelling.apply-med-get-instring-fn/test]
+    // [spec:foma:sem:fomalib.apply-med-get-instring-fn/test]
+    // [spec:foma:sem:spelling.apply-med-get-outstring-fn/test]
+    // [spec:foma:sem:fomalib.apply-med-get-outstring-fn/test]
+    #[test]
+    fn med_matches_and_costs() {
+        let net = parse_sorted("{cat}|{car}|{dog}");
+        let mut h = apply_med_init(&net);
+        // Exact match cost 0 first, then unit-cost edits (C-foma-verified).
+        let r = med_all(&mut h, "cat");
+        assert_eq!(
+            r,
+            vec![
+                ("cat".to_string(), "cat".to_string(), 0), // exact
+                ("car".to_string(), "cat".to_string(), 1), // 1 substitution
+                ("car".to_string(), "cat".to_string(), 2),
+                ("cat".to_string(), "cat".to_string(), 2),
+            ]
+        );
+        // getters reflect the most recent (last) match.
+        assert_eq!(apply_med_get_outstring(&h).unwrap(), "cat");
+        assert_eq!(apply_med_get_instring(&h).unwrap(), "cat");
+
+        // Deletion: "ca" -> cat/car at cost 1 (delete a trailing symbol).
+        let mut h2 = apply_med_init(&net);
+        let best = &med_all(&mut h2, "ca")[0];
+        assert_eq!(best.2, 1);
+        assert_eq!(best.1, "ca");
+        assert!(best.0 == "cat" || best.0 == "car");
+
+        // Insertion: "cats" -> cat at cost 1 (insert one word symbol).
+        let mut h3 = apply_med_init(&net);
+        let best = &med_all(&mut h3, "cats")[0];
+        assert_eq!(best.0, "cat");
+        assert_eq!(best.2, 1);
+    }
+
+    // [spec:foma:sem:spelling.apply-med-set-med-limit-fn/test]
+    // [spec:foma:sem:fomalib.apply-med-set-med-limit-fn/test]
+    #[test]
+    fn med_limit_enforced() {
+        let net = parse_sorted("{cat}|{car}|{dog}");
+        let mut h = apply_med_init(&net);
+        apply_med_set_med_limit(&mut h, 1);
+        assert_eq!(h.med_limit, 1);
+        assert_eq!(med_all(&mut h, "cat").len(), 1);
+        let mut h2 = apply_med_init(&net);
+        apply_med_set_med_limit(&mut h2, 2);
+        assert_eq!(med_all(&mut h2, "cat").len(), 2);
+    }
+
+    // [spec:foma:sem:spelling.apply-med-set-med-cutoff-fn/test]
+    // [spec:foma:sem:fomalib.apply-med-set-med-cutoff-fn/test]
+    #[test]
+    fn med_cutoff_enforced() {
+        let net = parse_sorted("{cat}|{car}|{dog}");
+        let mut h = apply_med_init(&net);
+        apply_med_set_med_cutoff(&mut h, 1);
+        assert_eq!(h.med_cutoff, 1);
+        // No dictionary word is within total cost 1 of "zzzzzz".
+        assert!(med_all(&mut h, "zzzzzz").is_empty());
+    }
+
+    // [spec:foma:sem:spelling.apply-med-set-align-symbol-fn/test]
+    // [spec:foma:sem:fomalib.apply-med-set-align-symbol-fn/test]
+    #[test]
+    fn med_align_symbol_in_output() {
+        let net = parse_sorted("{cat}");
+        let mut h = apply_med_init(&net);
+        apply_med_set_align_symbol(&mut h, "-");
+        assert_eq!(h.align_symbol.as_deref(), Some("-"));
+        // "bat" vs "cat": the cost-2 alignments carry an epsilon slot rendered
+        // as the align symbol on one side.
+        let r = med_all(&mut h, "bat");
+        assert!(
+            r.iter().any(|(o, i, _)| o.contains('-') || i.contains('-')),
+            "expected an alignment dash in {:?}",
+            r
+        );
+    }
+
+    // [spec:foma:sem:spelling.apply-med-set-heap-max-fn/test]
+    // [spec:foma:sem:fomalib.apply-med-set-heap-max-fn/test]
+    #[test]
+    fn med_set_heap_max() {
+        let net = parse_sorted("{cat}");
+        let mut h = apply_med_init(&net);
+        apply_med_set_heap_max(&mut h, 99);
+        assert_eq!(h.med_max_heap_size, 99);
+    }
+
+    // [spec:foma:sem:spelling.apply-med-clear-fn/test]
+    // [spec:foma:sem:fomalib.apply-med-clear-fn/test]
+    #[test]
+    fn med_clear_consumes_handle() {
+        let net = parse_sorted("{cat}");
+        let h = apply_med_init(&net);
+        apply_med_clear(Some(h)); // frees everything
+        apply_med_clear(None); // NULL handle is a no-op
+    }
+
+    // [spec:foma:sem:spelling.apply-med-fn/test]
+    // [spec:foma:sem:fomalib.apply-med-fn/test]
+    #[test]
+    #[should_panic]
+    fn med_null_resume_before_search_panics() {
+        // DEVIATION: resume-before-any-search is UB in C; the port panics because
+        // curr_ptr is None from calloc.
+        let net = parse_sorted("{cat}");
+        let mut h = apply_med_init(&net);
+        let _ = apply_med(&mut h, None);
+    }
+
+    // [spec:foma:sem:spelling.cmatrix-init-fn/test]
+    // [spec:foma:sem:fomalib.cmatrix-init-fn/test]
+    #[test]
+    fn cmatrix_init_costs() {
+        let mut net = parse_sorted("{cat}");
+        cmatrix_init(&mut net);
+        let cm = &net.medlookup.as_ref().unwrap().confusion_matrix;
+        // maxsigma = 6; identity cells 0, all others 1.
+        assert_eq!(cm.len(), 36);
+        assert_eq!(cm[3 * 6 + 3], 0); // a->a
+        assert_eq!(cm[3 * 6 + 4], 1); // a->c
+        assert_eq!(cm[0], 0); // 0->0 diagonal
+        assert_eq!(cm[0 * 6 + 4], 1); // insertion of c
+    }
+
+    // [spec:foma:sem:spelling.cmatrix-set-cost-fn/test]
+    // [spec:foma:sem:fomalib.cmatrix-set-cost-fn/test]
+    #[test]
+    fn cmatrix_set_cost_cell_and_warning() {
+        let mut net = parse_sorted("{cat}");
+        cmatrix_init(&mut net);
+        // substitution c -> a costs 4.
+        cmatrix_set_cost(&mut net, Some("c"), Some("a"), 4);
+        {
+            let cm = &net.medlookup.as_ref().unwrap().confusion_matrix;
+            // row = dictionary symbol c(4), col = word symbol a(3).
+            assert_eq!(cm[4 * 6 + 3], 4);
+        }
+        // an unknown symbol warns and leaves the matrix unchanged.
+        cmatrix_set_cost(&mut net, Some("Z"), None, 9);
+        let cm = &net.medlookup.as_ref().unwrap().confusion_matrix;
+        assert_eq!(cm[4 * 6 + 3], 4);
+    }
+
+    // [spec:foma:sem:spelling.cmatrix-default-substitute-fn/test]
+    // [spec:foma:sem:fomalib.cmatrix-default-substitute-fn/test]
+    #[test]
+    fn cmatrix_default_substitute_costs() {
+        let mut net = parse_sorted("{cat}");
+        cmatrix_init(&mut net);
+        cmatrix_default_substitute(&mut net, 7);
+        let cm = &net.medlookup.as_ref().unwrap().confusion_matrix;
+        assert_eq!(cm[3 * 6 + 4], 7); // off-diagonal substitution
+        assert_eq!(cm[3 * 6 + 3], 0); // diagonal stays free
+        assert_eq!(cm[0 * 6 + 4], 1); // row 0 (insertion) untouched
+    }
+
+    // [spec:foma:sem:spelling.cmatrix-default-insert-fn/test]
+    // [spec:foma:sem:fomalib.cmatrix-default-insert-fn/test]
+    #[test]
+    fn cmatrix_default_insert_costs() {
+        let mut net = parse_sorted("{cat}");
+        cmatrix_init(&mut net);
+        cmatrix_default_insert(&mut net, 9);
+        let cm = &net.medlookup.as_ref().unwrap().confusion_matrix;
+        // row 0 = insertion costs.
+        assert_eq!(cm[0 * 6 + 3], 9);
+        assert_eq!(cm[0], 9);
+    }
+
+    // [spec:foma:sem:spelling.cmatrix-default-delete-fn/test]
+    // [spec:foma:sem:fomalib.cmatrix-default-delete-fn/test]
+    #[test]
+    fn cmatrix_default_delete_costs() {
+        let mut net = parse_sorted("{cat}");
+        cmatrix_init(&mut net);
+        cmatrix_default_delete(&mut net, 8);
+        let cm = &net.medlookup.as_ref().unwrap().confusion_matrix;
+        // column 0 = deletion costs.
+        assert_eq!(cm[3 * 6], 8);
+        assert_eq!(cm[0], 8);
+    }
+
+    // [spec:foma:sem:spelling.apply-med-fn/test]
+    #[test]
+    fn cmatrix_affects_med_cost() {
+        // Raising substitution cost pushes "bat" beyond a small cutoff.
+        let mut net = parse_sorted("{cat}");
+        cmatrix_init(&mut net);
+        cmatrix_default_substitute(&mut net, 5);
+        let mut h = apply_med_init(&net);
+        assert!(h.hascm);
+        apply_med_set_med_cutoff(&mut h, 3);
+        // best "bat" match now needs 2 edits under cm cost model.
+        let r = med_all(&mut h, "bat");
+        assert!(r.iter().all(|(_, _, c)| *c >= 2));
+    }
+
+    // [spec:foma:sem:spelling.cmatrix-print-att-fn/test]
+    // [spec:foma:sem:fomalib.cmatrix-print-att-fn/test]
+    #[test]
+    fn cmatrix_print_att_format() {
+        let mut net = parse_sorted("{ab}"); // sigma a=3,b=4; maxsigma 5
+        cmatrix_init(&mut net);
+        let mut buf: Vec<u8> = Vec::new();
+        cmatrix_print_att(&net, &mut buf);
+        let got = String::from_utf8(buf).unwrap();
+        let expected = "\
+0\t0\t@0@\ta\t1
+0\t0\t@0@\tb\t1
+0\t0\ta\t@0@\t1
+0\t0\ta\ta\t0
+0\t0\ta\tb\t1
+0\t0\tb\t@0@\t1
+0\t0\tb\ta\t1
+0\t0\tb\tb\t0
+0
+";
+        assert_eq!(got, expected);
+    }
+
+    // [spec:foma:sem:spelling.cmatrix-print-fn/test]
+    // [spec:foma:sem:fomalib.cmatrix-print-fn/test]
+    #[test]
+    fn cmatrix_print_runs() {
+        // Writes to stdout; assert only that it renders without panicking.
+        let mut net = parse_sorted("{ab}");
+        cmatrix_init(&mut net);
+        cmatrix_print(&net);
+    }
+
+    // [spec:foma:sem:spelling.print-match-fn/test]
+    #[test]
+    fn print_match_via_med_alignment() {
+        // Exercises print_match's two-pass parent-chain walk end to end.
+        let net = parse_sorted("{cat}");
+        let mut h = apply_med_init(&net);
+        let r = med_all(&mut h, "cat");
+        // exact match: both aligned strings equal "cat", cost 0.
+        assert_eq!(r[0].0, "cat");
+        assert_eq!(r[0].1, "cat");
+        assert_eq!(r[0].2, 0);
+    }
+}
