@@ -1156,10 +1156,15 @@ mod tests {
     /* ---- module-static builder family ------------------------------- */
 
     // [spec:foma:sem:dynarray.fsm-state-init-fn/test]
+    // [spec:foma:sem:fomalibconf.fsm-state-init-fn/test]
     // [spec:foma:sem:dynarray.fsm-state-set-current-state-fn/test]
+    // [spec:foma:sem:fomalibconf.fsm-state-set-current-state-fn/test]
     // [spec:foma:sem:dynarray.fsm-state-add-arc-fn/test]
+    // [spec:foma:sem:fomalibconf.fsm-state-add-arc-fn/test]
     // [spec:foma:sem:dynarray.fsm-state-end-state-fn/test]
+    // [spec:foma:sem:fomalibconf.fsm-state-end-state-fn/test]
     // [spec:foma:sem:dynarray.fsm-state-close-fn/test]
+    // [spec:foma:sem:fomalibconf.fsm-state-close-fn/test]
     #[test]
     fn fsm_state_build_line_table_and_sentinel() {
         /* state 0: initial, one arc 0 -3:3-> 1; state 1: final, no arcs. */
