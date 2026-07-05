@@ -28,4 +28,5 @@ assertions (
     {id w3-apply-spelling, kind @complete, author "brendan@necessary.nu", at 2026-07-05T00:03:13.657251Z}
     {id w3-io, kind @complete, author "brendan@necessary.nu", at 2026-07-05T00:30:29.656132Z}
     {id w3-lexcread, kind @complete, author "brendan@necessary.nu", at 2026-07-05T00:30:29.696161Z}
+    {id w3-cli, kind @complete, author "brendan@necessary.nu", at 2026-07-05T01:25:27.296591Z}
 )
