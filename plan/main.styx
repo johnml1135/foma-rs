@@ -515,6 +515,15 @@ children (
                 id w4-io
                 title "Idiomatize io (Result-based, Read/Write generics) + bug fixes (BOM, prolog escape typo)"
                 deps (w4-structures-dynarray)
+                sealed true
+                log (
+                    {
+                        at 2026-07-06T11:44:20.30098Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Todo → Done (nplan complete)"
+                    }
+                )
             }
 
             {
