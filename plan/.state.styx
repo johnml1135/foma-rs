@@ -35,4 +35,5 @@ assertions (
     {id w4-graph-algorithms, kind @complete, author "brendan@necessary.nu", at 2026-07-06T11:43:10.963247Z}
     {id w4-io, kind @complete, author "brendan@necessary.nu", at 2026-07-06T11:44:20.30098Z}
     {id w4-constructions, kind @complete, author "brendan@necessary.nu", at 2026-07-06T12:22:39.047086Z}
+    {id w4-flags-define-rewrite, kind @doing, author "brendan@necessary.nu", at 2026-07-06T12:22:58.794321Z}
 )

@@ -53,9 +53,9 @@ pub struct Flags {
 ///Eliminate a flag from a network. If called with name = NULL, eliminate all flags.
 ///
 // [spec:foma:def:flags.flag-eliminate-fn]
-// [spec:foma:sem:flags.flag-eliminate-fn]
+// [spec:foma:sem:flags.flag-eliminate-fn+1]
 // [spec:foma:def:fomalib.flag-eliminate-fn]
-// [spec:foma:sem:fomalib.flag-eliminate-fn]
+// [spec:foma:sem:fomalib.flag-eliminate-fn+1]
 pub fn flag_eliminate(net: Box<Fsm>, name: Option<&str>) -> Box<Fsm> {
     let mut filter: Option<Box<Fsm>> = None;
 
@@ -96,12 +96,14 @@ pub fn flag_eliminate(net: Box<Fsm>, name: Option<&str>) -> Box<Fsm> {
         let mut fail_flags: Option<Box<Fsm>> = None;
         let mut self_: Option<Box<Fsm>> = None;
 
-        /* BUG in C, ported literally: `|` instead of `&` — the bitwise-or is
-        always nonzero, so the intended U/R/D/E type restriction is a no-op
-        and the body runs for every type (masked in practice: flag_build only
-        classifies pairs when f's type is U, R, or D). */
+        /* Wave 4 fix: the C ORed the type mask (`f->type | U|R|D|E`), which is
+        always nonzero, so the intended restriction to U/R/D/E flags was a
+        no-op and the body ran for every type. Use `&` to actually restrict it.
+        Observable language is unchanged: flag_build classifies pairs only when
+        f's type is U, R, or D, so the P/N/C/E iterations the bug allowed never
+        built a filter anyway. */
         if (name.is_none() || fl.name.as_deref() == name)
-            && (fl.r#type | FLAG_UNIFY | FLAG_REQUIRE | FLAG_DISALLOW | FLAG_EQUAL) != 0
+            && (fl.r#type & (FLAG_UNIFY | FLAG_REQUIRE | FLAG_DISALLOW | FLAG_EQUAL)) != 0
         {
             succeed_flags = Some(fsm_empty_set());
             fail_flags = Some(fsm_empty_set());
@@ -251,108 +253,62 @@ pub fn flag_build(
     ffname: &str,
     ffvalue: Option<&str>,
 ) -> i32 {
-    let mut selfnull = 0; /* If current flag has no value, e.g. @R.A@ */
     if fname != ffname {
         return NONE;
     }
-
-    let fvalue = match fvalue {
-        None => {
-            selfnull = 1;
-            ""
-        }
-        Some(v) => v,
-    };
-
+    /* selfnull: the eliminated flag is valueless, e.g. @R.A@ or @D.A@ */
+    let selfnull = fvalue.is_none();
+    let fvalue = fvalue.unwrap_or("");
     let ffvalue = ffvalue.unwrap_or("");
+    /* eq mirrors the C's `strcmp(fvalue, ffvalue) == 0` */
+    let eq = fvalue == ffvalue;
 
-    /* valeq = strcmp(fvalue, ffvalue) — only ever compared against 0 below */
-    let valeq = if fvalue == ffvalue { 0 } else { 1 };
-    /* U flags */
-    if ftype == FLAG_UNIFY && fftype == FLAG_POSITIVE && valeq == 0 {
-        return SUCCEED;
+    /* Pairwise compatibility decision table (see the sem rule); first matching
+    row wins, anything unlisted is NONE. Columns: eliminated flag type, other
+    flag type, required `eq` (None = don't care), required `selfnull`, result. */
+    type Row = (i32, i32, Option<bool>, Option<bool>, i32);
+    #[rustfmt::skip]
+    let rows: [Row; 25] = [
+        /* U flags */
+        (FLAG_UNIFY,    FLAG_POSITIVE, Some(true),  None,        SUCCEED),
+        (FLAG_UNIFY,    FLAG_CLEAR,    None,        None,        SUCCEED),
+        (FLAG_UNIFY,    FLAG_UNIFY,    Some(false), None,        FAIL),
+        (FLAG_UNIFY,    FLAG_POSITIVE, Some(false), None,        FAIL),
+        (FLAG_UNIFY,    FLAG_NEGATIVE, Some(true),  None,        FAIL),
+        /* R flag, valueless */
+        (FLAG_REQUIRE,  FLAG_UNIFY,    None,        Some(true),  SUCCEED),
+        (FLAG_REQUIRE,  FLAG_POSITIVE, None,        Some(true),  SUCCEED),
+        (FLAG_REQUIRE,  FLAG_NEGATIVE, None,        Some(true),  SUCCEED),
+        (FLAG_REQUIRE,  FLAG_CLEAR,    None,        Some(true),  FAIL),
+        /* R flag, with value */
+        (FLAG_REQUIRE,  FLAG_POSITIVE, Some(true),  Some(false), SUCCEED),
+        (FLAG_REQUIRE,  FLAG_UNIFY,    Some(true),  Some(false), SUCCEED),
+        (FLAG_REQUIRE,  FLAG_POSITIVE, Some(false), Some(false), FAIL),
+        (FLAG_REQUIRE,  FLAG_UNIFY,    Some(false), Some(false), FAIL),
+        (FLAG_REQUIRE,  FLAG_NEGATIVE, None,        Some(false), FAIL),
+        (FLAG_REQUIRE,  FLAG_CLEAR,    None,        Some(false), FAIL),
+        /* D flag, valueless */
+        (FLAG_DISALLOW, FLAG_CLEAR,    None,        Some(true),  SUCCEED),
+        (FLAG_DISALLOW, FLAG_POSITIVE, None,        Some(true),  FAIL),
+        (FLAG_DISALLOW, FLAG_UNIFY,    None,        Some(true),  FAIL),
+        (FLAG_DISALLOW, FLAG_NEGATIVE, None,        Some(true),  FAIL),
+        /* D flag, with value */
+        (FLAG_DISALLOW, FLAG_POSITIVE, Some(false), Some(false), SUCCEED),
+        (FLAG_DISALLOW, FLAG_CLEAR,    None,        Some(false), SUCCEED),
+        (FLAG_DISALLOW, FLAG_NEGATIVE, Some(true),  Some(false), SUCCEED),
+        (FLAG_DISALLOW, FLAG_POSITIVE, Some(true),  Some(false), FAIL),
+        (FLAG_DISALLOW, FLAG_UNIFY,    Some(true),  Some(false), FAIL),
+        (FLAG_DISALLOW, FLAG_NEGATIVE, Some(false), Some(false), FAIL),
+    ];
+    for &(ft, fft, eq_req, null_req, result) in &rows {
+        if ftype == ft
+            && fftype == fft
+            && eq_req.is_none_or(|r| r == eq)
+            && null_req.is_none_or(|r| r == selfnull)
+        {
+            return result;
+        }
     }
-    if ftype == FLAG_UNIFY && fftype == FLAG_CLEAR {
-        return SUCCEED;
-    }
-    if ftype == FLAG_UNIFY && fftype == FLAG_UNIFY && valeq != 0 {
-        return FAIL;
-    }
-    if ftype == FLAG_UNIFY && fftype == FLAG_POSITIVE && valeq != 0 {
-        return FAIL;
-    }
-    if ftype == FLAG_UNIFY && fftype == FLAG_NEGATIVE && valeq == 0 {
-        return FAIL;
-    }
-
-    /* R flag with value = 0 */
-    if ftype == FLAG_REQUIRE && fftype == FLAG_UNIFY && selfnull != 0 {
-        return SUCCEED;
-    }
-    if ftype == FLAG_REQUIRE && fftype == FLAG_POSITIVE && selfnull != 0 {
-        return SUCCEED;
-    }
-    if ftype == FLAG_REQUIRE && fftype == FLAG_NEGATIVE && selfnull != 0 {
-        return SUCCEED;
-    }
-    if ftype == FLAG_REQUIRE && fftype == FLAG_CLEAR && selfnull != 0 {
-        return FAIL;
-    }
-
-    /* R flag with value */
-    if ftype == FLAG_REQUIRE && fftype == FLAG_POSITIVE && valeq == 0 && selfnull == 0 {
-        return SUCCEED;
-    }
-    if ftype == FLAG_REQUIRE && fftype == FLAG_UNIFY && valeq == 0 && selfnull == 0 {
-        return SUCCEED;
-    }
-    if ftype == FLAG_REQUIRE && fftype == FLAG_POSITIVE && valeq != 0 && selfnull == 0 {
-        return FAIL;
-    }
-    if ftype == FLAG_REQUIRE && fftype == FLAG_UNIFY && valeq != 0 && selfnull == 0 {
-        return FAIL;
-    }
-    if ftype == FLAG_REQUIRE && fftype == FLAG_NEGATIVE && selfnull == 0 {
-        return FAIL;
-    }
-    if ftype == FLAG_REQUIRE && fftype == FLAG_CLEAR && selfnull == 0 {
-        return FAIL;
-    }
-
-    /* D flag with value = 0 */
-    if ftype == FLAG_DISALLOW && fftype == FLAG_CLEAR && selfnull != 0 {
-        return SUCCEED;
-    }
-    if ftype == FLAG_DISALLOW && fftype == FLAG_POSITIVE && selfnull != 0 {
-        return FAIL;
-    }
-    if ftype == FLAG_DISALLOW && fftype == FLAG_UNIFY && selfnull != 0 {
-        return FAIL;
-    }
-    if ftype == FLAG_DISALLOW && fftype == FLAG_NEGATIVE && selfnull != 0 {
-        return FAIL;
-    }
-
-    /* D flag with value */
-    if ftype == FLAG_DISALLOW && fftype == FLAG_POSITIVE && valeq != 0 && selfnull == 0 {
-        return SUCCEED;
-    }
-    if ftype == FLAG_DISALLOW && fftype == FLAG_CLEAR && selfnull == 0 {
-        return SUCCEED;
-    }
-    if ftype == FLAG_DISALLOW && fftype == FLAG_NEGATIVE && valeq == 0 && selfnull == 0 {
-        return SUCCEED;
-    }
-    if ftype == FLAG_DISALLOW && fftype == FLAG_POSITIVE && valeq == 0 && selfnull == 0 {
-        return FAIL;
-    }
-    if ftype == FLAG_DISALLOW && fftype == FLAG_UNIFY && valeq == 0 && selfnull == 0 {
-        return FAIL;
-    }
-    if ftype == FLAG_DISALLOW && fftype == FLAG_NEGATIVE && valeq != 0 && selfnull == 0 {
-        return FAIL;
-    }
-
     NONE
 }
 
@@ -447,161 +403,139 @@ pub(crate) fn flag_extract(net: &Fsm) -> Option<Box<Flags>> {
 // [spec:foma:def:fomalibconf.flag-check-fn]
 // [spec:foma:sem:fomalibconf.flag-check-fn]
 pub fn flag_check(s: &str) -> i32 {
-    /* We simply simulate this regex (where ND is not dot) */
-    /* "@" [U|P|N|R|E|D] "." ND+ "." ND+ "@" | "@" [D|R|C] "." ND+ "@" */
-    /* and return 1 if it matches */
+    /* Byte-level DFA for the flag-diacritic grammar (ND = any byte that is
+    neither '.' nor NUL): return 1 iff s matches
+        "@" [U|P|N|E] "." ND+ "." ND+ "@"   (U/P/N/E: attribute AND value)
+      | "@" [R|D]     "." ND+ ["." ND+] "@" (R/D: value optional)
+      | "@" C         "." ND+ "@"           (C: never a value)
+    The C used numeric goto labels s0..s11; here each is a `State` variant with
+    the same transitions. The end of the &str stands in for the C NUL. */
+    #[derive(Clone, Copy)]
+    enum State {
+        Start,
+        S1,
+        S2,
+        S3,
+        S4,
+        S5,
+        S6,
+        S7,
+        S8,
+        S9,
+        S10,
+        S11,
+    }
+    use State::*;
 
     let s = s.as_bytes();
-    /* *(s+i): the end of the &str stands in for the C NUL terminator */
-    let at = |i: usize| -> u8 {
-        if i < s.len() { s[i] } else { 0 }
-    };
+    let at = |i: usize| -> u8 { if i < s.len() { s[i] } else { 0 } };
 
     let mut i = 0usize;
-
-    /* C goto labels s0..s11 → state loop with the same targets */
-    let mut state = 0;
+    let mut state = Start;
     loop {
-        match state {
-            /* entry */
-            0 => {
-                if at(i) == b'@' {
+        state = match state {
+            Start => match at(i) {
+                b'@' => {
                     i += 1;
-                    state = 1;
-                    continue;
+                    S1
                 }
-                return 0;
+                _ => return 0,
+            },
+            S1 => match at(i) {
+                b'C' => {
+                    i += 1;
+                    S4
+                }
+                b'N' | b'E' | b'U' | b'P' => {
+                    i += 1;
+                    S2
+                }
+                b'R' | b'D' => {
+                    i += 1;
+                    S3
+                }
+                _ => return 0,
+            },
+            /* operator letter '.': into the first (mandatory) field */
+            S2 if at(i) == b'.' => {
+                i += 1;
+                S5
             }
-            /* s1 */
-            1 => {
-                if at(i) == b'C' {
-                    i += 1;
-                    state = 4;
-                    continue;
-                }
-                if at(i) == b'N' || at(i) == b'E' || at(i) == b'U' || at(i) == b'P' {
-                    i += 1;
-                    state = 2;
-                    continue;
-                }
-                if at(i) == b'R' || at(i) == b'D' {
-                    i += 1;
-                    state = 3;
-                    continue;
-                }
-                return 0;
+            S3 if at(i) == b'.' => {
+                i += 1;
+                S6
             }
-            /* s2 */
-            2 => {
-                if at(i) == b'.' {
-                    i += 1;
-                    state = 5;
-                    continue;
-                }
-                return 0;
+            S4 if at(i) == b'.' => {
+                i += 1;
+                S7
             }
-            /* s3 */
-            3 => {
-                if at(i) == b'.' {
+            S2 | S3 | S4 => return 0,
+            /* first ND byte of each field must exist */
+            S5 => match at(i) {
+                b'.' | 0 => return 0,
+                _ => {
                     i += 1;
-                    state = 6;
-                    continue;
+                    S8
                 }
-                return 0;
-            }
-            /* s4 */
-            4 => {
-                if at(i) == b'.' {
+            },
+            S6 => match at(i) {
+                b'.' | 0 => return 0,
+                _ => {
                     i += 1;
-                    state = 7;
-                    continue;
+                    S9
                 }
-                return 0;
-            }
-            /* s5 */
-            5 => {
-                if at(i) != b'.' && at(i) != 0 {
+            },
+            S7 => match at(i) {
+                b'.' | 0 => return 0,
+                _ => {
                     i += 1;
-                    state = 8;
-                    continue;
+                    S10
                 }
-                return 0;
-            }
-            /* s6 */
-            6 => {
-                if at(i) != b'.' && at(i) != 0 {
+            },
+            /* S8: first field of U/P/N/E — quirk: '@' is an ordinary ND byte
+            here, so e.g. "@U.a@b.c@" is accepted; only '.' ends the field */
+            S8 => match at(i) {
+                b'.' => {
                     i += 1;
-                    state = 9;
-                    continue;
+                    S7
                 }
-                return 0;
-            }
-            /* s7 */
-            7 => {
-                if at(i) != b'.' && at(i) != 0 {
+                0 => return 0,
+                _ => {
                     i += 1;
-                    state = 10;
-                    continue;
+                    S8
                 }
-                return 0;
-            }
-            /* s8 — quirk: '@' is an ordinary ND byte here (first field of
-            U/P/N/E flags), so e.g. "@U.a@b.c@" is accepted */
-            8 => {
-                if at(i) == b'.' {
+            },
+            /* S9: single field of R/D — '@' ends the string, '.' opens a value */
+            S9 => match at(i) {
+                b'@' => {
                     i += 1;
-                    state = 7;
-                    continue;
+                    S11
                 }
-                if at(i) != b'.' && at(i) != 0 {
+                b'.' => {
                     i += 1;
-                    state = 8;
-                    continue;
+                    S7
                 }
-                return 0;
-            }
-            /* s9 */
-            9 => {
-                if at(i) == b'@' {
+                0 => return 0,
+                _ => {
                     i += 1;
-                    state = 11;
-                    continue;
+                    S9
                 }
-                if at(i) == b'.' {
+            },
+            /* S10: last field — only '@' ends it */
+            S10 => match at(i) {
+                b'@' => {
                     i += 1;
-                    state = 7;
-                    continue;
+                    S11
                 }
-                if at(i) != b'.' && at(i) != 0 {
+                b'.' | 0 => return 0,
+                _ => {
                     i += 1;
-                    state = 9;
-                    continue;
+                    S10
                 }
-                return 0;
-            }
-            /* s10 */
-            10 => {
-                if at(i) == b'@' {
-                    i += 1;
-                    state = 11;
-                    continue;
-                }
-                if at(i) != b'.' && at(i) != 0 {
-                    i += 1;
-                    state = 10;
-                    continue;
-                }
-                return 0;
-            }
-            /* s11 */
-            11 => {
-                if at(i) == 0 {
-                    return 1;
-                }
-                return 0;
-            }
-            _ => unreachable!(),
-        }
+            },
+            /* S11: accept iff the '@' was the final byte */
+            S11 => return if at(i) == 0 { 1 } else { 0 },
+        };
     }
 }
 
@@ -766,11 +700,8 @@ pub fn flag_twosided(mut net: Box<Fsm>) -> Box<Fsm> {
         }
         return net;
     }
-    /* C: realloc(net->states, sizeof(struct fsm)*(i+newarcs)) — BUG kept as
-    documented: sized with sizeof(struct fsm) instead of sizeof(struct
-    fsm_state), a huge over-allocation that also hides that i+newarcs+1 slots
-    are needed for the new sentinel. DEVIATION from C (the Vec grows to
-    exactly the i+newarcs+1 lines actually written). */
+    /* Grow the line table to hold the i original lines, newarcs split arcs,
+    and one new sentinel. */
     net.states.resize(
         i + newarcs + 1,
         FsmState {
@@ -849,7 +780,6 @@ pub fn flag_twosided(mut net: Box<Fsm>) -> Box<Fsm> {
 mod tests {
     use super::*;
     use crate::apply::{apply_init, apply_words};
-    use crate::constructions::fsm_symbol;
     use crate::regex::fsm_parse_regex;
     use crate::types::{
         FLAG_CLEAR, FLAG_DISALLOW, FLAG_EQUAL, FLAG_NEGATIVE, FLAG_POSITIVE, FLAG_REQUIRE,
@@ -1086,8 +1016,8 @@ mod tests {
         assert!(syms2.contains(&"a".to_string()));
     }
 
-    // [spec:foma:sem:flags.flag-eliminate-fn/test]
-    // [spec:foma:sem:fomalib.flag-eliminate-fn/test]
+    // [spec:foma:sem:flags.flag-eliminate-fn+1/test]
+    // [spec:foma:sem:fomalib.flag-eliminate-fn+1/test]
     #[test]
     fn flag_eliminate_end_to_end() {
         /* U/R/D flags. Surviving paths (verified against C foma):
@@ -1098,9 +1028,9 @@ mod tests {
         let src = r#"["@P.F.1@" a "@U.F.1@"] | ["@P.F.2@" b "@U.F.1@"] | ["@P.G.1@" c "@R.G@"] | [d "@R.G@"] | [e "@D.H@"] | ["@P.H.1@" f "@D.H@"]"#;
         let net = fsm_parse_regex(src, None, None).unwrap();
         let result = flag_eliminate(net, None);
-        /* The `|`-for-`&` type-mask bug is masked here: flag_build classifies
-        nothing for non-U/R/D flags, so the observable result is the correctly
-        flag-filtered language. */
+        /* Wave 4 fix (`&` type mask): the body now runs only for U/R/D/E flags.
+        Because flag_build already classified nothing for the other types, the
+        observable flag-filtered language is identical to the pre-fix behavior. */
         assert_eq!(all_words(&result), vec!["a", "c", "e"]);
         /* No flag symbols remain in sigma. */
         for s in sigma_syms(&result) {

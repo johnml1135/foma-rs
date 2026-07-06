@@ -186,11 +186,8 @@ pub fn fsm_rewrite(all_rules: &mut RewriteSet) -> Box<Fsm> {
                     let left_copy = fsm_copy(r.left.as_deref_mut().unwrap());
                     r.right = Some(fsm_minimize(fsm_lower(left_copy)));
                     let left_copy = fsm_copy(r.left.as_deref_mut().unwrap());
-                    let old_left = r.left.replace(fsm_minimize(fsm_upper(left_copy)));
-                    /* C overwrites rules->left without freeing it — the
-                    original center transducer is leaked; bound and dropped
-                    here */
-                    drop(old_left);
+                    /* replace the center with its upper side (old center dropped) */
+                    r.left = Some(fsm_minimize(fsm_upper(left_copy)));
                     rewrite_add_special_syms(&rb, r.right.as_deref_mut());
                     rewrite_add_special_syms(&rb, r.left.as_deref_mut());
                     cp = cp_new;
@@ -360,17 +357,12 @@ pub fn fsm_rewrite(all_rules: &mut RewriteSet) -> Box<Fsm> {
                             c,
                             rewr_notleftmost(&rb, &mut lang, rule_number, r.arrow_type),
                         );
-                        /* C leaks the rewrite_upper original (rewr_notleftmost
-                        only copies it) */
-                        drop(lang);
                         let left_copy = fsm_copy(r.left.as_deref_mut().unwrap());
                         let mut lang = rewrite_upper(&mut rb, left_copy);
                         c = fsm_union(
                             c,
                             rewr_notlongest(&rb, &mut lang, rule_number, r.arrow_type),
                         );
-                        /* C leaks the rewrite_upper original */
-                        drop(lang);
                     }
                     if r.arrow_type & ARROW_LEFT != 0 {
                         let right_copy = fsm_copy(r.right.as_deref_mut().unwrap());
@@ -379,16 +371,12 @@ pub fn fsm_rewrite(all_rules: &mut RewriteSet) -> Box<Fsm> {
                             c,
                             rewr_notleftmost(&rb, &mut lang, rule_number, r.arrow_type),
                         );
-                        /* C leaks the rewrite_lower original */
-                        drop(lang);
                         let right_copy = fsm_copy(r.right.as_deref_mut().unwrap());
                         let mut lang = rewrite_lower(&mut rb, right_copy);
                         c = fsm_union(
                             c,
                             rewr_notlongest(&rb, &mut lang, rule_number, r.arrow_type),
                         );
-                        /* C leaks the rewrite_lower original */
-                        drop(lang);
                     }
                 }
                 if r.arrow_type & ARROW_SHORTEST_MATCH != 0 {
@@ -399,13 +387,9 @@ pub fn fsm_rewrite(all_rules: &mut RewriteSet) -> Box<Fsm> {
                             c,
                             rewr_notleftmost(&rb, &mut lang, rule_number, r.arrow_type),
                         );
-                        /* C leaks the rewrite_upper original */
-                        drop(lang);
                         let left_copy = fsm_copy(r.left.as_deref_mut().unwrap());
                         let mut lang = rewrite_upper(&mut rb, left_copy);
                         c = fsm_union(c, rewr_notshortest(&rb, &mut lang, rule_number));
-                        /* C leaks the rewrite_upper original */
-                        drop(lang);
                     }
                     if r.arrow_type & ARROW_LEFT != 0 {
                         let right_copy = fsm_copy(r.right.as_deref_mut().unwrap());
@@ -414,13 +398,9 @@ pub fn fsm_rewrite(all_rules: &mut RewriteSet) -> Box<Fsm> {
                             c,
                             rewr_notleftmost(&rb, &mut lang, rule_number, r.arrow_type),
                         );
-                        /* C leaks the rewrite_lower original */
-                        drop(lang);
                         let right_copy = fsm_copy(r.right.as_deref_mut().unwrap());
                         let mut lang = rewrite_lower(&mut rb, right_copy);
                         c = fsm_union(c, rewr_notshortest(&rb, &mut lang, rule_number));
-                        /* C leaks the rewrite_lower original */
-                        drop(lang);
                     }
                 }
                 if rewrite_contexts.is_none() {

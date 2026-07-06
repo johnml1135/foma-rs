@@ -556,16 +556,18 @@
 > [spec:foma:def:fomalib.flag-eliminate-fn]
 > fsm *flag_eliminate(struct fsm *net, char *name)
 
-> [spec:foma:sem:fomalib.flag-eliminate-fn]
+> [spec:foma:sem:fomalib.flag-eliminate-fn+1]
 > Eliminates the flag diacritic with attribute `name` (or ALL flags when name == NULL) from `net`
 > while preserving the flag semantics, by composing filter automata on both sides and then
 > replacing flag arcs with EPSILON. Steps: (1) If net->pathcount == 0 (the stored field, not
 > recomputed), return net unchanged (stderr note if g_verbose). (2) Extract the list of all flag
 > symbols in sigma as (type, attribute, value) triples. (3) If name != NULL and no extracted flag
 > has that attribute, return net unchanged (verbose note). (4) For each extracted flag f whose
-> attribute matches (or all if name == NULL) — the type restriction is written `f->type |
-> FLAG_UNIFY|FLAG_REQUIRE|FLAG_DISALLOW|FLAG_EQUAL`, bitwise OR instead of AND, so it is always
-> true (latent bug: filters are also attempted for C/P/N flags): build succeed_flags and
+> attribute matches (or all if name == NULL) — the type restriction is written `f->type &
+> (FLAG_UNIFY|FLAG_REQUIRE|FLAG_DISALLOW|FLAG_EQUAL)` — Wave 4 fix: the C used bitwise OR, which is
+> always true, so filters were also attempted for C/P/N flags; `&` restricts the body to U/R/D/E as
+> intended and changes nothing observable (flag_build classifies pairs only for U/R/D f):
+> build succeed_flags and
 > fail_flags as minimized unions of the single-symbol FSMs of every extracted flag ff for which
 > flag_build(f, ff) returns SUCCEED resp. FAIL (flag symbol strings are reconstructed as
 > "@T.name@" or "@T.name.value@"), plus self = the single-symbol FSM of f. If at least one ff

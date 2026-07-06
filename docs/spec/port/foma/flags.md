@@ -50,7 +50,7 @@
 > [spec:foma:def:flags.flag-eliminate-fn]
 > struct fsm *flag_eliminate(struct fsm *net, char *name)
 
-> [spec:foma:sem:flags.flag-eliminate-fn]
+> [spec:foma:sem:flags.flag-eliminate-fn+1]
 > Eliminates one flag attribute (all flags whose attribute equals name) or ALL flags (name==NULL)
 > from net by building per-flag filter automata, composing them on both sides, and erasing the flag
 > arcs. Uses file-local constants FAIL=1, SUCCEED=2, NONE=3.
@@ -60,14 +60,16 @@
 > has that exact attribute name: when g_verbose print "Flag attribute '%s' does not occur in the
 > network.\n" and return net unchanged (flags list leaked).
 > 3. For each extracted flag f: if (name==NULL || f->name equals name) &&
-> (f->type | FLAG_UNIFY | FLAG_REQUIRE | FLAG_DISALLOW | FLAG_EQUAL) — BUG: `|` should be `&`;
-> the bitwise-or is always nonzero, so the intended restriction to U/R/D/E types is a no-op and
-> the body runs for every type. Build fail_flags and succeed_flags as minimized unions (starting
-> from fsm_empty_set) of flag_create_symbol(ff) over ALL extracted flags ff, classified by
+> (f->type & (FLAG_UNIFY | FLAG_REQUIRE | FLAG_DISALLOW | FLAG_EQUAL)) — Wave 4 fix: the C wrote
+> this with `|`, which is always nonzero, so the intended restriction to U/R/D/E types was a no-op
+> and the body ran for every type; `&` restricts it as intended. The observable language is
+> unchanged (see below). Build fail_flags and succeed_flags as minimized unions (starting from
+> fsm_empty_set) of flag_create_symbol(ff) over ALL extracted flags ff, classified by
 > `[spec:foma:sem:flags.flag-build-fn]`(f, ff): FAIL goes to fail_flags, SUCCEED to succeed_flags;
-> set a marker if anything classified. self = flag_create_symbol(f). The bug is masked in practice:
-> flag_build only classifies pairs when f's type is U, R, or D, so for other types nothing is
-> classified and no filter is added (those succeed/fail/self nets leak).
+> set a marker if anything classified. self = flag_create_symbol(f). The fix changes nothing
+> observable: flag_build classifies pairs only when f's type is U, R, or D, so for E (and, before
+> the fix, P/N/C) types nothing is classified and no filter is added (those succeed/fail/self nets
+> leak).
 > 4. If the marker is set, build newfilter: for f->type == FLAG_REQUIRE,
 > ~[ (?* fail_flags)^0,1 ~$[succeed_flags] self ?* ] — literally fsm_complement(concat(
 > optionality(concat(universal, fail_flags)), concat(complement(contains(succeed_flags)),

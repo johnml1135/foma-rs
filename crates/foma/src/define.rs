@@ -30,7 +30,7 @@ pub fn find_defined<'a>(def: &'a mut DefinedNetworks, string: &str) -> Option<&'
     returned net is the registry's own copy (borrowed, not duplicated). */
     let mut d = Some(def);
     while let Some(node) = d {
-        if node.name.is_some() && node.name.as_deref() == Some(string) {
+        if node.name.as_deref() == Some(string) {
             return node.net.as_deref_mut();
         }
         d = node.next.as_deref_mut();
@@ -81,12 +81,9 @@ pub fn remove_defined(def: &mut DefinedNetworks, string: Option<&str>) -> i32 {
             if let Some(net) = node.net.take() {
                 fsm_destroy(net);
             }
-            /* free(d->name) */
-            // DEVIATION from C (the C frees every node's net/name but leaves
-            // the fields dangling and the nodes in place; safe Rust clears
-            // name/net to None — the nodes themselves stay in the list, as
-            // in C, so the registry keeps its node count but reads as empty
-            // instead of reading freed memory)
+            /* Clear name/net (already taken above); the nodes themselves stay
+            in the list as in C, so the registry keeps its node count but reads
+            as empty. */
             node.name = None;
             d = node.next.as_deref_mut();
         }
@@ -99,7 +96,7 @@ pub fn remove_defined(def: &mut DefinedNetworks, string: Option<&str>) -> i32 {
     {
         let mut d = Some(&*def);
         while let Some(node) = d {
-            if node.name.is_some() && node.name.as_deref() == Some(string) {
+            if node.name.as_deref() == Some(string) {
                 exists = 1;
                 break;
             }
@@ -109,7 +106,7 @@ pub fn remove_defined(def: &mut DefinedNetworks, string: Option<&str>) -> i32 {
     if exists == 0 {
         return 1;
     }
-    if def.name.is_some() && def.name.as_deref() == Some(string) {
+    if def.name.as_deref() == Some(string) {
         /* d == def */
         if def.next.is_some() {
             /* fsm_destroy(d->net) — C's fsm_destroy is a no-op on NULL */
@@ -136,7 +133,7 @@ pub fn remove_defined(def: &mut DefinedNetworks, string: Option<&str>) -> i32 {
         let mut d_prev = &mut *def;
         loop {
             let matched = match d_prev.next.as_deref() {
-                Some(d) => d.name.is_some() && d.name.as_deref() == Some(string),
+                Some(d) => d.name.as_deref() == Some(string),
                 None => break, /* unreachable: existence established above */
             };
             if matched {
@@ -168,7 +165,7 @@ pub fn find_defined_function<'a>(
     /* returns the stored regex string, borrowed from the list (not a copy) */
     let mut d = Some(deff);
     while let Some(node) = d {
-        if node.name.is_some() && node.name.as_deref() == Some(name) && node.numargs == numargs {
+        if node.name.as_deref() == Some(name) && node.numargs == numargs {
             return node.regex.as_deref();
         }
         d = node.next.as_deref();
@@ -189,7 +186,7 @@ pub fn add_defined_function(
 ) -> i32 {
     let mut d = Some(&mut *deff);
     while let Some(node) = d {
-        if node.name.is_some() && node.name.as_deref() == Some(name) && node.numargs == numargs {
+        if node.name.as_deref() == Some(name) && node.numargs == numargs {
             /* free(d->regex); d->regex = strdup(regex) */
             node.regex = Some(regex.to_string());
             if G_VERBOSE.with(|v| v.get()) != 0 {
@@ -240,7 +237,7 @@ pub fn add_defined(def: &mut DefinedNetworks, net: Option<Box<Fsm>>, string: &st
     fsm_count(&mut net);
     let mut d = Some(&mut *def);
     while let Some(node) = d {
-        if node.name.is_some() && node.name.as_deref() == Some(string) {
+        if node.name.as_deref() == Some(string) {
             /* fsm_destroy(d->net) — C's fsm_destroy is a no-op on NULL */
             if let Some(old) = node.net.take() {
                 fsm_destroy(old);
