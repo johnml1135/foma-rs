@@ -41,8 +41,9 @@ pub fn iface_apply_med(word: &str) {
         }
         Some(r) => {
             print!("{}\n", r);
-            let (instr, cost) =
-                stack_entry_amedh(amedh, |h| (apply_med_get_instring(h), apply_med_get_cost(h)));
+            let (instr, cost) = stack_entry_amedh(amedh, |h| {
+                (apply_med_get_instring(h), apply_med_get_cost(h))
+            });
             print!("{}\n", instr.unwrap_or_default());
             print!("Cost[f]: {}\n\n", cost);
         }
@@ -53,8 +54,9 @@ pub fn iface_apply_med(word: &str) {
             None => break,
             Some(r) => {
                 print!("{}\n", r);
-                let (instr, cost) =
-                    stack_entry_amedh(amedh, |h| (apply_med_get_instring(h), apply_med_get_cost(h)));
+                let (instr, cost) = stack_entry_amedh(amedh, |h| {
+                    (apply_med_get_instring(h), apply_med_get_cost(h))
+                });
                 print!("{}\n", instr.unwrap_or_default());
                 print!("Cost[f]: {}\n\n", cost);
             }
@@ -424,8 +426,14 @@ pub fn iface_print_shortest_string_size() {
                 onel,
                 fsm_kleene_star(fsm_cross_product(fsm_identity(), fsm_symbol("a"))),
             )));
-            print!("Shortest acyclic upper path length: {}\n", result_u.statecount - 1);
-            print!("Shortest acyclic lower path length: {}\n", result_l.statecount - 1);
+            print!(
+                "Shortest acyclic upper path length: {}\n",
+                result_u.statecount - 1
+            );
+            print!(
+                "Shortest acyclic lower path length: {}\n",
+                result_l.statecount - 1
+            );
         }
     }
 }
@@ -538,8 +546,12 @@ pub fn iface_pairs_call(limit: i32, random: i32) {
     };
     if iface_stack_check(1) != 0 {
         let ah = stack_get_ah().unwrap();
-        stack_entry_ah(ah, |h| apply_set_show_flags(h, G_SHOW_FLAGS.with(|v| v.get())));
-        stack_entry_ah(ah, |h| apply_set_obey_flags(h, G_OBEY_FLAGS.with(|v| v.get())));
+        stack_entry_ah(ah, |h| {
+            apply_set_show_flags(h, G_SHOW_FLAGS.with(|v| v.get()))
+        });
+        stack_entry_ah(ah, |h| {
+            apply_set_obey_flags(h, G_OBEY_FLAGS.with(|v| v.get()))
+        });
         stack_entry_ah(ah, |h| apply_set_space_symbol(h, "\u{1}"));
         stack_entry_ah(ah, |h| apply_set_epsilon(h, "\u{2}"));
         stack_entry_ah(ah, |h| apply_set_separator(h, "\u{3}"));
@@ -617,8 +629,12 @@ pub fn iface_pairs_file(filename: &str) {
             }
         };
         let ah = stack_get_ah().unwrap();
-        stack_entry_ah(ah, |h| apply_set_show_flags(h, G_SHOW_FLAGS.with(|v| v.get())));
-        stack_entry_ah(ah, |h| apply_set_obey_flags(h, G_OBEY_FLAGS.with(|v| v.get())));
+        stack_entry_ah(ah, |h| {
+            apply_set_show_flags(h, G_SHOW_FLAGS.with(|v| v.get()))
+        });
+        stack_entry_ah(ah, |h| {
+            apply_set_obey_flags(h, G_OBEY_FLAGS.with(|v| v.get()))
+        });
         stack_entry_ah(ah, |h| apply_set_space_symbol(h, "\u{1}"));
         stack_entry_ah(ah, |h| apply_set_epsilon(h, "\u{2}"));
         stack_entry_ah(ah, |h| apply_set_separator(h, "\u{3}"));

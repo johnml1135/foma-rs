@@ -24,8 +24,8 @@ use crate::mem::next_power_of_two;
 use crate::sigma::{sigma_max, sigma_sort, sigma_to_list};
 use crate::structures::{fsm_create, fsm_destroy, fsm_empty_set};
 use crate::types::{
-    Fsm, FsmConstructHandle, FsmReadHandle, FsmSigmaHash, FsmSigmaList, FsmState, FsmStateList,
-    FsmTransList, Sigma, EPSILON, FSM_NAME_LEN, IDENTITY, PATHCOUNT_UNKNOWN, UNK, UNKNOWN,
+    EPSILON, FSM_NAME_LEN, Fsm, FsmConstructHandle, FsmReadHandle, FsmSigmaHash, FsmSigmaList,
+    FsmState, FsmStateList, FsmTransList, IDENTITY, PATHCOUNT_UNKNOWN, Sigma, UNK, UNKNOWN,
 };
 
 /* C: #define INITIAL_SIZE 16384 */
@@ -272,11 +272,15 @@ thread_local! {
 /// Run `f` against the active thread-local build (panics if no build is in
 /// progress — the C read uninitialized statics, callers always init first).
 fn with_builder<R>(f: impl FnOnce(&mut FsmBuilder) -> R) -> R {
-    BUILDER.with(|b| f(b.borrow_mut().as_mut().expect("fsm_state build not initialized")))
+    BUILDER.with(|b| {
+        f(b.borrow_mut()
+            .as_mut()
+            .expect("fsm_state build not initialized"))
+    })
 }
 
 /* C library srand() twin: reseeds the shared LCG state used by rand().
-   apply_init calls this; the ISO C sample sets `next = seed`. */
+apply_init calls this; the ISO C sample sets `next = seed`. */
 pub(crate) fn srand(seed: u32) {
     RAND_NEXT.with(|n| n.set(seed as u64));
 }
@@ -284,10 +288,7 @@ pub(crate) fn srand(seed: u32) {
 /* C library rand() twin (ISO C sample implementation; see RAND_NEXT) */
 pub(crate) fn rand() -> i32 {
     RAND_NEXT.with(|n| {
-        let next = n
-            .get()
-            .wrapping_mul(1103515245)
-            .wrapping_add(12345);
+        let next = n.get().wrapping_mul(1103515245).wrapping_add(12345);
         n.set(next);
         ((next / 65536) % 32768) as i32
     })
@@ -581,9 +582,10 @@ pub fn fsm_construct_copy_sigma(handle: &mut FsmConstructHandle, sigma: Option<&
             New slots are not zero-initialized in C (None here). */
             handle.fsm_sigma_list_size = next_power_of_two(handle.fsm_sigma_list_size);
             // DEVIATION from C (OOB write when symnum >= the doubled size; Rust panics on the index below)
-            handle
-                .fsm_sigma_list
-                .resize(handle.fsm_sigma_list_size as usize, FsmSigmaList { symbol: None });
+            handle.fsm_sigma_list.resize(
+                handle.fsm_sigma_list_size as usize,
+                FsmSigmaList { symbol: None },
+            );
         }
         /* Insert into list */
         /* C shares one strdup between the list slot and the hash node;
@@ -647,9 +649,10 @@ pub fn fsm_construct_add_symbol(handle: &mut FsmConstructHandle, symbol: &str) -
         power-of-two size); new slots are not zero-initialized in C */
         handle.fsm_sigma_list_size = next_power_of_two(handle.fsm_sigma_list_size);
         // DEVIATION from C (OOB write when symnum >= the doubled size; Rust panics on the index below)
-        handle
-            .fsm_sigma_list
-            .resize(handle.fsm_sigma_list_size as usize, FsmSigmaList { symbol: None });
+        handle.fsm_sigma_list.resize(
+            handle.fsm_sigma_list_size as usize,
+            FsmSigmaList { symbol: None },
+        );
     }
     /* Insert into list */
     /* C shares one strdup between the list slot and the hash node;
@@ -1307,8 +1310,7 @@ mod tests {
 
         assert_eq!(peek(|b| b.current_fsm_linecount), 3);
         assert_eq!(peek(|b| b.arccount), 3);
-        let targets: Vec<i32> =
-            peek(|b| b.current_fsm_head.iter().map(|l| l.target).collect());
+        let targets: Vec<i32> = peek(|b| b.current_fsm_head.iter().map(|l| l.target).collect());
         assert_eq!(targets, vec![1, 2, 1]);
 
         /* end_state bumps mainloop, invalidating the stamps for the next state */
@@ -1402,8 +1404,14 @@ mod tests {
         assert_eq!(h.maxsigma, 3);
         assert_eq!(fsm_construct_add_symbol(&mut h, "dog"), 4);
         /* reserved symbols keep their fixed numbers, maxsigma not lowered */
-        assert_eq!(fsm_construct_add_symbol(&mut h, "@_EPSILON_SYMBOL_@"), EPSILON);
-        assert_eq!(fsm_construct_add_symbol(&mut h, "@_IDENTITY_SYMBOL_@"), IDENTITY);
+        assert_eq!(
+            fsm_construct_add_symbol(&mut h, "@_EPSILON_SYMBOL_@"),
+            EPSILON
+        );
+        assert_eq!(
+            fsm_construct_add_symbol(&mut h, "@_IDENTITY_SYMBOL_@"),
+            IDENTITY
+        );
         assert_eq!(h.maxsigma, 4);
         /* now findable via the hash */
         assert_eq!(fsm_construct_check_symbol(&h, "cat"), 3);

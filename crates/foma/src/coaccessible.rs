@@ -151,13 +151,11 @@ pub fn fsm_coaccessible(net: Box<Fsm>) -> Box<Fsm> {
                 && (net.states[i as usize].target == -1
                     || coacc[net.states[i as usize].target as usize] != 0)
             {
-                net.states[j as usize].state_no =
-                    mapping[net.states[i as usize].state_no as usize];
+                net.states[j as usize].state_no = mapping[net.states[i as usize].state_no as usize];
                 if net.states[i as usize].target == -1 {
                     net.states[j as usize].target = -1;
                 } else {
-                    net.states[j as usize].target =
-                        mapping[net.states[i as usize].target as usize];
+                    net.states[j as usize].target = mapping[net.states[i as usize].target as usize];
                 }
                 net.states[j as usize].final_state = net.states[i as usize].final_state;
                 net.states[j as usize].start_state = net.states[i as usize].start_state;
@@ -249,10 +247,7 @@ mod tests {
         fsm_construct_set_final(&mut h, 1);
         fsm_construct_set_initial(&mut h, 0);
         let net = fsm_coaccessible(fsm_construct_done(h));
-        assert_eq!(
-            lines(&net),
-            vec![(0, 3, 3, 1, 0, 1), (1, -1, -1, -1, 1, 0)]
-        );
+        assert_eq!(lines(&net), vec![(0, 3, 3, 1, 0, 1), (1, -1, -1, -1, 1, 0)]);
         assert_eq!(net.statecount, 2);
         assert_eq!(net.linecount, 2);
         assert_eq!(net.arccount, 1);
@@ -301,10 +296,7 @@ mod tests {
         fsm_construct_set_final(&mut h, 2);
         fsm_construct_set_initial(&mut h, 0);
         let net = fsm_coaccessible(fsm_construct_done(h));
-        assert_eq!(
-            lines(&net),
-            vec![(1, 4, 4, 2, 0, 0), (2, -1, -1, -1, 1, 0)]
-        );
+        assert_eq!(lines(&net), vec![(1, 4, 4, 2, 0, 0), (2, -1, -1, -1, 1, 0)]);
         assert!(lines(&net).iter().all(|l| l.0 != 0), "no state 0 survives");
         assert_eq!(net.statecount, 2);
         assert_eq!(net.linecount, 2);
@@ -325,10 +317,7 @@ mod tests {
         fsm_construct_set_final(&mut h, 1);
         fsm_construct_set_initial(&mut h, 0);
         let net = fsm_coaccessible(fsm_construct_done(h));
-        assert_eq!(
-            lines(&net),
-            vec![(0, 3, 3, 1, 0, 1), (1, -1, -1, -1, 1, 0)]
-        );
+        assert_eq!(lines(&net), vec![(0, 3, 3, 1, 0, 1), (1, -1, -1, -1, 1, 0)]);
         assert_eq!(net.statecount, 2);
         assert_eq!(net.linecount, 2);
         assert_eq!(net.arccount, 1);
@@ -347,10 +336,7 @@ mod tests {
         fsm_construct_set_final(&mut h, 2);
         fsm_construct_set_initial(&mut h, 0);
         let net = fsm_coaccessible(fsm_construct_done(h));
-        assert_eq!(
-            lines(&net),
-            vec![(0, 3, 3, 1, 0, 1), (1, -1, -1, -1, 1, 0)]
-        );
+        assert_eq!(lines(&net), vec![(0, 3, 3, 1, 0, 1), (1, -1, -1, -1, 1, 0)]);
         assert_eq!(net.statecount, 2);
         assert_eq!(net.linecount, 2);
         assert_eq!(net.arccount, 1);

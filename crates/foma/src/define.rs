@@ -340,7 +340,11 @@ mod tests {
         /* Redefinition returns 1 and replaces the net in place. */
         assert_eq!(add_defined(&mut def, Some(fsm_symbol("A2")), "a"), 1);
         assert!(has_sym(find_defined(&mut def, "a").unwrap(), "A2"));
-        assert_eq!(net_names(&def), vec!["a", "c", "b"], "redefinition adds no node");
+        assert_eq!(
+            net_names(&def),
+            vec!["a", "c", "b"],
+            "redefinition adds no node"
+        );
 
         /* net == None is a no-op returning 0. */
         assert_eq!(add_defined(&mut def, None, "q"), 0);

@@ -51,7 +51,11 @@ pub fn iface_ignore() {
     if iface_stack_check(2) != 0 {
         let one = stack_pop().unwrap();
         let two = stack_pop().unwrap();
-        stack_add(fsm_topsort(fsm_minimize(fsm_ignore(one, two, OP_IGNORE_ALL))));
+        stack_add(fsm_topsort(fsm_minimize(fsm_ignore(
+            one,
+            two,
+            OP_IGNORE_ALL,
+        ))));
     }
 }
 

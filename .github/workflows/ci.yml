@@ -1,0 +1,60 @@
+name: Rust CI
+
+# CI for the Rust port (crates/foma). The upstream C build lives in build.yml /
+# test.yml; this workflow only touches the Cargo workspace.
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      # The workspace's path dependencies point at ../nfst, so the two repos
+      # must sit side by side:
+      #   $GITHUB_WORKSPACE/foma  (this repo)
+      #   $GITHUB_WORKSPACE/nfst  (nfst-xre / nfst-lexc parser crates)
+      - name: Checkout foma (Rust port)
+        uses: actions/checkout@v4
+        with:
+          path: foma
+
+      - name: Checkout nfst (parser crates)
+        uses: actions/checkout@v4
+        with:
+          repository: necessary/nfst
+          path: nfst
+          # If necessary/nfst is private, provide a PAT with read access:
+          # token: ${{ secrets.NFST_CHECKOUT_TOKEN }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: foma
+
+      # Scope fmt to the foma package: `cargo fmt --all` also formats the
+      # ../nfst path dependencies, which have their own style and would fail
+      # this check for reasons unrelated to the port.
+      - name: Format check
+        working-directory: foma
+        run: cargo fmt --package foma -- --check
+
+      - name: Build
+        working-directory: foma
+        run: cargo build --workspace --all-targets
+
+      - name: Test
+        working-directory: foma
+        run: cargo test --workspace
+
+      - name: Clippy
+        working-directory: foma
+        run: cargo clippy --workspace --all-targets

@@ -50,32 +50,152 @@ const DISCLAIMER: &str = "Foma, version 0.10.0\nCopyright © 2008-2021 Mans Huld
 
 /* C: `char *cmd[]` (foma.c) — the readline completion command table. */
 static CMD: &[&str] = &[
-    "ambiguous upper", "apply down", "apply med", "apply up", "apropos", "assert-stack",
-    "clear stack", "close sigma", "compact sigma", "complete net", "compose net", "concatenate net",
-    "crossproduct net", "define", "determinize net", "echo", "eliminate flags", "eliminate flag",
-    "export cmatrix", "extract ambiguous", "extract unambiguous", "factorize", "help license",
-    "help warranty", "ignore net", "intersect net", "invert net", "label net", "letter machine",
-    "load defined", "lower-side net", "minimize net", "name net", "negate net", "one-plus net",
-    "pop stack", "print defined", "print dot", "print lower-words", "print cmatrix", "print name",
-    "print net", "print random-lower", "print random-upper", "print random-words", "print sigma",
-    "print size", "print shortest-string", "print shortest-string-length", "print words",
-    "print pairs", "print random-pairs", "print upper-words", "prune net", "push defined", "quit",
-    "read att", "read cmatrix", "read prolog", "read lexc", "read regex", "read spaced-text",
-    "read text", "reverse net", "rotate stack", "save defined", "save stack", "sequentialize",
-    "set", "show variables", "show variable", "shuffle net", "sigma", "sigma net", "source",
-    "sort in", "sort net", "sort out", "substitute defined", "substitute symbol", "system",
-    "test unambiguous", "test equivalent", "test functional", "test identity", "test lower-universal",
-    "test upper-universal", "test non-null", "test null", "test sequential", "turn stack",
-    "twosided flag-diacritics", "undefine", "union net", "upper-side net", "view net", "write att",
-    "write prolog", "zero-plus net",
+    "ambiguous upper",
+    "apply down",
+    "apply med",
+    "apply up",
+    "apropos",
+    "assert-stack",
+    "clear stack",
+    "close sigma",
+    "compact sigma",
+    "complete net",
+    "compose net",
+    "concatenate net",
+    "crossproduct net",
+    "define",
+    "determinize net",
+    "echo",
+    "eliminate flags",
+    "eliminate flag",
+    "export cmatrix",
+    "extract ambiguous",
+    "extract unambiguous",
+    "factorize",
+    "help license",
+    "help warranty",
+    "ignore net",
+    "intersect net",
+    "invert net",
+    "label net",
+    "letter machine",
+    "load defined",
+    "lower-side net",
+    "minimize net",
+    "name net",
+    "negate net",
+    "one-plus net",
+    "pop stack",
+    "print defined",
+    "print dot",
+    "print lower-words",
+    "print cmatrix",
+    "print name",
+    "print net",
+    "print random-lower",
+    "print random-upper",
+    "print random-words",
+    "print sigma",
+    "print size",
+    "print shortest-string",
+    "print shortest-string-length",
+    "print words",
+    "print pairs",
+    "print random-pairs",
+    "print upper-words",
+    "prune net",
+    "push defined",
+    "quit",
+    "read att",
+    "read cmatrix",
+    "read prolog",
+    "read lexc",
+    "read regex",
+    "read spaced-text",
+    "read text",
+    "reverse net",
+    "rotate stack",
+    "save defined",
+    "save stack",
+    "sequentialize",
+    "set",
+    "show variables",
+    "show variable",
+    "shuffle net",
+    "sigma",
+    "sigma net",
+    "source",
+    "sort in",
+    "sort net",
+    "sort out",
+    "substitute defined",
+    "substitute symbol",
+    "system",
+    "test unambiguous",
+    "test equivalent",
+    "test functional",
+    "test identity",
+    "test lower-universal",
+    "test upper-universal",
+    "test non-null",
+    "test null",
+    "test sequential",
+    "turn stack",
+    "twosided flag-diacritics",
+    "undefine",
+    "union net",
+    "upper-side net",
+    "view net",
+    "write att",
+    "write prolog",
+    "zero-plus net",
 ];
 
 /* C: `char *abbrvcmd[]` (foma.c) — the completion abbreviation table. */
 static ABBRVCMD: &[&str] = &[
-    "ambiguous", "close", "down", "up", "med", "size", "loadd", "lower-words", "upper-words", "net",
-    "random-lower", "random-upper", "words", "random-words", "regex", "rpl", "au revoir", "bye",
-    "exit", "saved", "seq", "ss", "stack", "tunam", "tid", "tfu", "tlu", "tuu", "tnu", "tnn", "tseq",
-    "tsf", "equ", "pss", "psz", "ratt", "tfd", "hyvästi", "watt", "wpl", "examb", "exunamb", "pairs",
+    "ambiguous",
+    "close",
+    "down",
+    "up",
+    "med",
+    "size",
+    "loadd",
+    "lower-words",
+    "upper-words",
+    "net",
+    "random-lower",
+    "random-upper",
+    "words",
+    "random-words",
+    "regex",
+    "rpl",
+    "au revoir",
+    "bye",
+    "exit",
+    "saved",
+    "seq",
+    "ss",
+    "stack",
+    "tunam",
+    "tid",
+    "tfu",
+    "tlu",
+    "tuu",
+    "tnu",
+    "tnn",
+    "tseq",
+    "tsf",
+    "equ",
+    "pss",
+    "psz",
+    "ratt",
+    "tfd",
+    "hyvästi",
+    "watt",
+    "wpl",
+    "examb",
+    "exunamb",
+    "pairs",
     "random-pairs",
 ];
 
@@ -595,7 +715,8 @@ fn compile_regex(pmode: i32, defname: &str, body: &str) {
                                 } else {
                                     print!("defined {}: ", defname);
                                 }
-                                if let Some(n) = find_defined(dnb.as_deref_mut().unwrap(), defname) {
+                                if let Some(n) = find_defined(dnb.as_deref_mut().unwrap(), defname)
+                                {
                                     print_stats(n);
                                 }
                             }
@@ -731,7 +852,11 @@ fn dispatch(line: &str) -> bool {
     let w1 = ws.get(1).copied().unwrap_or("");
 
     // quit / exit / bye / au revoir / hyvästi
-    if w0 == "quit" || w0 == "exit" || w0 == "bye" || w0 == "hyvästi" || (w0 == "au" && w1 == "revoir")
+    if w0 == "quit"
+        || w0 == "exit"
+        || w0 == "bye"
+        || w0 == "hyvästi"
+        || (w0 == "au" && w1 == "revoir")
     {
         iface_quit(); // never returns
         return true;
@@ -818,7 +943,10 @@ fn dispatch(line: &str) -> bool {
         iface_warranty();
         return true;
     }
-    if w0 == "help" || pfx(w0, "help", 1) && ws.len() >= 2 && (w1 == "license" || w1 == "licence" || w1 == "warranty")
+    if w0 == "help"
+        || pfx(w0, "help", 1)
+            && ws.len() >= 2
+            && (w1 == "license" || w1 == "licence" || w1 == "warranty")
     {
         if w0 == "help" {
             if ws.len() == 1 {
@@ -984,7 +1112,10 @@ fn dispatch(line: &str) -> bool {
         } else {
             // print everything after "echo" + one whitespace, raw.
             let after = &t[4..];
-            let after = after.strip_prefix(' ').or_else(|| after.strip_prefix('\t')).unwrap_or(after);
+            let after = after
+                .strip_prefix(' ')
+                .or_else(|| after.strip_prefix('\t'))
+                .unwrap_or(after);
             print!("{}\n", after);
         }
         return true;
@@ -1223,7 +1354,11 @@ fn try_print_family(t: &str, ws: &[&str]) -> Option<bool> {
     // (`sub_owned`) is matched against the print sub-commands, which also stand
     // alone as short forms ("net", "sigma", "words", "pss", …).
     let had_print = ws.len() >= 2 && pfx(ws[0], "print", 2);
-    let sub_owned = if had_print { arg_after(t, 1) } else { t.to_string() };
+    let sub_owned = if had_print {
+        arg_after(t, 1)
+    } else {
+        t.to_string()
+    };
     let subws: Vec<&str> = sub_owned.split_whitespace().collect();
     if subws.is_empty() {
         return None;

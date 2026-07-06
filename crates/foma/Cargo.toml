@@ -3,11 +3,24 @@ name = "foma"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Idiomatic Rust port of foma, a finite-state compiler and library for constructing and applying finite-state automata and transducers (original C foma by Mans Hulden, Apache-2.0)."
+repository = "https://github.com/mhulden/foma"
+readme = "../../README.md"
+keywords = ["finite-state", "transducer", "fst", "nlp", "morphology"]
+categories = ["science", "text-processing", "command-line-utilities"]
+rust-version = "1.85"
+
+[package.metadata.docs.rs]
+all-features = true
 
 [dependencies]
 flate2 = { workspace = true }
 nfst-lexc = { workspace = true }
 nfst-xre = { workspace = true }
+
+[[bin]]
+name = "foma"
+path = "src/bin/foma.rs"
 
 [[bin]]
 name = "flookup"
@@ -16,7 +29,3 @@ path = "src/bin/flookup.rs"
 [[bin]]
 name = "cgflookup"
 path = "src/bin/cgflookup.rs"
-
-[[bin]]
-name = "foma"
-path = "src/bin/foma.rs"

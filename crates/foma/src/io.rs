@@ -24,11 +24,11 @@ use flate2::write::GzEncoder;
 
 use crate::constructions::fsm_count;
 use crate::define::add_defined;
-use crate::error::FomaError;
 use crate::dynarray::{
     fsm_construct_add_arc, fsm_construct_add_symbol, fsm_construct_check_symbol,
     fsm_construct_done, fsm_construct_init, fsm_construct_set_final, fsm_construct_set_initial,
 };
+use crate::error::FomaError;
 use crate::mem::G_ATT_EPSILON;
 use crate::sigma::{sigma_add_number, sigma_max, sigma_string, sigma_to_list};
 use crate::structures::{fsm_create, fsm_destroy};
@@ -37,8 +37,8 @@ use crate::trie::{
     fsm_trie_add_word, fsm_trie_done, fsm_trie_end_word, fsm_trie_init, fsm_trie_symbol,
 };
 use crate::types::{
-    DefinedNetworks, FSM_NAME_LEN, Fsm, FsmConstructHandle, FsmReadBinaryHandle, FsmState, IDENTITY,
-    UNKNOWN,
+    DefinedNetworks, FSM_NAME_LEN, Fsm, FsmConstructHandle, FsmReadBinaryHandle, FsmState,
+    IDENTITY, UNKNOWN,
 };
 
 /* C: #define READ_BUF_SIZE 4096 (the io_gets/io_net_read line buffer size).
@@ -344,7 +344,11 @@ pub fn read_att(filename: &str) -> Option<Box<Fsm>> {
             inword.pop();
         }
         /* strtok on "\t": non-empty tokens only, capped at 6 */
-        let tokens: Vec<&str> = inword.split('\t').filter(|s| !s.is_empty()).take(6).collect();
+        let tokens: Vec<&str> = inword
+            .split('\t')
+            .filter(|s| !s.is_empty())
+            .take(6)
+            .collect();
         let i = tokens.len();
         if i == 0 {
             continue;
@@ -1655,7 +1659,10 @@ mod tests {
             name: Some("n".to_string()),
             value: None,
         };
-        assert_eq!((b.r#type, b.state, b.r#in, b.target, b.out, b.symbol), (1, 2, 3, 4, 5, 6));
+        assert_eq!(
+            (b.r#type, b.state, b.r#in, b.target, b.out, b.symbol),
+            (1, 2, 3, 4, 5, 6)
+        );
         assert_eq!(b.name.as_deref(), Some("n"));
         assert!(b.value.is_none());
     }
@@ -1900,7 +1907,10 @@ mod tests {
         assert_eq!(net.name, "7F50986");
         assert_eq!(net.arity, 2);
         assert_eq!(net.statecount, 2);
-        assert_eq!(sigma_pairs(&net), vec![(3, Some("a".into())), (4, Some("b".into()))]);
+        assert_eq!(
+            sigma_pairs(&net),
+            vec![(3, Some("a".into())), (4, Some("b".into()))]
+        );
     }
 
     // [spec:foma:sem:io.fsm-read-binary-file-multiple-init-fn/test]
@@ -2144,7 +2154,10 @@ mod tests {
         let mut p = std::env::temp_dir();
         p.push("foma_io_absent_f2m_zzz");
         let _ = std::fs::remove_file(&p);
-        assert!(matches!(file_to_mem(p.to_str().unwrap()), Err(FomaError::Io(_))));
+        assert!(matches!(
+            file_to_mem(p.to_str().unwrap()),
+            Err(FomaError::Io(_))
+        ));
     }
 
     // [spec:foma:def:io.bom/test]
@@ -2153,16 +2166,31 @@ mod tests {
     fn check_bom_exact_match_no_nul_false_positives() {
         assert_eq!(check_BOM(&[0xEF, 0xBB, 0xBF]).unwrap().name, Some("UTF-8"));
         /* full 4-byte marks match exactly */
-        assert_eq!(check_BOM(&[0xFF, 0xFE, 0x00, 0x00]).unwrap().name, Some("UTF-32LE"));
-        assert_eq!(check_BOM(&[0x00, 0x00, 0xFE, 0xFF]).unwrap().name, Some("UTF-32BE"));
+        assert_eq!(
+            check_BOM(&[0xFF, 0xFE, 0x00, 0x00]).unwrap().name,
+            Some("UTF-32LE")
+        );
+        assert_eq!(
+            check_BOM(&[0x00, 0x00, 0xFE, 0xFF]).unwrap().name,
+            Some("UTF-32BE")
+        );
         /* Wave 4 fix: a lone leading '\0' no longer false-matches UTF-32BE */
         assert!(check_BOM(&[0x00, 0x41, 0x42, 0x43]).is_none());
         assert!(check_BOM(&[0x00]).is_none());
         /* Wave 4 fix: FF FE 00 <non-00> is UTF16-LE (not a UTF-32LE false match) */
-        assert_eq!(check_BOM(&[0xFF, 0xFE, 0x00, 0x99]).unwrap().name, Some("UTF16-LE"));
+        assert_eq!(
+            check_BOM(&[0xFF, 0xFE, 0x00, 0x99]).unwrap().name,
+            Some("UTF16-LE")
+        );
         /* FF FE <non-NUL> → UTF16-LE */
-        assert_eq!(check_BOM(&[0xFF, 0xFE, 0x41, 0x42]).unwrap().name, Some("UTF16-LE"));
-        assert_eq!(check_BOM(&[0xFE, 0xFF, 0x41, 0x42]).unwrap().name, Some("UTF16-BE"));
+        assert_eq!(
+            check_BOM(&[0xFF, 0xFE, 0x41, 0x42]).unwrap().name,
+            Some("UTF16-LE")
+        );
+        assert_eq!(
+            check_BOM(&[0xFE, 0xFF, 0x41, 0x42]).unwrap().name,
+            Some("UTF16-BE")
+        );
         assert!(check_BOM(b"hello").is_none());
     }
 

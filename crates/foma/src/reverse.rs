@@ -15,7 +15,7 @@ use crate::dynarray::{
     fsm_get_next_initial, fsm_read_done, fsm_read_init,
 };
 use crate::structures::fsm_destroy;
-use crate::types::{Fsm, EPSILON};
+use crate::types::{EPSILON, Fsm};
 
 // [spec:foma:def:reverse.fsm-reverse-fn]
 // [spec:foma:sem:reverse.fsm-reverse-fn]

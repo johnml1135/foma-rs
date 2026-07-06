@@ -17,7 +17,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 use foma::apply::{apply_clear, apply_down, apply_index, apply_init, apply_up};
 use foma::io::{fsm_read_binary_file_multiple, fsm_read_binary_file_multiple_init};
 use foma::structures::{fsm_destroy, fsm_get_library_version_string, fsm_sort_arcs};
-use foma::types::{ApplyHandle, Fsm, APPLY_INDEX_INPUT, APPLY_INDEX_OUTPUT};
+use foma::types::{APPLY_INDEX_INPUT, APPLY_INDEX_OUTPUT, ApplyHandle, Fsm};
 
 const LINE_LIMIT: usize = 262144;
 const UDP_MAX: usize = 65535;
@@ -142,11 +142,14 @@ fn atoi(s: &str) -> i32 {
 
 /* isdigit(*optarg) */
 fn first_is_digit(s: &str) -> bool {
-    s.as_bytes().first().map(|b| b.is_ascii_digit()).unwrap_or(false)
+    s.as_bytes()
+        .first()
+        .map(|b| b.is_ascii_digit())
+        .unwrap_or(false)
 }
 
 /* Minimal getopt(3) twin: clustered flags, attached/separate option
-   arguments, "--" terminator, stop at first non-option operand. */
+arguments, "--" terminator, stop at first non-option operand. */
 struct GetOpt {
     args: Vec<String>,
     optind: usize,
@@ -155,7 +158,12 @@ struct GetOpt {
 }
 impl GetOpt {
     fn new(args: Vec<String>) -> Self {
-        GetOpt { args, optind: 1, subpos: 0, optarg: None }
+        GetOpt {
+            args,
+            optind: 1,
+            subpos: 0,
+            optarg: None,
+        }
     }
     fn next(&mut self, argtakers: &str) -> Option<u8> {
         self.optarg = None;
@@ -252,10 +260,10 @@ fn app_print(result: Option<&str>) {
 }
 
 /* strncat(serverstring+udpsize, src, UDP_MAX-udpsize)
-   DEVIATION from C (once udpsize exceeds UDP_MAX the C length argument goes
-   negative and converts to a huge size_t, making strncat unbounded — a latent
-   buffer overflow near the 64 kB reply limit; here the append is clamped to the
-   UDP_MAX byte budget while udpsize is still advanced by the full src length). */
+DEVIATION from C (once udpsize exceeds UDP_MAX the C length argument goes
+negative and converts to a huge size_t, making strncat unbounded — a latent
+buffer overflow near the 64 kB reply limit; here the append is clamped to the
+UDP_MAX byte budget while udpsize is still advanced by the full src length). */
 fn server_append(src: &str) {
     SERVERSTRING.with_borrow_mut(|ss| {
         let remaining = UDP_MAX.saturating_sub(ss.len());
@@ -400,14 +408,31 @@ fn main() {
         }
         let mut ah = apply_init(&net);
         if direction == DIR_DOWN && index_arcs != 0 {
-            apply_index(&mut ah, APPLY_INDEX_INPUT, index_cutoff, index_mem_limit, index_flag_states);
+            apply_index(
+                &mut ah,
+                APPLY_INDEX_INPUT,
+                index_cutoff,
+                index_mem_limit,
+                index_flag_states,
+            );
         }
         if direction == DIR_UP && index_arcs != 0 {
-            apply_index(&mut ah, APPLY_INDEX_OUTPUT, index_cutoff, index_mem_limit, index_flag_states);
+            apply_index(
+                &mut ah,
+                APPLY_INDEX_OUTPUT,
+                index_cutoff,
+                index_mem_limit,
+                index_flag_states,
+            );
         }
 
         let idx = CHAIN.with_borrow_mut(|c| {
-            c.push(LookupChain { net: Some(net), ah: Some(ah), next: None, prev: None });
+            c.push(LookupChain {
+                net: Some(net),
+                ah: Some(ah),
+                next: None,
+                prev: None,
+            });
             c.len() - 1
         });
         if CHAIN_TAIL.get().is_none() {
@@ -445,9 +470,7 @@ fn main() {
         let mut buf = vec![0u8; UDP_MAX];
         loop {
             let (numbytes, clientaddr) = {
-                let res = LISTEN_SD.with_borrow(|s| {
-                    s.as_ref().unwrap().recv_from(&mut buf)
-                });
+                let res = LISTEN_SD.with_borrow(|s| s.as_ref().unwrap().recv_from(&mut buf));
                 match res {
                     Ok(v) => v,
                     Err(_) => {
@@ -459,7 +482,10 @@ fn main() {
             // line[numbytes]='\0'; line[strcspn(line,"\n\r")]='\0'
             // DEVIATION from C (raw datagram bytes → String via from_utf8_lossy).
             let raw = &buf[..numbytes];
-            let cut = raw.iter().position(|&b| b == b'\n' || b == b'\r').unwrap_or(raw.len());
+            let cut = raw
+                .iter()
+                .position(|&b| b == b'\n' || b == b'\r')
+                .unwrap_or(raw.len());
             let word = String::from_utf8_lossy(&raw[..cut]).into_owned();
             LINE.with_borrow_mut(|l| *l = word.clone());
             out_flush();
@@ -472,9 +498,8 @@ fn main() {
             }
             let reply = SERVERSTRING.with_borrow(|s| s.clone());
             if !reply.is_empty() {
-                let sent = LISTEN_SD.with_borrow(|s| {
-                    s.as_ref().unwrap().send_to(reply.as_bytes(), clientaddr)
-                });
+                let sent = LISTEN_SD
+                    .with_borrow(|s| s.as_ref().unwrap().send_to(reply.as_bytes(), clientaddr));
                 if sent.is_err() {
                     perror("sendto() failed");
                     out_flush();
@@ -533,7 +558,10 @@ fn get_next_line() -> bool {
     if n == 0 {
         return false;
     }
-    let cut = raw.iter().position(|&b| b == b'\n' || b == b'\r').unwrap_or(raw.len());
+    let cut = raw
+        .iter()
+        .position(|&b| b == b'\n' || b == b'\r')
+        .unwrap_or(raw.len());
     raw.truncate(cut);
     let s = String::from_utf8_lossy(&raw).into_owned();
     LINE.with_borrow_mut(|l| *l = s);

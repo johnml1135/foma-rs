@@ -43,25 +43,101 @@ pub struct Gv {
 /// trailing `{NULL, NULL, 0}` sentinel is represented by the end of the Vec.
 pub(crate) fn global_vars() -> Vec<Gv> {
     vec![
-        Gv { ptr: GvPtr::Int(&G_FLAG_IS_EPSILON), name: "flag-is-epsilon", r#type: FVAR_BOOL },
-        Gv { ptr: GvPtr::Int(&G_MINIMAL), name: "minimal", r#type: FVAR_BOOL },
-        Gv { ptr: GvPtr::Int(&G_NAME_NETS), name: "name-nets", r#type: FVAR_BOOL },
-        Gv { ptr: GvPtr::Int(&G_OBEY_FLAGS), name: "obey-flags", r#type: FVAR_BOOL },
-        Gv { ptr: GvPtr::Int(&G_PRINT_PAIRS), name: "print-pairs", r#type: FVAR_BOOL },
-        Gv { ptr: GvPtr::Int(&G_PRINT_SIGMA), name: "print-sigma", r#type: FVAR_BOOL },
-        Gv { ptr: GvPtr::Int(&G_PRINT_SPACE), name: "print-space", r#type: FVAR_BOOL },
-        Gv { ptr: GvPtr::Int(&G_QUIT_ON_FAIL), name: "quit-on-fail", r#type: FVAR_BOOL },
-        Gv { ptr: GvPtr::Int(&G_RECURSIVE_DEFINE), name: "recursive-define", r#type: FVAR_BOOL },
-        Gv { ptr: GvPtr::Int(&G_QUOTE_SPECIAL), name: "quote-special", r#type: FVAR_BOOL },
-        Gv { ptr: GvPtr::Int(&G_SHOW_FLAGS), name: "show-flags", r#type: FVAR_BOOL },
-        Gv { ptr: GvPtr::Int(&G_SORT_ARCS), name: "sort-arcs", r#type: FVAR_BOOL },
-        Gv { ptr: GvPtr::Int(&G_VERBOSE), name: "verbose", r#type: FVAR_BOOL },
-        Gv { ptr: GvPtr::Int(&G_MINIMIZE_HOPCROFT), name: "hopcroft-min", r#type: FVAR_BOOL },
-        Gv { ptr: GvPtr::Int(&G_COMPOSE_TRISTATE), name: "compose-tristate", r#type: FVAR_BOOL },
-        Gv { ptr: GvPtr::Int(&G_MED_LIMIT), name: "med-limit", r#type: FVAR_INT },
-        Gv { ptr: GvPtr::Int(&G_MED_CUTOFF), name: "med-cutoff", r#type: FVAR_INT },
-        Gv { ptr: GvPtr::Int(&G_LEXC_ALIGN), name: "lexc-align", r#type: FVAR_BOOL },
-        Gv { ptr: GvPtr::Str(&G_ATT_EPSILON), name: "att-epsilon", r#type: FVAR_STRING },
+        Gv {
+            ptr: GvPtr::Int(&G_FLAG_IS_EPSILON),
+            name: "flag-is-epsilon",
+            r#type: FVAR_BOOL,
+        },
+        Gv {
+            ptr: GvPtr::Int(&G_MINIMAL),
+            name: "minimal",
+            r#type: FVAR_BOOL,
+        },
+        Gv {
+            ptr: GvPtr::Int(&G_NAME_NETS),
+            name: "name-nets",
+            r#type: FVAR_BOOL,
+        },
+        Gv {
+            ptr: GvPtr::Int(&G_OBEY_FLAGS),
+            name: "obey-flags",
+            r#type: FVAR_BOOL,
+        },
+        Gv {
+            ptr: GvPtr::Int(&G_PRINT_PAIRS),
+            name: "print-pairs",
+            r#type: FVAR_BOOL,
+        },
+        Gv {
+            ptr: GvPtr::Int(&G_PRINT_SIGMA),
+            name: "print-sigma",
+            r#type: FVAR_BOOL,
+        },
+        Gv {
+            ptr: GvPtr::Int(&G_PRINT_SPACE),
+            name: "print-space",
+            r#type: FVAR_BOOL,
+        },
+        Gv {
+            ptr: GvPtr::Int(&G_QUIT_ON_FAIL),
+            name: "quit-on-fail",
+            r#type: FVAR_BOOL,
+        },
+        Gv {
+            ptr: GvPtr::Int(&G_RECURSIVE_DEFINE),
+            name: "recursive-define",
+            r#type: FVAR_BOOL,
+        },
+        Gv {
+            ptr: GvPtr::Int(&G_QUOTE_SPECIAL),
+            name: "quote-special",
+            r#type: FVAR_BOOL,
+        },
+        Gv {
+            ptr: GvPtr::Int(&G_SHOW_FLAGS),
+            name: "show-flags",
+            r#type: FVAR_BOOL,
+        },
+        Gv {
+            ptr: GvPtr::Int(&G_SORT_ARCS),
+            name: "sort-arcs",
+            r#type: FVAR_BOOL,
+        },
+        Gv {
+            ptr: GvPtr::Int(&G_VERBOSE),
+            name: "verbose",
+            r#type: FVAR_BOOL,
+        },
+        Gv {
+            ptr: GvPtr::Int(&G_MINIMIZE_HOPCROFT),
+            name: "hopcroft-min",
+            r#type: FVAR_BOOL,
+        },
+        Gv {
+            ptr: GvPtr::Int(&G_COMPOSE_TRISTATE),
+            name: "compose-tristate",
+            r#type: FVAR_BOOL,
+        },
+        Gv {
+            ptr: GvPtr::Int(&G_MED_LIMIT),
+            name: "med-limit",
+            r#type: FVAR_INT,
+        },
+        Gv {
+            ptr: GvPtr::Int(&G_MED_CUTOFF),
+            name: "med-cutoff",
+            r#type: FVAR_INT,
+        },
+        Gv {
+            ptr: GvPtr::Int(&G_LEXC_ALIGN),
+            name: "lexc-align",
+            r#type: FVAR_BOOL,
+        },
+        Gv {
+            ptr: GvPtr::Str(&G_ATT_EPSILON),
+            name: "att-epsilon",
+            r#type: FVAR_STRING,
+        },
     ]
 }
 
@@ -150,7 +226,11 @@ pub fn iface_show_variables() {
                 GvPtr::Int(c) => c.with(|x| x.get()),
                 GvPtr::Str(_) => 0,
             };
-            print!("{:<17.17}: {}\n", gv.name, if v == 1 { "ON" } else { "OFF" });
+            print!(
+                "{:<17.17}: {}\n",
+                gv.name,
+                if v == 1 { "ON" } else { "OFF" }
+            );
         }
         if gv.r#type == FVAR_INT {
             let v = match &gv.ptr {

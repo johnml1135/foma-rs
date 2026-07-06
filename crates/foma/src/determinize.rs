@@ -34,7 +34,7 @@ use crate::int_stack::{
 };
 use crate::mem::next_power_of_two;
 use crate::sigma::sigma_max;
-use crate::types::{Fsm, FsmState, EPSILON, UNKNOWN, YES};
+use crate::types::{EPSILON, Fsm, FsmState, UNKNOWN, YES};
 
 /* C: #define SUBSET_EPSILON_REMOVE 1 / SUBSET_DETERMINIZE 2 /
 SUBSET_TEST_STAR_FREE 3 */
@@ -907,8 +907,8 @@ pub(crate) fn hashf(s: &Subset, set: &[i32], setsize: i32) -> i32 {
     for i in 0..setsize {
         /* C: hashval = (unsigned int) (*(set+i) + 1103 * setsize) * hashval;
         — the int addition wraps, then the unsigned multiply wraps */
-        hashval =
-            (set[i as usize].wrapping_add(1103_i32.wrapping_mul(setsize)) as u32).wrapping_mul(hashval);
+        hashval = (set[i as usize].wrapping_add(1103_i32.wrapping_mul(setsize)) as u32)
+            .wrapping_mul(hashval);
         /* C: sum += *(set+i) + i; — int add converted to unsigned */
         sum = sum.wrapping_add(set[i as usize].wrapping_add(i) as u32);
     }
@@ -1092,7 +1092,16 @@ mod tests {
     fn lines(net: &Fsm) -> Vec<(i32, i16, i16, i32, i8, i8)> {
         net.states
             .iter()
-            .map(|s| (s.state_no, s.r#in, s.out, s.target, s.final_state, s.start_state))
+            .map(|s| {
+                (
+                    s.state_no,
+                    s.r#in,
+                    s.out,
+                    s.target,
+                    s.final_state,
+                    s.start_state,
+                )
+            })
             .collect()
     }
 
@@ -1132,7 +1141,10 @@ mod tests {
         assert_eq!(d.is_epsilon_free, YES);
         /* start state renumbered to 0, densely numbered result */
         assert_eq!(
-            d.states.iter().filter(|s| s.state_no != -1 && s.start_state != 0).count(),
+            d.states
+                .iter()
+                .filter(|s| s.state_no != -1 && s.start_state != 0)
+                .count(),
             1
         );
         assert_eq!(accepts(&d, ""), None);
@@ -1160,7 +1172,11 @@ mod tests {
         let er = fsm_epsilon_remove(net);
         assert_eq!(er.is_epsilon_free, YES);
         /* no (EPSILON:EPSILON) arc survives */
-        assert!(!er.states.iter().any(|s| s.r#in == 0 && s.out == 0 && s.target != -1));
+        assert!(
+            !er.states
+                .iter()
+                .any(|s| s.r#in == 0 && s.out == 0 && s.target != -1)
+        );
         /* state 0's epsilon closure reaches final state 1 -> language a* kept */
         assert_eq!(accepts(&er, ""), Some("".to_string()));
         assert_eq!(accepts(&er, "a"), Some("a".to_string()));
@@ -1186,7 +1202,10 @@ mod tests {
         let er = fsm_epsilon_remove(net);
         assert_eq!(er.is_epsilon_free, YES);
         assert_eq!(er.statecount, sc);
-        assert_ne!(er.is_deterministic, YES, "not determinized on the eps-free path");
+        assert_ne!(
+            er.is_deterministic, YES,
+            "not determinized on the eps-free path"
+        );
         assert_eq!(lines(&er), before, "line table returned untouched");
     }
 
@@ -1330,7 +1349,11 @@ mod tests {
         s.e_table[1] = 1;
         s.e_table[2] = 1;
         s.mainloop = 2;
-        assert_eq!(set_lookup(&mut s, &[0, 1, 2], 3), 0, "permutation canonicalises to 0");
+        assert_eq!(
+            set_lookup(&mut s, &[0, 1, 2], 3),
+            0,
+            "permutation canonicalises to 0"
+        );
 
         /* a distinct set gets the next number */
         assert_eq!(set_lookup(&mut s, &[3, 4], 2), 1);
@@ -1373,7 +1396,10 @@ mod tests {
         sigma_to_pairs(&mut s, &mut net);
         assert_eq!(net.arity, 2);
         assert_ne!(s.epsilon_symbol, -1);
-        assert_eq!(s.epsilon_symbol, symbol_pair_to_single_symbol(&s, EPSILON, EPSILON));
+        assert_eq!(
+            s.epsilon_symbol,
+            symbol_pair_to_single_symbol(&s, EPSILON, EPSILON)
+        );
         for st in net.states.iter() {
             let (i, o) = (st.r#in as i32, st.out as i32);
             if i < 0 || o < 0 {
@@ -1398,13 +1424,62 @@ mod tests {
         s.num_states = 3;
         let e = EPSILON as i16;
         let fsm = vec![
-            FsmState { state_no: 0, r#in: e, out: e, target: 1, final_state: 0, start_state: 1 },
-            FsmState { state_no: 0, r#in: e, out: e, target: 2, final_state: 0, start_state: 1 },
-            FsmState { state_no: 0, r#in: e, out: e, target: 1, final_state: 0, start_state: 1 }, /* dup */
-            FsmState { state_no: 0, r#in: e, out: e, target: 0, final_state: 0, start_state: 1 }, /* self */
-            FsmState { state_no: 1, r#in: -1, out: -1, target: -1, final_state: 0, start_state: 0 },
-            FsmState { state_no: 2, r#in: -1, out: -1, target: -1, final_state: 1, start_state: 0 },
-            FsmState { state_no: -1, r#in: -1, out: -1, target: -1, final_state: -1, start_state: -1 },
+            FsmState {
+                state_no: 0,
+                r#in: e,
+                out: e,
+                target: 1,
+                final_state: 0,
+                start_state: 1,
+            },
+            FsmState {
+                state_no: 0,
+                r#in: e,
+                out: e,
+                target: 2,
+                final_state: 0,
+                start_state: 1,
+            },
+            FsmState {
+                state_no: 0,
+                r#in: e,
+                out: e,
+                target: 1,
+                final_state: 0,
+                start_state: 1,
+            }, /* dup */
+            FsmState {
+                state_no: 0,
+                r#in: e,
+                out: e,
+                target: 0,
+                final_state: 0,
+                start_state: 1,
+            }, /* self */
+            FsmState {
+                state_no: 1,
+                r#in: -1,
+                out: -1,
+                target: -1,
+                final_state: 0,
+                start_state: 0,
+            },
+            FsmState {
+                state_no: 2,
+                r#in: -1,
+                out: -1,
+                target: -1,
+                final_state: 1,
+                start_state: 0,
+            },
+            FsmState {
+                state_no: -1,
+                r#in: -1,
+                out: -1,
+                target: -1,
+                final_state: -1,
+                start_state: -1,
+            },
         ];
         memoize_e_closure(&mut s, &fsm);
         let em = &s.e_closure_memo;
@@ -1449,8 +1524,14 @@ mod tests {
     // [spec:foma:sem:determinize.trans-sort-cmp-fn/test]
     #[test]
     fn trans_sort_cmp_orders_by_inout() {
-        let a = TransList { inout: 5, target: 0 };
-        let b = TransList { inout: 2, target: 9 };
+        let a = TransList {
+            inout: 5,
+            target: 0,
+        };
+        let b = TransList {
+            inout: 2,
+            target: 9,
+        };
         assert_eq!(trans_sort_cmp(&a, &b), 3);
         assert_eq!(trans_sort_cmp(&b, &a), -3);
         assert_eq!(trans_sort_cmp(&a, &a), 0);
@@ -1461,13 +1542,27 @@ mod tests {
     #[test]
     fn add_fsm_arc_reexport_writes_line() {
         let mut fsm = vec![
-            FsmState { state_no: 0, r#in: 0, out: 0, target: 0, final_state: 0, start_state: 0 };
+            FsmState {
+                state_no: 0,
+                r#in: 0,
+                out: 0,
+                target: 0,
+                final_state: 0,
+                start_state: 0
+            };
             2
         ];
         let r = add_fsm_arc(&mut fsm, 0, 5, 1, 2, 3, 1, 1);
         assert_eq!(r, 1);
         assert_eq!(
-            (fsm[0].state_no, fsm[0].r#in, fsm[0].out, fsm[0].target, fsm[0].final_state, fsm[0].start_state),
+            (
+                fsm[0].state_no,
+                fsm[0].r#in,
+                fsm[0].out,
+                fsm[0].target,
+                fsm[0].final_state,
+                fsm[0].start_state
+            ),
             (5, 1, 2, 3, 1, 1)
         );
     }

@@ -18,7 +18,10 @@ pub fn iface_ambiguous_upper() {
 // [spec:foma:sem:foma.iface-close-fn]
 pub fn iface_close() {
     if iface_stack_check(1) != 0 {
-        stack_add(fsm_topsort(fsm_minimize(fsm_close_sigma(stack_pop().unwrap(), 0))));
+        stack_add(fsm_topsort(fsm_minimize(fsm_close_sigma(
+            stack_pop().unwrap(),
+            0,
+        ))));
     }
 }
 
@@ -185,7 +188,9 @@ pub fn iface_label_net() {
 // [spec:foma:sem:foma.iface-letter-machine-fn]
 pub fn iface_letter_machine() {
     if iface_stack_check(1) != 0 {
-        stack_add(fsm_topsort(fsm_minimize(fsm_letter_machine(stack_pop().unwrap()))));
+        stack_add(fsm_topsort(fsm_minimize(fsm_letter_machine(
+            stack_pop().unwrap(),
+        ))));
     }
 }
 
@@ -218,7 +223,9 @@ pub fn iface_minimize() {
 // [spec:foma:sem:foma.iface-one-plus-fn]
 pub fn iface_one_plus() {
     if iface_stack_check(1) != 0 {
-        stack_add(fsm_topsort(fsm_minimize(fsm_kleene_plus(stack_pop().unwrap()))));
+        stack_add(fsm_topsort(fsm_minimize(fsm_kleene_plus(
+            stack_pop().unwrap(),
+        ))));
     }
 }
 
@@ -228,7 +235,9 @@ pub fn iface_one_plus() {
 // [spec:foma:sem:foma.iface-negate-fn]
 pub fn iface_negate() {
     if iface_stack_check(1) != 0 {
-        stack_add(fsm_topsort(fsm_minimize(fsm_complement(stack_pop().unwrap()))));
+        stack_add(fsm_topsort(fsm_minimize(fsm_complement(
+            stack_pop().unwrap(),
+        ))));
     }
 }
 
@@ -248,7 +257,9 @@ pub fn iface_prune() {
 // [spec:foma:sem:foma.iface-reverse-fn]
 pub fn iface_reverse() {
     if iface_stack_check(1) != 0 {
-        stack_add(fsm_topsort(fsm_determinize(fsm_reverse(stack_pop().unwrap()))));
+        stack_add(fsm_topsort(fsm_determinize(fsm_reverse(
+            stack_pop().unwrap(),
+        ))));
     }
 }
 
@@ -322,6 +333,8 @@ pub fn iface_upper_side() {
 // [spec:foma:sem:foma.iface-zero-plus-fn]
 pub fn iface_zero_plus() {
     if iface_stack_check(1) != 0 {
-        stack_add(fsm_topsort(fsm_minimize(fsm_kleene_star(stack_pop().unwrap()))));
+        stack_add(fsm_topsort(fsm_minimize(fsm_kleene_star(
+            stack_pop().unwrap(),
+        ))));
     }
 }

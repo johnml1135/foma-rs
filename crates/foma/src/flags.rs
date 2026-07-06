@@ -181,7 +181,10 @@ pub fn flag_eliminate(net: Box<Fsm>, name: Option<&str>) -> Box<Fsm> {
     let newnet = if let Some(mut filter) = filter {
         let old_g_flag_is_epsilon = G_FLAG_IS_EPSILON.with(|c| c.get());
         G_FLAG_IS_EPSILON.with(|c| c.set(0));
-        let newnet = fsm_compose(fsm_copy(&mut filter), fsm_compose(net, fsm_copy(&mut filter)));
+        let newnet = fsm_compose(
+            fsm_copy(&mut filter),
+            fsm_compose(net, fsm_copy(&mut filter)),
+        );
         G_FLAG_IS_EPSILON.with(|c| c.set(old_g_flag_is_epsilon));
         /* the filter itself is never destroyed in C (leak); dropped here */
         newnet
@@ -930,39 +933,105 @@ mod tests {
     #[test]
     fn flag_build_rows() {
         /* Different attribute names -> NONE immediately */
-        assert_eq!(flag_build(FLAG_UNIFY, "F", Some("1"), FLAG_UNIFY, "G", Some("1")), NONE);
+        assert_eq!(
+            flag_build(FLAG_UNIFY, "F", Some("1"), FLAG_UNIFY, "G", Some("1")),
+            NONE
+        );
 
         /* U rows (first matching row wins) */
-        assert_eq!(flag_build(FLAG_UNIFY, "F", Some("1"), FLAG_POSITIVE, "F", Some("1")), SUCCEED);
-        assert_eq!(flag_build(FLAG_UNIFY, "F", Some("1"), FLAG_CLEAR, "F", None), SUCCEED);
-        assert_eq!(flag_build(FLAG_UNIFY, "F", Some("1"), FLAG_UNIFY, "F", Some("2")), FAIL);
-        assert_eq!(flag_build(FLAG_UNIFY, "F", Some("1"), FLAG_POSITIVE, "F", Some("2")), FAIL);
-        assert_eq!(flag_build(FLAG_UNIFY, "F", Some("1"), FLAG_NEGATIVE, "F", Some("1")), FAIL);
+        assert_eq!(
+            flag_build(FLAG_UNIFY, "F", Some("1"), FLAG_POSITIVE, "F", Some("1")),
+            SUCCEED
+        );
+        assert_eq!(
+            flag_build(FLAG_UNIFY, "F", Some("1"), FLAG_CLEAR, "F", None),
+            SUCCEED
+        );
+        assert_eq!(
+            flag_build(FLAG_UNIFY, "F", Some("1"), FLAG_UNIFY, "F", Some("2")),
+            FAIL
+        );
+        assert_eq!(
+            flag_build(FLAG_UNIFY, "F", Some("1"), FLAG_POSITIVE, "F", Some("2")),
+            FAIL
+        );
+        assert_eq!(
+            flag_build(FLAG_UNIFY, "F", Some("1"), FLAG_NEGATIVE, "F", Some("1")),
+            FAIL
+        );
         /* U vs U equal value is explicitly NONE */
-        assert_eq!(flag_build(FLAG_UNIFY, "F", Some("1"), FLAG_UNIFY, "F", Some("1")), NONE);
+        assert_eq!(
+            flag_build(FLAG_UNIFY, "F", Some("1"), FLAG_UNIFY, "F", Some("1")),
+            NONE
+        );
 
         /* R valueless */
-        assert_eq!(flag_build(FLAG_REQUIRE, "F", None, FLAG_UNIFY, "F", Some("1")), SUCCEED);
-        assert_eq!(flag_build(FLAG_REQUIRE, "F", None, FLAG_POSITIVE, "F", Some("1")), SUCCEED);
-        assert_eq!(flag_build(FLAG_REQUIRE, "F", None, FLAG_NEGATIVE, "F", Some("1")), SUCCEED);
-        assert_eq!(flag_build(FLAG_REQUIRE, "F", None, FLAG_CLEAR, "F", None), FAIL);
+        assert_eq!(
+            flag_build(FLAG_REQUIRE, "F", None, FLAG_UNIFY, "F", Some("1")),
+            SUCCEED
+        );
+        assert_eq!(
+            flag_build(FLAG_REQUIRE, "F", None, FLAG_POSITIVE, "F", Some("1")),
+            SUCCEED
+        );
+        assert_eq!(
+            flag_build(FLAG_REQUIRE, "F", None, FLAG_NEGATIVE, "F", Some("1")),
+            SUCCEED
+        );
+        assert_eq!(
+            flag_build(FLAG_REQUIRE, "F", None, FLAG_CLEAR, "F", None),
+            FAIL
+        );
         /* R with value */
-        assert_eq!(flag_build(FLAG_REQUIRE, "F", Some("1"), FLAG_POSITIVE, "F", Some("1")), SUCCEED);
-        assert_eq!(flag_build(FLAG_REQUIRE, "F", Some("1"), FLAG_POSITIVE, "F", Some("2")), FAIL);
+        assert_eq!(
+            flag_build(FLAG_REQUIRE, "F", Some("1"), FLAG_POSITIVE, "F", Some("1")),
+            SUCCEED
+        );
+        assert_eq!(
+            flag_build(FLAG_REQUIRE, "F", Some("1"), FLAG_POSITIVE, "F", Some("2")),
+            FAIL
+        );
 
         /* D valueless */
-        assert_eq!(flag_build(FLAG_DISALLOW, "F", None, FLAG_CLEAR, "F", None), SUCCEED);
-        assert_eq!(flag_build(FLAG_DISALLOW, "F", None, FLAG_POSITIVE, "F", Some("1")), FAIL);
+        assert_eq!(
+            flag_build(FLAG_DISALLOW, "F", None, FLAG_CLEAR, "F", None),
+            SUCCEED
+        );
+        assert_eq!(
+            flag_build(FLAG_DISALLOW, "F", None, FLAG_POSITIVE, "F", Some("1")),
+            FAIL
+        );
         /* D with value */
-        assert_eq!(flag_build(FLAG_DISALLOW, "F", Some("1"), FLAG_POSITIVE, "F", Some("2")), SUCCEED);
-        assert_eq!(flag_build(FLAG_DISALLOW, "F", Some("1"), FLAG_NEGATIVE, "F", Some("1")), SUCCEED);
-        assert_eq!(flag_build(FLAG_DISALLOW, "F", Some("1"), FLAG_POSITIVE, "F", Some("1")), FAIL);
+        assert_eq!(
+            flag_build(FLAG_DISALLOW, "F", Some("1"), FLAG_POSITIVE, "F", Some("2")),
+            SUCCEED
+        );
+        assert_eq!(
+            flag_build(FLAG_DISALLOW, "F", Some("1"), FLAG_NEGATIVE, "F", Some("1")),
+            SUCCEED
+        );
+        assert_eq!(
+            flag_build(FLAG_DISALLOW, "F", Some("1"), FLAG_POSITIVE, "F", Some("1")),
+            FAIL
+        );
 
         /* Any ftype of C/N/P/E yields NONE (masks the flag_eliminate `|` bug) */
-        assert_eq!(flag_build(FLAG_POSITIVE, "F", Some("1"), FLAG_UNIFY, "F", Some("1")), NONE);
-        assert_eq!(flag_build(FLAG_NEGATIVE, "F", Some("1"), FLAG_UNIFY, "F", Some("1")), NONE);
-        assert_eq!(flag_build(FLAG_EQUAL, "F", Some("1"), FLAG_UNIFY, "F", Some("1")), NONE);
-        assert_eq!(flag_build(FLAG_CLEAR, "F", None, FLAG_UNIFY, "F", Some("1")), NONE);
+        assert_eq!(
+            flag_build(FLAG_POSITIVE, "F", Some("1"), FLAG_UNIFY, "F", Some("1")),
+            NONE
+        );
+        assert_eq!(
+            flag_build(FLAG_NEGATIVE, "F", Some("1"), FLAG_UNIFY, "F", Some("1")),
+            NONE
+        );
+        assert_eq!(
+            flag_build(FLAG_EQUAL, "F", Some("1"), FLAG_UNIFY, "F", Some("1")),
+            NONE
+        );
+        assert_eq!(
+            flag_build(FLAG_CLEAR, "F", None, FLAG_UNIFY, "F", Some("1")),
+            NONE
+        );
     }
 
     // [spec:foma:sem:flags.flag-extract-fn/test]
@@ -997,7 +1066,10 @@ mod tests {
         let mut net = fsm_parse_regex(r#""@U.F.1@" a "@U.G.1@""#, None, None).unwrap();
         flag_purge(&mut net, Some("F"));
         let syms = sigma_syms(&net);
-        assert!(!syms.contains(&"@U.F.1@".to_string()), "F symbol removed from sigma");
+        assert!(
+            !syms.contains(&"@U.F.1@".to_string()),
+            "F symbol removed from sigma"
+        );
         assert!(syms.contains(&"@U.G.1@".to_string()), "G symbol kept");
         /* The F arc became epsilon; the G arc is unchanged. */
         let labels = arc_labels(&net);
@@ -1021,10 +1093,10 @@ mod tests {
     #[test]
     fn flag_eliminate_end_to_end() {
         /* U/R/D flags. Surviving paths (verified against C foma):
-           @P.F.1@ a @U.F.1@ -> "a" (U unify equal), the @P.F.2@ b @U.F.1@ path
-           fails (U unify unequal); @P.G.1@ c @R.G@ -> "c" (R require satisfied),
-           d @R.G@ fails (nothing set G); e @D.H@ -> "e" (D disallow, H unset),
-           @P.H.1@ f @D.H@ fails (D disallow but H set). */
+        @P.F.1@ a @U.F.1@ -> "a" (U unify equal), the @P.F.2@ b @U.F.1@ path
+        fails (U unify unequal); @P.G.1@ c @R.G@ -> "c" (R require satisfied),
+        d @R.G@ fails (nothing set G); e @D.H@ -> "e" (D disallow, H unset),
+        @P.H.1@ f @D.H@ fails (D disallow but H set). */
         let src = r#"["@P.F.1@" a "@U.F.1@"] | ["@P.F.2@" b "@U.F.1@"] | ["@P.G.1@" c "@R.G@"] | [d "@R.G@"] | [e "@D.H@"] | ["@P.H.1@" f "@D.H@"]"#;
         let net = fsm_parse_regex(src, None, None).unwrap();
         let result = flag_eliminate(net, None);

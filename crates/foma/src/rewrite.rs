@@ -19,9 +19,9 @@ use crate::regex::fsm_parse_regex;
 use crate::sigma::{sigma_add, sigma_find, sigma_remove, sigma_sort, sigma_substitute};
 use crate::structures::{fsm_copy, fsm_destroy, fsm_empty_set, fsm_empty_string, fsm_identity};
 use crate::types::{
-    Fsm, Fsmcontexts, RewriteSet, ARROW_DOTTED, ARROW_LEFT, ARROW_LONGEST_MATCH, ARROW_OPTIONAL,
-    ARROW_RIGHT, ARROW_SHORTEST_MATCH, OP_DOWNWARD_REPLACE, OP_LEFTWARD_REPLACE,
-    OP_RIGHTWARD_REPLACE, OP_TWO_LEVEL_REPLACE, OP_UPWARD_REPLACE,
+    ARROW_DOTTED, ARROW_LEFT, ARROW_LONGEST_MATCH, ARROW_OPTIONAL, ARROW_RIGHT,
+    ARROW_SHORTEST_MATCH, Fsm, Fsmcontexts, OP_DOWNWARD_REPLACE, OP_LEFTWARD_REPLACE,
+    OP_RIGHTWARD_REPLACE, OP_TWO_LEVEL_REPLACE, OP_UPWARD_REPLACE, RewriteSet,
 };
 
 // Lower(X) puts X on output tape (may also be represented by @ID@ on input tape)
@@ -78,9 +78,8 @@ pub struct RewriteBatch {
 
 /* C: char *specialsymbols[] = { ..., NULL } — the NULL terminator is
 dropped; iteration is by length instead */
-pub static SPECIALSYMBOLS: [&str; 8] = [
-    "@0@", "@O@", "@I@", "@I[@", "@I[]@", "@I]@", "@ID@", "@#@",
-];
+pub static SPECIALSYMBOLS: [&str; 8] =
+    ["@0@", "@O@", "@I@", "@I[@", "@I[]@", "@I]@", "@ID@", "@#@"];
 
 // [spec:foma:def:rewrite.fsm-rewrite-fn]
 // [spec:foma:sem:rewrite.fsm-rewrite-fn]
@@ -221,10 +220,7 @@ pub fn fsm_rewrite(all_rules: &mut RewriteSet) -> Box<Fsm> {
     let any_copy = fsm_copy(rb.any.as_deref_mut().unwrap());
     let outside = fsm_minimize(fsm_concat(
         fsm_symbol("@O@"),
-        fsm_concat(
-            fsm_symbol("@0@"),
-            fsm_concat(any_copy, fsm_symbol("@ID@")),
-        ),
+        fsm_concat(fsm_symbol("@0@"), fsm_concat(any_copy, fsm_symbol("@ID@"))),
     ));
     let mut base = fsm_minimize(fsm_concat(
         fsm_copy(&mut boundary),
@@ -405,8 +401,7 @@ pub fn fsm_rewrite(all_rules: &mut RewriteSet) -> Box<Fsm> {
                 }
                 if rewrite_contexts.is_none() {
                     if r.arrow_type & ARROW_DOTTED != 0 && (r.arrow_type & ARROW_OPTIONAL) == 0 {
-                        let epep =
-                            fsm_concat(rewrite_epextend(&mut rb), rewrite_epextend(&mut rb));
+                        let epep = fsm_concat(rewrite_epextend(&mut rb), rewrite_epextend(&mut rb));
                         base = fsm_minus(base, rewr_contains(&mut rb, epep));
                     } else {
                         let c_copy = fsm_copy(&mut c);
@@ -525,10 +520,7 @@ pub fn rewr_notlongest(
         fsm_identity(),
         fsm_concat(
             fsm_symbol(&rb.namestrings[(rule_number - 1) as usize]),
-            fsm_concat(
-                fsm_identity(),
-                fsm_concat(fsm_identity(), fsm_universal()),
-            ),
+            fsm_concat(fsm_identity(), fsm_concat(fsm_identity(), fsm_universal())),
         ),
     ));
     nl = fsm_intersect(nl, rulenum);
@@ -551,10 +543,7 @@ pub fn rewr_notshortest(rb: &RewriteBatch, lang: &mut Fsm, rule_number: i32) -> 
         fsm_identity(),
         fsm_concat(
             fsm_symbol(&rb.namestrings[(rule_number - 1) as usize]),
-            fsm_concat(
-                fsm_identity(),
-                fsm_concat(fsm_identity(), fsm_universal()),
-            ),
+            fsm_concat(fsm_identity(), fsm_concat(fsm_identity(), fsm_universal())),
         ),
     ));
     ns = rewrite_tape_m_to_n_of_k(ns, 1, 1, 4);
@@ -581,18 +570,12 @@ pub fn rewr_notleftmost(
     let rulenum = fsm_minimize(fsm_concat(
         fsm_concat(
             fsm_symbol("@O@"),
-            fsm_concat(
-                fsm_identity(),
-                fsm_concat(fsm_identity(), fsm_identity()),
-            ),
+            fsm_concat(fsm_identity(), fsm_concat(fsm_identity(), fsm_identity())),
         ),
         fsm_concat(
             fsm_kleene_star(fsm_concat(
                 fsm_symbol("@O@"),
-                fsm_concat(
-                    fsm_identity(),
-                    fsm_concat(fsm_identity(), fsm_identity()),
-                ),
+                fsm_concat(fsm_identity(), fsm_concat(fsm_identity(), fsm_identity())),
             )),
             fsm_concat(
                 fsm_union(fsm_symbol("@I[@"), fsm_symbol("@I[]@")),
@@ -647,16 +630,10 @@ pub fn rewrite_tape_m_to_n_of_k(lang: Box<Fsm>, m: i32, n: i32, k: i32) -> Box<F
     fsm_minimize(fsm_lower(fsm_compose(
         lang,
         fsm_kleene_star(fsm_concat(
-            fsm_concat_n(
-                fsm_cross_product(fsm_empty_string(), fsm_identity()),
-                m - 1,
-            ),
+            fsm_concat_n(fsm_cross_product(fsm_empty_string(), fsm_identity()), m - 1),
             fsm_concat(
                 fsm_concat_n(fsm_identity(), n - m + 1),
-                fsm_concat_n(
-                    fsm_cross_product(fsm_empty_string(), fsm_identity()),
-                    k - n,
-                ),
+                fsm_concat_n(fsm_cross_product(fsm_empty_string(), fsm_identity()), k - n),
             ),
         )),
     )))
@@ -704,10 +681,7 @@ pub fn rewrite_lower(rb: &mut RewriteBatch, lower: Box<Fsm>) -> Box<Fsm> {
         fsm_concat(
             fsm_cross_product(fsm_empty_string(), fsm_symbol("@0@")),
             fsm_concat(
-                fsm_union(
-                    fsm_symbol("@#@"),
-                    fsm_copy(rb.any.as_deref_mut().unwrap()),
-                ),
+                fsm_union(fsm_symbol("@#@"), fsm_copy(rb.any.as_deref_mut().unwrap())),
                 fsm_cross_product(fsm_empty_string(), fsm_symbol("@ID@")),
             ),
         ),
@@ -726,10 +700,7 @@ pub fn rewrite_lower(rb: &mut RewriteBatch, lower: Box<Fsm>) -> Box<Fsm> {
             fsm_concat(
                 fsm_cross_product(
                     fsm_empty_string(),
-                    fsm_union(
-                        fsm_copy(rb.any.as_deref_mut().unwrap()),
-                        fsm_symbol("@0@"),
-                    ),
+                    fsm_union(fsm_copy(rb.any.as_deref_mut().unwrap()), fsm_symbol("@0@")),
                 ),
                 fsm_copy(rb.any.as_deref_mut().unwrap()),
             ),
@@ -747,10 +718,7 @@ pub fn rewrite_lower(rb: &mut RewriteBatch, lower: Box<Fsm>) -> Box<Fsm> {
                 fsm_copy(rb.rulenames.as_deref_mut().unwrap()),
             ),
             fsm_concat(
-                fsm_cross_product(
-                    fsm_empty_string(),
-                    fsm_copy(rb.any.as_deref_mut().unwrap()),
-                ),
+                fsm_cross_product(fsm_empty_string(), fsm_copy(rb.any.as_deref_mut().unwrap())),
                 fsm_cross_product(fsm_empty_string(), fsm_symbol("@0@")),
             ),
         ),
@@ -781,10 +749,7 @@ pub fn rewrite_any_4tape(rb: &mut RewriteBatch) -> Box<Fsm> {
                 fsm_concat(
                     fsm_symbol("@0@"),
                     fsm_concat(
-                        fsm_union(
-                            fsm_copy(rb.any.as_deref_mut().unwrap()),
-                            fsm_symbol("@#@"),
-                        ),
+                        fsm_union(fsm_copy(rb.any.as_deref_mut().unwrap()), fsm_symbol("@#@")),
                         fsm_symbol("@ID@"),
                     ),
                 ),
@@ -794,10 +759,7 @@ pub fn rewrite_any_4tape(rb: &mut RewriteBatch) -> Box<Fsm> {
                 fsm_concat(
                     fsm_copy(rb.rulenames.as_deref_mut().unwrap()),
                     fsm_concat(
-                        fsm_union(
-                            fsm_copy(rb.any.as_deref_mut().unwrap()),
-                            fsm_symbol("@0@"),
-                        ),
+                        fsm_union(fsm_copy(rb.any.as_deref_mut().unwrap()), fsm_symbol("@0@")),
                         fsm_union(
                             fsm_copy(rb.any.as_deref_mut().unwrap()),
                             fsm_union(fsm_symbol("@ID@"), fsm_symbol("@0@")),
@@ -830,10 +792,7 @@ pub fn rewrite_upper(rb: &mut RewriteBatch, upper: Box<Fsm>) -> Box<Fsm> {
         fsm_concat(
             fsm_cross_product(fsm_empty_string(), fsm_symbol("@0@")),
             fsm_concat(
-                fsm_union(
-                    fsm_symbol("@#@"),
-                    fsm_copy(rb.any.as_deref_mut().unwrap()),
-                ),
+                fsm_union(fsm_symbol("@#@"), fsm_copy(rb.any.as_deref_mut().unwrap())),
                 fsm_cross_product(fsm_empty_string(), fsm_symbol("@ID@")),
             ),
         ),
@@ -851,10 +810,7 @@ pub fn rewrite_upper(rb: &mut RewriteBatch, upper: Box<Fsm>) -> Box<Fsm> {
             ),
             fsm_concat(
                 fsm_cross_product(fsm_empty_string(), fsm_symbol("@0@")),
-                fsm_cross_product(
-                    fsm_empty_string(),
-                    fsm_copy(rb.any.as_deref_mut().unwrap()),
-                ),
+                fsm_cross_product(fsm_empty_string(), fsm_copy(rb.any.as_deref_mut().unwrap())),
             ),
         ),
     ));
@@ -874,10 +830,7 @@ pub fn rewrite_upper(rb: &mut RewriteBatch, upper: Box<Fsm>) -> Box<Fsm> {
                 fsm_cross_product(
                     fsm_empty_string(),
                     fsm_union(
-                        fsm_union(
-                            fsm_symbol("@0@"),
-                            fsm_copy(rb.any.as_deref_mut().unwrap()),
-                        ),
+                        fsm_union(fsm_symbol("@0@"), fsm_copy(rb.any.as_deref_mut().unwrap())),
                         fsm_symbol("@ID@"),
                     ),
                 ),
@@ -905,9 +858,8 @@ pub fn rewrite_align(upper: Box<Fsm>, lower: Box<Fsm>) -> Box<Fsm> {
         2,
         2,
     ));
-    let third = fsm_minimize(
-        fsm_parse_regex("~[[? ?]* \"@0@\" \"@0@\" [? ?]*]", None, None).unwrap(),
-    );
+    let third =
+        fsm_minimize(fsm_parse_regex("~[[? ?]* \"@0@\" \"@0@\" [? ?]*]", None, None).unwrap());
 
     let mut align = fsm_minimize(fsm_intersect(third, fsm_intersect(first, second)));
     align = fsm_minimize(fsm_substitute_symbol(align, "@_IDENTITY_SYMBOL_@", "@UNK@"));
@@ -915,7 +867,11 @@ pub fn rewrite_align(upper: Box<Fsm>, lower: Box<Fsm>) -> Box<Fsm> {
         align,
         fsm_parse_regex("[? ? | \"@UNK@\" \"@UNK@\":\"@ID@\" ]*", None, None).unwrap(),
     )));
-    align2 = fsm_minimize(fsm_substitute_symbol(align2, "@UNK@", "@_IDENTITY_SYMBOL_@"));
+    align2 = fsm_minimize(fsm_substitute_symbol(
+        align2,
+        "@UNK@",
+        "@_IDENTITY_SYMBOL_@",
+    ));
     align2
 }
 
@@ -947,17 +903,18 @@ pub fn rewrite_align_markup(upper: Box<Fsm>, lower1: Box<Fsm>, lower2: Box<Fsm>)
     let sixth = fsm_minimize(rewrite_tape_m_to_n_of_k(lower2, 2, 2, 2));
     let mut align = fsm_minimize(fsm_concat(
         fsm_intersect(first, second),
-        fsm_concat(
-            fsm_intersect(third, fourth),
-            fsm_intersect(fifth, sixth),
-        ),
+        fsm_concat(fsm_intersect(third, fourth), fsm_intersect(fifth, sixth)),
     ));
     align = fsm_minimize(fsm_substitute_symbol(align, "@_IDENTITY_SYMBOL_@", "@UNK@"));
     let mut align2 = fsm_minimize(fsm_lower(fsm_compose(
         align,
         fsm_parse_regex("[? ? | \"@UNK@\" \"@UNK@\":\"@ID@\" ]*", None, None).unwrap(),
     )));
-    align2 = fsm_minimize(fsm_substitute_symbol(align2, "@UNK@", "@_IDENTITY_SYMBOL_@"));
+    align2 = fsm_minimize(fsm_substitute_symbol(
+        align2,
+        "@UNK@",
+        "@_IDENTITY_SYMBOL_@",
+    ));
     align2
 }
 
@@ -1146,10 +1103,7 @@ pub fn rewr_context_restrict(
                 left,
                 fsm_concat(
                     fsm_copy(&mut var),
-                    fsm_concat(
-                        fsm_copy(&mut notvar),
-                        fsm_concat(fsm_copy(&mut var), right),
-                    ),
+                    fsm_concat(fsm_copy(&mut notvar), fsm_concat(fsm_copy(&mut var), right)),
                 ),
             ),
             union_p,
@@ -1208,10 +1162,7 @@ pub fn rewrite_epextend(rb: &mut RewriteBatch) -> Box<Fsm> {
             fsm_concat(
                 fsm_symbol("@0@"),
                 fsm_concat(
-                    fsm_union(
-                        fsm_copy(rb.any.as_deref_mut().unwrap()),
-                        fsm_symbol("@#@"),
-                    ),
+                    fsm_union(fsm_copy(rb.any.as_deref_mut().unwrap()), fsm_symbol("@#@")),
                     fsm_symbol("@ID@"),
                 ),
             ),
@@ -1224,10 +1175,7 @@ pub fn rewrite_epextend(rb: &mut RewriteBatch) -> Box<Fsm> {
                     fsm_copy(rb.any.as_deref_mut().unwrap()),
                     fsm_union(
                         fsm_symbol("@0@"),
-                        fsm_union(
-                            fsm_symbol("@ID@"),
-                            fsm_copy(rb.any.as_deref_mut().unwrap()),
-                        ),
+                        fsm_union(fsm_symbol("@ID@"), fsm_copy(rb.any.as_deref_mut().unwrap())),
                     ),
                 ),
             ),
@@ -1238,16 +1186,10 @@ pub fn rewrite_epextend(rb: &mut RewriteBatch) -> Box<Fsm> {
             fsm_concat(
                 fsm_copy(rb.rulenames.as_deref_mut().unwrap()),
                 fsm_concat(
-                    fsm_union(
-                        fsm_copy(rb.any.as_deref_mut().unwrap()),
-                        fsm_symbol("@0@"),
-                    ),
+                    fsm_union(fsm_copy(rb.any.as_deref_mut().unwrap()), fsm_symbol("@0@")),
                     fsm_union(
                         fsm_symbol("@0@"),
-                        fsm_union(
-                            fsm_symbol("@ID@"),
-                            fsm_copy(rb.any.as_deref_mut().unwrap()),
-                        ),
+                        fsm_union(fsm_symbol("@ID@"), fsm_copy(rb.any.as_deref_mut().unwrap())),
                     ),
                 ),
             ),
@@ -1257,16 +1199,10 @@ pub fn rewrite_epextend(rb: &mut RewriteBatch) -> Box<Fsm> {
             fsm_concat(
                 fsm_copy(rb.rulenames.as_deref_mut().unwrap()),
                 fsm_concat(
-                    fsm_union(
-                        fsm_copy(rb.any.as_deref_mut().unwrap()),
-                        fsm_symbol("@0@"),
-                    ),
+                    fsm_union(fsm_copy(rb.any.as_deref_mut().unwrap()), fsm_symbol("@0@")),
                     fsm_union(
                         fsm_symbol("@0@"),
-                        fsm_union(
-                            fsm_symbol("@ID@"),
-                            fsm_copy(rb.any.as_deref_mut().unwrap()),
-                        ),
+                        fsm_union(fsm_symbol("@ID@"), fsm_copy(rb.any.as_deref_mut().unwrap())),
                     ),
                 ),
             ),
@@ -1276,24 +1212,15 @@ pub fn rewrite_epextend(rb: &mut RewriteBatch) -> Box<Fsm> {
             fsm_concat(
                 fsm_copy(rb.rulenames.as_deref_mut().unwrap()),
                 fsm_concat(
-                    fsm_union(
-                        fsm_copy(rb.any.as_deref_mut().unwrap()),
-                        fsm_symbol("@0@"),
-                    ),
+                    fsm_union(fsm_copy(rb.any.as_deref_mut().unwrap()), fsm_symbol("@0@")),
                     fsm_union(
                         fsm_symbol("@0@"),
-                        fsm_union(
-                            fsm_symbol("@ID@"),
-                            fsm_copy(rb.any.as_deref_mut().unwrap()),
-                        ),
+                        fsm_union(fsm_symbol("@ID@"), fsm_copy(rb.any.as_deref_mut().unwrap())),
                     ),
                 ),
             ),
         ));
-        let three = fsm_intersect(
-            allzeroupper,
-            fsm_concat(threea, fsm_concat(threeb, threec)),
-        );
+        let three = fsm_intersect(allzeroupper, fsm_concat(threea, fsm_concat(threeb, threec)));
         rb.epextend = Some(fsm_minimize(fsm_union(fsm_union(one, two), three)));
     }
     fsm_copy(rb.epextend.as_deref_mut().unwrap())
@@ -1309,12 +1236,8 @@ mod tests {
     use crate::constructions::{fsm_intersect, fsm_symbol, fsm_union};
     use crate::minimize::fsm_minimize;
     use crate::regex::fsm_parse_regex;
-    use crate::structures::{
-        fsm_copy, fsm_empty_set, fsm_empty_string, fsm_identity, fsm_isempty,
-    };
-    use crate::types::{
-        ARROW_RIGHT, Fsm, Fsmcontexts, Fsmrules, OP_TWO_LEVEL_REPLACE, RewriteSet,
-    };
+    use crate::structures::{fsm_copy, fsm_empty_set, fsm_empty_string, fsm_identity, fsm_isempty};
+    use crate::types::{ARROW_RIGHT, Fsm, Fsmcontexts, Fsmrules, OP_TWO_LEVEL_REPLACE, RewriteSet};
 
     /* All lower-side outputs of `word` (apply down), sorted+deduped. */
     fn down_all(net: &Fsm, word: &str) -> Vec<String> {
@@ -1566,7 +1489,11 @@ mod tests {
     fn rewr_contains_no_complement() {
         let mut rb = mini_rb();
         let mut net = rewr_contains(&mut rb, fsm_symbol("a"));
-        assert_eq!(fsm_isempty(&mut net), 0, "containment language is non-empty");
+        assert_eq!(
+            fsm_isempty(&mut net),
+            0,
+            "containment language is non-empty"
+        );
         let mut probe = fsm_intersect(fsm_copy(&mut net), fsm_empty_string());
         assert_eq!(
             fsm_isempty(&mut probe),

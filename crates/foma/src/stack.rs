@@ -318,11 +318,7 @@ pub fn stack_pop() -> Option<Box<Fsm>> {
 // [spec:foma:def:foma.stack-isempty-fn]
 // [spec:foma:sem:foma.stack-isempty-fn]
 pub fn stack_isempty() -> i32 {
-    if e_next(main_stack()).is_none() {
-        1
-    } else {
-        0
-    }
+    if e_next(main_stack()).is_none() { 1 } else { 0 }
 }
 
 // [spec:foma:def:stack.stack-turn-fn]
@@ -550,7 +546,10 @@ mod tests {
         assert_eq!(stack_add(fsm_symbol("c")), 2);
         let name = top_fsm_name();
         assert!(!name.is_empty());
-        assert!(name.bytes().all(|b| b.is_ascii_digit() || (b'A'..=b'F').contains(&b)));
+        assert!(
+            name.bytes()
+                .all(|b| b.is_ascii_digit() || (b'A'..=b'F').contains(&b))
+        );
         // fsm_count ran on the pushed net: single-symbol net is
         // "2 states, 1 arc, 1 path" (C foma `print size`), 1 final.
         stack_entry_fsm(stack_find_top().unwrap(), |f| {
@@ -691,7 +690,10 @@ mod tests {
         // entry is untouched and (for size > 2) this is a swap, not a rotate.
         assert_eq!(bottom_fsm_name(), "topnet");
         assert_eq!(top_fsm_name(), "bottomnet");
-        assert_eq!(stack_entry_fsm(stack_find_second().unwrap(), |f| f.name.clone()), "midnet");
+        assert_eq!(
+            stack_entry_fsm(stack_find_second().unwrap(), |f| f.name.clone()),
+            "midnet"
+        );
         // Numbers are NOT swapped...
         assert_eq!(e_number(stack_find_bottom().unwrap()), 0);
         assert_eq!(e_number(stack_find_top().unwrap()), 2);

@@ -9,16 +9,16 @@
 //! agenda is append-only and addressed by index; astarnode "pointers" become
 //! agenda indices so the parent-chain walk in print_match survives reallocs.
 
-use crate::sigma::{sigma_find, sigma_max, sigma_string};
-use crate::stringhash::{sh_add_string, sh_find_string, sh_get_value, sh_init};
-use crate::structures::map_firstlines;
 use crate::int_stack::{
     int_stack_clear, int_stack_isempty, int_stack_pop, int_stack_push, ptr_stack_isempty,
     ptr_stack_pop, ptr_stack_push,
 };
+use crate::sigma::{sigma_find, sigma_max, sigma_string};
+use crate::stringhash::{sh_add_string, sh_find_string, sh_get_value, sh_init};
+use crate::structures::map_firstlines;
 use crate::types::{
-    ApplyMedHandle, Astarnode, Fsm, Medlookup, Sigma, IDENTITY, MED_DEFAULT_CUTOFF,
-    MED_DEFAULT_LIMIT, MED_DEFAULT_MAX_HEAP_SIZE,
+    ApplyMedHandle, Astarnode, Fsm, IDENTITY, MED_DEFAULT_CUTOFF, MED_DEFAULT_LIMIT,
+    MED_DEFAULT_MAX_HEAP_SIZE, Medlookup, Sigma,
 };
 use crate::utf8::{utf8skip, utf8strlen};
 
@@ -182,11 +182,7 @@ pub fn apply_med_clear(medh: Option<Box<ApplyMedHandle>>) {
 an empty slice, standing in for the C reading the NUL terminator (byte 0). */
 fn wtail(word: &[u8], i: i32) -> &[u8] {
     let ii = i as usize;
-    if ii <= word.len() {
-        &word[ii..]
-    } else {
-        &[]
-    }
+    if ii <= word.len() { &word[ii..] } else { &[] }
 }
 
 // [spec:foma:def:spelling.print-match-fn]
@@ -329,11 +325,7 @@ fn calculate_h(medh: &ApplyMedHandle, intword: &[i32], currpos: i32, state: i32)
         i += 1;
         j += 1;
     }
-    if hinf > hn {
-        hinf
-    } else {
-        hn
-    }
+    if hinf > hn { hinf } else { hn }
 }
 
 // [spec:foma:def:spelling.node-delete-min-fn]
@@ -542,8 +534,9 @@ pub fn fsm_create_letter_lookup(medh: &mut ApplyMedHandle, net: &Fsm) {
                 letterbits_union(v, vp, &mut medh.letterbits, bpla);
                 letterbits_add(v, ls_in(net, curr_ptr) as i32, &mut medh.letterbits, bpla);
 
-                sccinfo[v as usize].lowlink =
-                    sccinfo[v as usize].lowlink.min(sccinfo[vp as usize].lowlink);
+                sccinfo[v as usize].lowlink = sccinfo[v as usize]
+                    .lowlink
+                    .min(sccinfo[vp as usize].lowlink);
 
                 if ls_state_no(net, curr_ptr + 1) != ls_state_no(net, curr_ptr) {
                     pc = Pc::L4;
@@ -578,8 +571,9 @@ pub fn fsm_create_letter_lookup(medh: &mut ApplyMedHandle, net: &Fsm) {
                     pc = Pc::L1;
                 } else {
                     if sccinfo[vp as usize].on_t_stack != 0 {
-                        sccinfo[v as usize].lowlink =
-                            sccinfo[v as usize].lowlink.min(sccinfo[vp as usize].lowlink);
+                        sccinfo[v as usize].lowlink = sccinfo[v as usize]
+                            .lowlink
+                            .min(sccinfo[vp as usize].lowlink);
                     }
                     /* If node is visited, copy its bits */
                     letterbits_union(v, vp, &mut medh.letterbits, bpla);
@@ -1253,10 +1247,7 @@ mod tests {
 
     /* Full A* result-set: first call passes the word, NULL-resume drains the
     remaining matches. Returns (dictionary-side, aligned-input, cost) triples. */
-    fn med_all(
-        h: &mut ApplyMedHandle,
-        word: &str,
-    ) -> Vec<(String, String, i32)> {
+    fn med_all(h: &mut ApplyMedHandle, word: &str) -> Vec<(String, String, i32)> {
         let mut out = Vec::new();
         let mut r = apply_med(h, Some(word));
         while let Some(s) = r {

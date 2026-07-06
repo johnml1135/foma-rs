@@ -48,7 +48,12 @@ static COUNTER: AtomicU32 = AtomicU32::new(0);
 fn temp_path(tag: &str) -> PathBuf {
     let mut p = std::env::temp_dir();
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    p.push(format!("foma_cli_test_{}_{}_{}.foma", tag, std::process::id(), n));
+    p.push(format!(
+        "foma_cli_test_{}_{}_{}.foma",
+        tag,
+        std::process::id(),
+        n
+    ));
     p
 }
 
@@ -63,7 +68,11 @@ fn build_stack(tag: &str, regexes: &[&str]) -> PathBuf {
     script.push_str(&format!("save stack {}\n", path.display()));
     let (_o, _e, st) = run(foma().arg("-q"), script.as_bytes());
     assert!(st.success(), "foma failed while building stack file");
-    assert!(path.exists(), "stack file {} was not created", path.display());
+    assert!(
+        path.exists(),
+        "stack file {} was not created",
+        path.display()
+    );
     path
 }
 
@@ -122,7 +131,11 @@ fn foma_q_suppresses_banner_and_e_executes() {
     // -q + quit: banner suppressed, quit exits before the EOF newline → empty.
     let (out, _err, st) = run(foma().arg("-q"), b"quit\n");
     assert!(st.success());
-    assert!(out.is_empty(), "quiet quit should emit nothing, got {:?}", s(&out));
+    assert!(
+        out.is_empty(),
+        "quiet quit should emit nothing, got {:?}",
+        s(&out)
+    );
 
     // Default (no -q) prints the multi-line disclaimer banner first.
     let (out2, _e2, st2) = run(&mut foma(), b"quit\n");
@@ -243,7 +256,11 @@ fn foma_source_command() {
     assert!(st.success());
     let text = s(&out);
     assert!(text.starts_with("Opening file '"), "got {:?}", text);
-    assert!(text.contains("xyz\n"), "source did not run script: {:?}", text);
+    assert!(
+        text.contains("xyz\n"),
+        "source did not run script: {:?}",
+        text
+    );
 }
 
 // ─────────────────────────────── flookup ───────────────────────────────────
@@ -320,7 +337,11 @@ fn flookup_version_and_usage_errors() {
     // Missing file operand → usage on stderr, exit failure.
     let (_o, err, st) = run(&mut flookup(), b"");
     assert!(!st.success());
-    assert!(s(&err).starts_with("Usage: flookup "), "stderr {:?}", s(&err));
+    assert!(
+        s(&err).starts_with("Usage: flookup "),
+        "stderr {:?}",
+        s(&err)
+    );
 
     // `-h` prints usage + help to stdout and exits 0.
     let (out, _e, st) = run(flookup().arg("-h"), b"");
@@ -390,7 +411,11 @@ fn cgflookup_version_and_usage_error() {
 
     let (_o, err, st) = run(&mut cgflookup(), b"");
     assert!(!st.success());
-    assert!(s(&err).starts_with("Usage: cgflookup "), "stderr {:?}", s(&err));
+    assert!(
+        s(&err).starts_with("Usage: cgflookup "),
+        "stderr {:?}",
+        s(&err)
+    );
 }
 
 /* ------------------------------------------------------------------ */
@@ -419,7 +444,8 @@ fn flookup_server_mode_binds_and_answers_over_udp() {
         .expect("failed to spawn flookup server");
 
     let sock = UdpSocket::bind("127.0.0.1:0").expect("client bind");
-    sock.set_read_timeout(Some(Duration::from_millis(500))).unwrap();
+    sock.set_read_timeout(Some(Duration::from_millis(500)))
+        .unwrap();
     let server = format!("127.0.0.1:{}", port);
 
     // The server prints its banner then blocks in recvfrom; retry-send until a
@@ -439,7 +465,11 @@ fn flookup_server_mode_binds_and_answers_over_udp() {
     // apply up of surface "b" through a:b yields lexical "a":
     // serverstring accumulates "b\ta\n" + the blank separator line.
     let text = String::from_utf8_lossy(&reply);
-    assert!(text.contains("b\ta\n"), "unexpected server reply: {:?}", text);
+    assert!(
+        text.contains("b\ta\n"),
+        "unexpected server reply: {:?}",
+        text
+    );
 
     // A miss uses the server-mode "?+" marker (the documented inversion of
     // stdin mode's "+?").
@@ -447,7 +477,11 @@ fn flookup_server_mode_binds_and_answers_over_udp() {
     let mut buf = [0u8; 65536];
     let (n, _) = sock.recv_from(&mut buf).expect("miss reply");
     let miss = String::from_utf8_lossy(&buf[..n]).into_owned();
-    assert!(miss.contains("?+"), "miss reply should carry ?+: {:?}", miss);
+    assert!(
+        miss.contains("?+"),
+        "miss reply should carry ?+: {:?}",
+        miss
+    );
 
     child.kill().ok();
     child.wait().ok();

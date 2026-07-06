@@ -123,11 +123,9 @@ pub fn fsm_sort_arcs(net: &mut Fsm, direction: i32) {
                 /* C: qsort (unstable); a stable slice sort is an admissible
                 qsort behavior */
                 if direction == 1 {
-                    fsm[lasthead..lasthead + numlines as usize]
-                        .sort_by(|a, b| scin(a, b).cmp(&0));
+                    fsm[lasthead..lasthead + numlines as usize].sort_by(|a, b| scin(a, b).cmp(&0));
                 } else {
-                    fsm[lasthead..lasthead + numlines as usize]
-                        .sort_by(|a, b| scout(a, b).cmp(&0));
+                    fsm[lasthead..lasthead + numlines as usize].sort_by(|a, b| scout(a, b).cmp(&0));
                 }
             }
             numlines = 0;
@@ -801,9 +799,7 @@ pub fn fsm_isidentity(net: &mut Fsm) -> i32 {
 
             /* Check target conditions a) c) */
             /* a) */
-            if tmp.states[state_array[vp as usize].transitions].final_state != 0
-                && newlength != 0
-            {
+            if tmp.states[state_array[vp as usize].transitions].final_state != 0 && newlength != 0 {
                 failed = true;
                 break 'stack_loop;
             }

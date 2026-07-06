@@ -85,7 +85,11 @@ fn foma_net_print_writes_save_format_and_returns_1() {
     let mut buf: Vec<u8> = Vec::new();
     assert_eq!(foma_net_print(&net, &mut buf), 1);
     let s = String::from_utf8_lossy(&buf);
-    assert!(s.starts_with("##foma-net 1.0##"), "got: {:?}", &s[..s.len().min(40)]);
+    assert!(
+        s.starts_with("##foma-net 1.0##"),
+        "got: {:?}",
+        &s[..s.len().min(40)]
+    );
     assert!(s.contains("##sigma##"));
     assert!(s.trim_end().ends_with("##end##"));
 }
@@ -175,7 +179,11 @@ fn apply_file_direction_stack_and_roundtrip() {
     // Bad input path with a populated stack: open failure → 1.
     assert_eq!(iface_apply_file("/no/such/foma/path", None, AP_D), 1);
     // Good run writing to a file.
-    let rc = iface_apply_file(inpath.to_str().unwrap(), Some(outpath.to_str().unwrap()), AP_D);
+    let rc = iface_apply_file(
+        inpath.to_str().unwrap(),
+        Some(outpath.to_str().unwrap()),
+        AP_D,
+    );
     assert_eq!(rc, 0);
     assert_eq!(stack_size(), 1); // net not consumed
     let out = std::fs::read_to_string(&outpath).unwrap();
@@ -1624,6 +1632,10 @@ fn print_dot_static_writes_digraph() {
     let mut net = fsm_parse_regex("a b", None, None).unwrap();
     assert_eq!(print_dot(&mut net, Some(p.to_str().unwrap())), 1);
     let s = std::fs::read_to_string(&p).unwrap();
-    assert!(s.starts_with("digraph A {"), "got {:?}", &s[..s.len().min(20)]);
+    assert!(
+        s.starts_with("digraph A {"),
+        "got {:?}",
+        &s[..s.len().min(20)]
+    );
     assert!(s.trim_end().ends_with("}"));
 }

@@ -24,27 +24,25 @@ use nfst_xre::{
 
 use crate::constructions::{
     fsm_complement, fsm_compose, fsm_concat, fsm_concat_m_n, fsm_concat_n, fsm_contains,
-    fsm_contains_one, fsm_contains_opt_one, fsm_context_restrict, fsm_cross_product, fsm_ignore,
-    fsm_intersect, fsm_invert, fsm_kleene_plus, fsm_kleene_star, fsm_lenient_compose, fsm_minus,
-    fsm_optionality, fsm_precedes, fsm_priority_union_lower, fsm_priority_union_upper,
+    fsm_contains_one, fsm_contains_opt_one, fsm_context_restrict, fsm_cross_product, fsm_follows,
+    fsm_ignore, fsm_intersect, fsm_invert, fsm_kleene_plus, fsm_kleene_star, fsm_lenient_compose,
+    fsm_minus, fsm_optionality, fsm_precedes, fsm_priority_union_lower, fsm_priority_union_upper,
     fsm_quotient_left, fsm_shuffle, fsm_substitute_symbol, fsm_symbol, fsm_term_negation,
-    fsm_union, fsm_follows,
+    fsm_union,
 };
 use crate::define::{add_defined, find_defined, find_defined_function, remove_defined};
 use crate::determinize::fsm_determinize;
 use crate::extract::{fsm_lower, fsm_upper};
-use crate::io::{
-    file_to_mem, fsm_read_binary_file, fsm_read_spaced_text_file, fsm_read_text_file,
-};
+use crate::io::{file_to_mem, fsm_read_binary_file, fsm_read_spaced_text_file, fsm_read_text_file};
 use crate::minimize::fsm_minimize;
 use crate::reverse::fsm_reverse;
 use crate::rewrite::fsm_rewrite;
 use crate::structures::{fsm_copy, fsm_destroy, fsm_empty_string, fsm_identity, fsm_isempty};
 use crate::types::{
-    DefinedFunctions, DefinedNetworks, Fsm, Fsmcontexts, Fsmrules, RewriteSet, ARROW_DOTTED,
-    ARROW_LEFT, ARROW_LEFT_TO_RIGHT, ARROW_LONGEST_MATCH, ARROW_OPTIONAL, ARROW_RIGHT,
-    ARROW_RIGHT_TO_LEFT, ARROW_SHORTEST_MATCH, OP_DOWNWARD_REPLACE, OP_IGNORE_ALL,
-    OP_IGNORE_INTERNAL, OP_LEFTWARD_REPLACE, OP_RIGHTWARD_REPLACE, OP_UPWARD_REPLACE,
+    ARROW_DOTTED, ARROW_LEFT, ARROW_LEFT_TO_RIGHT, ARROW_LONGEST_MATCH, ARROW_OPTIONAL,
+    ARROW_RIGHT, ARROW_RIGHT_TO_LEFT, ARROW_SHORTEST_MATCH, DefinedFunctions, DefinedNetworks, Fsm,
+    Fsmcontexts, Fsmrules, OP_DOWNWARD_REPLACE, OP_IGNORE_ALL, OP_IGNORE_INTERNAL,
+    OP_LEFTWARD_REPLACE, OP_RIGHTWARD_REPLACE, OP_UPWARD_REPLACE, RewriteSet,
 };
 use crate::utf8::streqrep;
 
@@ -235,7 +233,9 @@ fn build_net(
         XreExpr::Restriction { body, contexts } => {
             build_restriction(&body.value, contexts, nets, funcs)
         }
-        XreExpr::Substitute { haystack, what } => build_substitute(&haystack.value, what, nets, funcs),
+        XreExpr::Substitute { haystack, what } => {
+            build_substitute(&haystack.value, what, nets, funcs)
+        }
     }
 }
 
@@ -403,7 +403,11 @@ fn function_apply(
     the NAME(args) call). */
     let mut arg_nets: Vec<Box<Fsm>> = Vec::new();
     for a in args {
-        arg_nets.push(build_net(&a.value, nets.as_deref_mut(), funcs.as_deref_mut())?);
+        arg_nets.push(build_net(
+            &a.value,
+            nets.as_deref_mut(),
+            funcs.as_deref_mut(),
+        )?);
     }
 
     let mut regex_bytes = body.into_bytes();
@@ -586,7 +590,10 @@ fn build_substitute(
     match what {
         /* sub1 sub2: fsm_substitute_symbol(net, subval1, subval2) — exactly one
         symbol to one symbol. */
-        SubstituteWhat::Symbol { needle, replacement } => {
+        SubstituteWhat::Symbol {
+            needle,
+            replacement,
+        } => {
             if replacement.len() != 1 {
                 eprintln!(
                     "*** Syntax error: substitution replaces a symbol with exactly one symbol"
@@ -769,7 +776,9 @@ fn link_rewritesets(mut nodes: Vec<Box<RewriteSet>>) -> Option<Box<RewriteSet>> 
 #[cfg(test)]
 mod tests {
     use crate::constructions::{fsm_count, fsm_equivalent};
-    use crate::define::{add_defined, add_defined_function, defined_functions_init, defined_networks_init};
+    use crate::define::{
+        add_defined, add_defined_function, defined_functions_init, defined_networks_init,
+    };
     use crate::topsort::fsm_topsort;
     use crate::types::Fsm;
 
@@ -803,7 +812,12 @@ mod tests {
     fn rewrite_internal_regexes_parse() {
         for src in REWRITE_INTERNAL_REGEXES {
             let r = nfst_xre::parse_all(src);
-            assert!(r.is_ok(), "nfst-xre failed to parse {:?}: {:?}", src, r.err());
+            assert!(
+                r.is_ok(),
+                "nfst-xre failed to parse {:?}: {:?}",
+                src,
+                r.err()
+            );
         }
     }
 

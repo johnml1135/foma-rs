@@ -186,7 +186,10 @@ pub(crate) fn print_mem_size(net: &Fsm) {
             break;
         }
         let symlen = node.symbol.as_deref().unwrap_or("").len() as u32;
-        s = s.wrapping_add(symlen).wrapping_add(1).wrapping_add(SIZEOF_SIGMA);
+        s = s
+            .wrapping_add(symlen)
+            .wrapping_add(1)
+            .wrapping_add(SIZEOF_SIGMA);
         sig = node.next.as_deref();
     }
     s = s.wrapping_add(SIZEOF_FSM);

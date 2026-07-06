@@ -7,10 +7,11 @@ version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
 
-# NOTE: absolute paths because nplan worktrees live outside the repo tree;
-# switch to relative/published deps when the port stabilizes (Wave 4).
+# The nfst-xre (regex) and nfst-lexc (lexc) parser crates live in a sibling
+# checkout of the necessary/nfst repo. Paths are relative to the repo root:
+# <parent>/foma/Cargo.toml -> <parent>/nfst/crates/... — clone necessary/nfst
+# next to this repo before building. (nfst-xfst is unused by the port.)
 [workspace.dependencies]
-nfst-xre = { path = "/Users/brendan/git/necessary/nfst/crates/nfst-xre" }
-nfst-lexc = { path = "/Users/brendan/git/necessary/nfst/crates/nfst-lexc" }
-nfst-xfst = { path = "/Users/brendan/git/necessary/nfst/crates/nfst-xfst" }
+nfst-xre = { path = "../nfst/crates/nfst-xre" }
+nfst-lexc = { path = "../nfst/crates/nfst-lexc" }
 flate2 = "1"

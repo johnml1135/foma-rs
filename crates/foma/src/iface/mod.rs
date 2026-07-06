@@ -23,9 +23,10 @@ pub(crate) use crate::apply::{
 pub(crate) use crate::coaccessible::fsm_coaccessible;
 pub(crate) use crate::constructions::{
     fsm_bimachine, fsm_close_sigma, fsm_compact, fsm_complement, fsm_complete, fsm_compose,
-    fsm_concat, fsm_count, fsm_cross_product, fsm_equivalent, fsm_ignore, fsm_intersect, fsm_invert,
-    fsm_kleene_plus, fsm_kleene_star, fsm_letter_machine, fsm_minus, fsm_sequentialize, fsm_shuffle,
-    fsm_substitute_label, fsm_substitute_symbol, fsm_symbol, fsm_symbol_occurs, fsm_union,
+    fsm_concat, fsm_count, fsm_cross_product, fsm_equivalent, fsm_ignore, fsm_intersect,
+    fsm_invert, fsm_kleene_plus, fsm_kleene_star, fsm_letter_machine, fsm_minus, fsm_sequentialize,
+    fsm_shuffle, fsm_substitute_label, fsm_substitute_symbol, fsm_symbol, fsm_symbol_occurs,
+    fsm_union,
 };
 pub(crate) use crate::define::{G_DEFINES, G_DEFINES_F, find_defined, remove_defined};
 pub(crate) use crate::determinize::fsm_determinize;
@@ -46,8 +47,8 @@ pub(crate) use crate::minimize::fsm_minimize;
 pub(crate) use crate::reverse::fsm_reverse;
 pub(crate) use crate::sigma::sigma_sort;
 pub(crate) use crate::spelling::{
-    apply_med, apply_med_get_cost, apply_med_get_instring, apply_med_set_med_cutoff,
-    apply_med_set_med_limit, apply_med_set_heap_max, cmatrix_print, cmatrix_print_att,
+    apply_med, apply_med_get_cost, apply_med_get_instring, apply_med_set_heap_max,
+    apply_med_set_med_cutoff, apply_med_set_med_limit, cmatrix_print, cmatrix_print_att,
 };
 pub(crate) use crate::stack::{
     stack_add, stack_entry_ah, stack_entry_amedh, stack_entry_fsm, stack_entry_next,

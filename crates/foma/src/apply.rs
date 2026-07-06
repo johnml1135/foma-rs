@@ -35,11 +35,11 @@ use crate::flags::{flag_check, flag_get_name, flag_get_type, flag_get_value};
 use crate::mem::round_up_to_power_of_two;
 use crate::sigma::sigma_max;
 use crate::types::{
-    ApplyHandle, ApplyStateIndex, FlagList, FlagLookup, Fsm, Searchstack, SigmaTrie,
-    SigmaTrieArrays, SigmatchArray, Sigs, APPLY_BINSEARCH_THRESHOLD, APPLY_INDEX_INPUT,
+    APPLY_BINSEARCH_THRESHOLD, APPLY_INDEX_INPUT, ApplyHandle, ApplyStateIndex,
     DEFAULT_OUTSTRING_SIZE, DEFAULT_STACK_SIZE, DOWN, ENUMERATE, EPSILON, FAIL, FLAG_CLEAR,
-    FLAG_DISALLOW, FLAG_EQUAL, FLAG_NEGATIVE, FLAG_POSITIVE, FLAG_REQUIRE, FLAG_UNIFY, IDENTITY,
-    LOWER, RANDOM, SUCCEED, UNKNOWN, UP, UPPER,
+    FLAG_DISALLOW, FLAG_EQUAL, FLAG_NEGATIVE, FLAG_POSITIVE, FLAG_REQUIRE, FLAG_UNIFY, FlagList,
+    FlagLookup, Fsm, IDENTITY, LOWER, RANDOM, SUCCEED, Searchstack, SigmaTrie, SigmaTrieArrays,
+    SigmatchArray, Sigs, UNKNOWN, UP, UPPER,
 };
 use crate::utf8::{utf8iscombining, utf8skip};
 
@@ -48,7 +48,7 @@ use crate::utf8::{utf8iscombining, utf8skip};
 /* ------------------------------------------------------------------ */
 
 /* (h->gstates + off) line accessors. gstates is the base index of
-   last_net->states (always 0); off is a line offset (h->ptr / h->curr_ptr). */
+last_net->states (always 0); off is a line offset (h->ptr / h->curr_ptr). */
 fn l_state_no(h: &ApplyHandle, off: i32) -> i32 {
     h.last_net.as_ref().unwrap().states[h.gstates + off as usize].state_no
 }
@@ -99,7 +99,7 @@ fn buf_memcpy(buf: &mut Vec<u8>, off: usize, src: &[u8], len: usize) {
 }
 
 /* Read h->outstring up to its NUL terminator as an owned String.
-   DEVIATION from C (from_utf8_lossy; C hands back the raw byte pointer). */
+DEVIATION from C (from_utf8_lossy; C hands back the raw byte pointer). */
 fn outstring_result(h: &ApplyHandle) -> String {
     let end = h
         .outstring
@@ -630,7 +630,11 @@ impl Iterator for ApplyIter<'_> {
         }
         // down/up seed with the word on the first pull, then resume with None;
         // the enumerate-family entry points ignore the word entirely.
-        let seed = if self.started { None } else { self.word.as_deref() };
+        let seed = if self.started {
+            None
+        } else {
+            self.word.as_deref()
+        };
         let result = match self.dir {
             ApplyDir::Down => apply_down(self.h, seed),
             ApplyDir::Up => apply_up(self.h, seed),
@@ -741,15 +745,19 @@ pub fn apply_index(
     let states = net.states.clone();
 
     /* Pass 1: get maxtrans (largest per-state count of real arcs). Both passes
-       only close a state when the next line's state_no differs, so the final
-       block before the -1 sentinel is never registered (latent bug, harmless). */
+    only close a state when the next line's state_no differs, so the final
+    block before the -1 sentinel is never registered (latent bug, harmless). */
     let mut laststate = 0i32;
     let mut maxtrans = 0i32;
     let mut numtrans = 0i32;
     let mut i = 0usize;
     while states[i].state_no != -1 {
         if states[i].state_no != laststate {
-            maxtrans = if numtrans > maxtrans { numtrans } else { maxtrans };
+            maxtrans = if numtrans > maxtrans {
+                numtrans
+            } else {
+                maxtrans
+            };
             numtrans = 0;
         }
         if states[i].target != -1 {
@@ -760,7 +768,7 @@ pub fn apply_index(
     }
 
     /* Pass 2: bucket states by their real-arc count. pre_index[count] holds
-       the state numbers with that count (in encounter order). */
+    the state numbers with that count (in encounter order). */
     let mut pre_index: Vec<Vec<i32>> = vec![Vec::new(); (maxtrans + 1) as usize];
     laststate = 0;
     maxtrans = 0;
@@ -769,7 +777,11 @@ pub fn apply_index(
     while states[i].state_no != -1 {
         if states[i].state_no != laststate {
             pre_index[numtrans as usize].push(laststate);
-            maxtrans = if numtrans > maxtrans { numtrans } else { maxtrans };
+            maxtrans = if numtrans > maxtrans {
+                numtrans
+            } else {
+                maxtrans
+            };
             numtrans = 0;
         }
         if states[i].target != -1 {
@@ -832,9 +844,9 @@ pub fn apply_index(
     }
 
     /* Fill: build each allowed state's all-arcs chain (fsmptr = line index).
-       Overflow/EPSILON-fallthrough of C is replaced by re-matching in
-       apply_follow_next_arc (DEVIATION documented in the module header). The
-       chain preserves arc-line order. */
+    Overflow/EPSILON-fallthrough of C is replaced by re-matching in
+    apply_follow_next_arc (DEVIATION documented in the module header). The
+    chain preserves arc-line order. */
     i = 0;
     // Collect each allowed state's arc line indices in line order.
     let mut per_state: Vec<Vec<i32>> = vec![Vec::new(); statecount as usize];
@@ -1079,8 +1091,7 @@ pub fn apply_follow_next_arc(h: &mut ApplyHandle) -> i32 {
             if (h.mode & RANDOM) == RANDOM {
                 let mut vc = 0;
                 h.curr_ptr = h.ptr;
-                while l_state_no(h, h.curr_ptr) == l_state_no(h, h.ptr)
-                    && l_in(h, h.curr_ptr) != -1
+                while l_state_no(h, h.curr_ptr) == l_state_no(h, h.ptr) && l_in(h, h.curr_ptr) != -1
                 {
                     vc += 1;
                     h.curr_ptr += 1;
@@ -1387,12 +1398,7 @@ pub fn apply_append(h: &mut ApplyHandle, cptr: i32, sym: i32) -> i32 {
         .as_bytes()
         .to_vec();
     let mut blen = h.sigs[symout as usize].length;
-    let sep: Vec<u8> = h
-        .separator
-        .as_deref()
-        .unwrap_or("")
-        .as_bytes()
-        .to_vec();
+    let sep: Vec<u8> = h.separator.as_deref().unwrap_or("").as_bytes().to_vec();
     let seplen = sep.len() as i32; /* strlen(h->separator) */
     let mut len: i32;
 
@@ -1432,7 +1438,11 @@ pub fn apply_append(h: &mut ApplyHandle, cptr: i32, sym: i32) -> i32 {
             } else {
                 buf_strcpy(&mut h.outstring, h.opos as usize, &astring);
                 buf_strcpy(&mut h.outstring, (h.opos + alen) as usize, &sep);
-                buf_strcpy(&mut h.outstring, (h.opos + alen + seplen) as usize, &bstring);
+                buf_strcpy(
+                    &mut h.outstring,
+                    (h.opos + alen + seplen) as usize,
+                    &bstring,
+                );
                 len = alen + blen + seplen;
             }
         }
@@ -1521,12 +1531,7 @@ pub fn apply_append(h: &mut ApplyHandle, cptr: i32, sym: i32) -> i32 {
         }
     }
     if h.print_space != 0 && len > 0 {
-        let space: Vec<u8> = h
-            .space_symbol
-            .as_deref()
-            .unwrap_or("")
-            .as_bytes()
-            .to_vec();
+        let space: Vec<u8> = h.space_symbol.as_deref().unwrap_or("").as_bytes().to_vec();
         buf_strcpy(&mut h.outstring, (h.opos + len) as usize, &space);
         // C: len++ regardless of the space symbol's byte length (latent bug —
         // a multi-byte space symbol has all but its first byte overwritten).
@@ -1651,8 +1656,13 @@ pub fn apply_add_sigma_trie(h: &mut ApplyHandle, number: i32, symbol: &str, len:
             h.sigma_trie[cell].signum = number;
         } else if h.sigma_trie[cell].next.is_none() {
             let child_base = h.sigma_trie.len();
-            h.sigma_trie
-                .resize(child_base + 256, SigmaTrie { signum: 0, next: None });
+            h.sigma_trie.resize(
+                child_base + 256,
+                SigmaTrie {
+                    signum: 0,
+                    next: None,
+                },
+            );
             h.sigma_trie[cell].next = Some(Box::new(SigmaTrie {
                 signum: child_base as i32,
                 next: None,
@@ -1717,7 +1727,13 @@ pub fn apply_create_sigarray(h: &mut ApplyHandle, net: &Fsm) {
     h.flag_list = None;
 
     // Root level of the trie arena (256 cells) + bookkeeping node.
-    h.sigma_trie = vec![SigmaTrie { signum: 0, next: None }; 256];
+    h.sigma_trie = vec![
+        SigmaTrie {
+            signum: 0,
+            next: None
+        };
+        256
+    ];
     h.sigma_trie_arrays = Some(Box::new(SigmaTrieArrays {
         arr: Vec::new(),
         next: None,
@@ -1847,7 +1863,11 @@ pub fn apply_create_sigmatch(h: &mut ApplyHandle) {
         /* Merge trailing Unicode combining characters into one ? (IDENTITY). */
         loop {
             let pos = i + consumes as usize;
-            let slice: &[u8] = if pos < symbol.len() { &symbol[pos..] } else { &[] };
+            let slice: &[u8] = if pos < symbol.len() {
+                &symbol[pos..]
+            } else {
+                &[]
+            };
             let cons = utf8iscombining(slice);
             if cons == 0 {
                 break;
@@ -2326,7 +2346,10 @@ mod tests {
             r = apply_words(&mut h);
         }
         // C foma yields this exact order on a small acyclic net.
-        assert_eq!(words, vec!["a".to_string(), "ab".to_string(), "cd".to_string()]);
+        assert_eq!(
+            words,
+            vec!["a".to_string(), "ab".to_string(), "cd".to_string()]
+        );
 
         // upper/lower words on a transducer: both sides differ.
         let tnet = parse("{ab}:{xy}|{cd}");
@@ -2496,8 +2519,7 @@ mod tests {
     // [spec:foma:sem:apply.apply-mark-flagstates-fn/test]
     #[test]
     fn flag_diacritics_end_to_end() {
-        let net =
-            parse(r#"[a "@U.F.1@" | b "@U.F.2@"] [c "@R.F.1@" | d "@R.F.2@"]"#);
+        let net = parse(r#"[a "@U.F.1@" | b "@U.F.2@"] [c "@R.F.1@" | d "@R.F.2@"]"#);
         let h = apply_init(&net);
         assert_eq!(h.has_flags, 1);
         // states with flag arcs are recorded in flagstates.
@@ -2540,23 +2562,56 @@ mod tests {
         let net = parse(r#"[a "@U.F.1@"] [c "@R.F.1@"]"#);
         let mut h = apply_init(&net);
         // U.F.1 on an unset feature stores the value and succeeds.
-        assert_eq!(apply_check_flag(&mut h, FLAG_UNIFY, Some("F"), Some("1")), SUCCEED);
+        assert_eq!(
+            apply_check_flag(&mut h, FLAG_UNIFY, Some("F"), Some("1")),
+            SUCCEED
+        );
         // same value unifies; different value fails.
-        assert_eq!(apply_check_flag(&mut h, FLAG_UNIFY, Some("F"), Some("1")), SUCCEED);
-        assert_eq!(apply_check_flag(&mut h, FLAG_UNIFY, Some("F"), Some("2")), FAIL);
+        assert_eq!(
+            apply_check_flag(&mut h, FLAG_UNIFY, Some("F"), Some("1")),
+            SUCCEED
+        );
+        assert_eq!(
+            apply_check_flag(&mut h, FLAG_UNIFY, Some("F"), Some("2")),
+            FAIL
+        );
         // R.F requires a value present -> succeed while set.
-        assert_eq!(apply_check_flag(&mut h, FLAG_REQUIRE, Some("F"), None), SUCCEED);
+        assert_eq!(
+            apply_check_flag(&mut h, FLAG_REQUIRE, Some("F"), None),
+            SUCCEED
+        );
         // D.F.1 disallows the currently-set value -> fail; a different value ok.
-        assert_eq!(apply_check_flag(&mut h, FLAG_DISALLOW, Some("F"), Some("1")), FAIL);
-        assert_eq!(apply_check_flag(&mut h, FLAG_DISALLOW, Some("F"), Some("9")), SUCCEED);
+        assert_eq!(
+            apply_check_flag(&mut h, FLAG_DISALLOW, Some("F"), Some("1")),
+            FAIL
+        );
+        assert_eq!(
+            apply_check_flag(&mut h, FLAG_DISALLOW, Some("F"), Some("9")),
+            SUCCEED
+        );
         // C.F clears the value -> R.F now fails (nothing set).
-        assert_eq!(apply_check_flag(&mut h, FLAG_CLEAR, Some("F"), None), SUCCEED);
-        assert_eq!(apply_check_flag(&mut h, FLAG_REQUIRE, Some("F"), None), FAIL);
+        assert_eq!(
+            apply_check_flag(&mut h, FLAG_CLEAR, Some("F"), None),
+            SUCCEED
+        );
+        assert_eq!(
+            apply_check_flag(&mut h, FLAG_REQUIRE, Some("F"), None),
+            FAIL
+        );
         // P.F.5 sets; clear_flags resets, so REQUIRE fails again.
-        assert_eq!(apply_check_flag(&mut h, FLAG_POSITIVE, Some("F"), Some("5")), SUCCEED);
-        assert_eq!(apply_check_flag(&mut h, FLAG_REQUIRE, Some("F"), None), SUCCEED);
+        assert_eq!(
+            apply_check_flag(&mut h, FLAG_POSITIVE, Some("F"), Some("5")),
+            SUCCEED
+        );
+        assert_eq!(
+            apply_check_flag(&mut h, FLAG_REQUIRE, Some("F"), None),
+            SUCCEED
+        );
         apply_clear_flags(&mut h);
-        assert_eq!(apply_check_flag(&mut h, FLAG_REQUIRE, Some("F"), None), FAIL);
+        assert_eq!(
+            apply_check_flag(&mut h, FLAG_REQUIRE, Some("F"), None),
+            FAIL
+        );
     }
 
     // [spec:foma:sem:apply.apply-check-flag-fn/test]

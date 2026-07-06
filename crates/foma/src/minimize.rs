@@ -22,7 +22,7 @@ use crate::mem::{G_MINIMAL, G_MINIMIZE_HOPCROFT};
 use crate::reverse::fsm_reverse;
 use crate::sigma::sigma_max;
 use crate::structures::{fsm_destroy, fsm_empty_set};
-use crate::types::{Fsm, EPSILON, UNK, UNKNOWN, YES};
+use crate::types::{EPSILON, Fsm, UNK, UNKNOWN, YES};
 
 // [spec:foma:def:minimize.statesym]
 /* Declared in the C but never used (dead declaration) — kept literally. */
@@ -144,8 +144,8 @@ pub(crate) struct Minimizer {
 }
 
 /* C forward decl kept as a comment:
-   static void single_symbol_to_symbol_pair(int symbol, int *symbol_in, int *symbol_out);
-   (compiled out in minimize.c — the back-mapping is never needed here) */
+static void single_symbol_to_symbol_pair(int symbol, int *symbol_in, int *symbol_out);
+(compiled out in minimize.c — the back-mapping is never needed here) */
 
 // [spec:foma:def:minimize.fsm-minimize-fn]
 // [spec:foma:sem:minimize.fsm-minimize-fn]
@@ -261,7 +261,7 @@ pub(crate) fn fsm_minimize_hop(net: Box<Fsm>) -> Box<Fsm> {
             }
 
             /* for (next_minsym = INT_MAX; minsym != INT_MAX;
-                    minsym = next_minsym, next_minsym = INT_MAX) */
+            minsym = next_minsym, next_minsym = INT_MAX) */
             let mut next_minsym: i32 = i32::MAX;
             'symloop: while minsym != i32::MAX {
                 'cont: {
@@ -439,8 +439,8 @@ pub(crate) fn refine_states(m: &mut Minimizer, invstates: i32) -> i32 {
         let tP = m.e[thise].group;
 
         /* Do we need to split?
-           if we've touched as many states as there are in the partition
-           we don't split */
+        if we've touched as many states as there are in the partition
+        we don't split */
 
         if m.phead[tP].t_count == m.phead[tP].count {
             m.phead[tP].t_count = 0;
@@ -500,15 +500,27 @@ pub(crate) fn refine_states(m: &mut Minimizer, invstates: i32) -> i32 {
                     /* We process the larger one for all symbols */
                     /* and the smaller one for only the ones remaining in this symloop */
                 } else if tP == m.current_w {
-                    let smaller = if m.phead[tP].inv_count < m.phead[tP].inv_t_count { tP } else { np };
-                    let larger = if m.phead[tP].inv_count >= m.phead[tP].inv_t_count { tP } else { np };
+                    let smaller = if m.phead[tP].inv_count < m.phead[tP].inv_t_count {
+                        tP
+                    } else {
+                        np
+                    };
+                    let larger = if m.phead[tP].inv_count >= m.phead[tP].inv_t_count {
+                        tP
+                    } else {
+                        np
+                    };
                     agenda_add(m, smaller, 0);
                     agenda_add(m, larger, 1);
                     selfsplit = 1;
                 } else {
                     /* If the block is not on the agenda, we add */
                     /* the smaller of tP, newP and start the symloop from 0 */
-                    let smaller = if m.phead[tP].inv_count < m.phead[tP].inv_t_count { tP } else { np };
+                    let smaller = if m.phead[tP].inv_count < m.phead[tP].inv_t_count {
+                        tP
+                    } else {
+                        np
+                    };
                     agenda_add(m, smaller, 0);
                 }
                 /* Add to middle of P-chain */
@@ -745,7 +757,8 @@ pub(crate) fn generate_inverse(m: &mut Minimizer, net: &Fsm) {
             i += 1;
             continue;
         }
-        let symbol = symbol_pair_to_single_symbol(m, net.states[i].r#in as i32, net.states[i].out as i32);
+        let symbol =
+            symbol_pair_to_single_symbol(m, net.states[i].r#in as i32, net.states[i].out as i32);
         let source = net.states[i].state_no;
         let target = net.states[i].target as usize;
         let slot = m.trans_array_minimize[target].transitions
@@ -990,21 +1003,45 @@ mod tests {
             let d = fsm_determinize(net.clone());
             let m = fsm_minimize(net);
             for (w, exp) in samples {
-                assert_eq!(accepts(&d, w).is_some(), *exp, "determinize accepts {:?}", w);
+                assert_eq!(
+                    accepts(&d, w).is_some(),
+                    *exp,
+                    "determinize accepts {:?}",
+                    w
+                );
                 assert_eq!(accepts(&m, w).is_some(), *exp, "minimize accepts {:?}", w);
             }
         }
         check(
             build_a_ge2(),
-            &[("", false), ("a", false), ("aa", true), ("aaa", true), ("aaaa", true)],
+            &[
+                ("", false),
+                ("a", false),
+                ("aa", true),
+                ("aaa", true),
+                ("aaaa", true),
+            ],
         );
         check(
             build_ab_plus(),
-            &[("", false), ("a", true), ("b", true), ("ab", true), ("bba", true)],
+            &[
+                ("", false),
+                ("a", true),
+                ("b", true),
+                ("ab", true),
+                ("bba", true),
+            ],
         );
         check(
             build_ends_a(),
-            &[("", false), ("a", true), ("b", false), ("ba", true), ("ab", false), ("aba", true)],
+            &[
+                ("", false),
+                ("a", true),
+                ("b", false),
+                ("ba", true),
+                ("ab", false),
+                ("aba", true),
+            ],
         );
     }
 
@@ -1101,7 +1138,13 @@ mod tests {
         the single composite symbol 0 */
         let t0 = m.trans_array_minimize[0].transitions;
         let t1 = m.trans_array_minimize[1].transitions;
-        assert_eq!((m.trans_list_minimize[t0].source, m.trans_list_minimize[t1].source), (1, 0));
+        assert_eq!(
+            (
+                m.trans_list_minimize[t0].source,
+                m.trans_list_minimize[t1].source
+            ),
+            (1, 0)
+        );
         assert_eq!(m.trans_list_minimize[t0].inout, 0);
         assert_eq!(m.trans_list_minimize[t1].inout, 0);
     }
@@ -1164,8 +1207,14 @@ mod tests {
     // [spec:foma:sem:minimize.trans-sort-cmp-fn/test]
     #[test]
     fn trans_sort_cmp_orders_by_inout() {
-        let a = TransList { inout: 9, source: 0 };
-        let b = TransList { inout: 4, source: 1 };
+        let a = TransList {
+            inout: 9,
+            source: 0,
+        };
+        let b = TransList {
+            inout: 4,
+            source: 1,
+        };
         assert_eq!(trans_sort_cmp(&a, &b), 5);
         assert_eq!(trans_sort_cmp(&b, &a), -5);
         assert_eq!(trans_sort_cmp(&a, &a), 0);

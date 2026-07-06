@@ -739,7 +739,10 @@ mod tests {
         assert_eq!(sigma_add("a", &mut s), 3);
         assert_eq!(sigma_add("b", &mut s), 4);
         assert_eq!(sigma_add("c", &mut s), 5);
-        assert_eq!(syms(Some(&s)), vec![pair(3, "a"), pair(4, "b"), pair(5, "c")]);
+        assert_eq!(
+            syms(Some(&s)),
+            vec![pair(3, "a"), pair(4, "b"), pair(5, "c")]
+        );
     }
 
     // [spec:foma:sem:sigma.sigma-add-fn/test]
@@ -907,7 +910,10 @@ mod tests {
         assert_eq!(sigma_add_special(EPSILON, &mut s), 0);
         assert_eq!(
             syms(Some(&s)),
-            vec![pair(0, "@_EPSILON_SYMBOL_@"), pair(2, "@_IDENTITY_SYMBOL_@")]
+            vec![
+                pair(0, "@_EPSILON_SYMBOL_@"),
+                pair(2, "@_IDENTITY_SYMBOL_@")
+            ]
         );
     }
 
@@ -970,7 +976,11 @@ mod tests {
         let s = sigma_create();
         assert_eq!(sigma_find("a", Some(&s)), -1);
         /* scanning stops at an interior number==-1 node */
-        let s = node(3, Some("a"), Some(node(-1, None, Some(node(4, Some("b"), None)))));
+        let s = node(
+            3,
+            Some("a"),
+            Some(node(-1, None, Some(node(4, Some("b"), None)))),
+        );
         assert_eq!(sigma_find("b", Some(&s)), -1);
     }
 
@@ -1206,7 +1216,11 @@ mod tests {
     #[test]
     fn sigma_to_list_stops_filling_at_interior_sentinel() {
         /* the fill loop breaks at number==-1; sigma_max still sizes the table */
-        let s = node(3, Some("a"), Some(node(-1, None, Some(node(4, Some("b"), None)))));
+        let s = node(
+            3,
+            Some("a"),
+            Some(node(-1, None, Some(node(4, Some("b"), None)))),
+        );
         let sl = sigma_to_list(Some(&s));
         assert_eq!(sl.len(), 5);
         assert_eq!(sl[3].symbol.as_deref(), Some("a"));
@@ -1247,7 +1261,11 @@ mod tests {
     // [spec:foma:sem:fomalib.sigma-copy-fn/test]
     #[test]
     fn sigma_copy_preserves_null_symbols_and_trailing_sentinel() {
-        let src = node(3, Some("a"), Some(node(5, None, Some(node(-1, None, None)))));
+        let src = node(
+            3,
+            Some("a"),
+            Some(node(5, None, Some(node(-1, None, None)))),
+        );
         let copy = sigma_copy(Some(&src));
         assert_eq!(
             syms(copy.as_deref()),
@@ -1339,10 +1357,7 @@ mod tests {
         }
         net.states = vec![line(0, 4, 3, 0), sentinel_line()];
         assert_eq!(sigma_sort(&mut net), 1);
-        assert_eq!(
-            syms(net.sigma.as_deref()),
-            vec![pair(3, "a"), pair(4, "b")]
-        );
+        assert_eq!(syms(net.sigma.as_deref()), vec![pair(3, "a"), pair(4, "b")]);
         /* in=4 is absent from sigma → replacearray[4] == 4 (identity, kept);
         out: b 3→4 */
         assert_eq!((net.states[0].r#in, net.states[0].out), (4, 4));
@@ -1414,10 +1429,7 @@ mod tests {
         net.states = vec![line(0, 3, 5, 0), sentinel_line()];
         sigma_cleanup(&mut net, 1);
         /* unattested reserved 0–2 entries are removed too (head included) */
-        assert_eq!(
-            syms(net.sigma.as_deref()),
-            vec![pair(3, "a"), pair(4, "c")]
-        );
+        assert_eq!(syms(net.sigma.as_deref()), vec![pair(3, "a"), pair(4, "c")]);
         /* arcs rewritten through the renumbering table */
         assert_eq!((net.states[0].r#in, net.states[0].out), (3, 4));
     }

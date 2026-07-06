@@ -29,5 +29,8 @@ fn quit_command_exits_zero() {
         .write_all(b"quit\n")
         .expect("failed to write to foma stdin");
     let status = child.wait().expect("failed to wait on foma");
-    assert!(status.success(), "foma -q with `quit` should exit 0, got {status:?}");
+    assert!(
+        status.success(),
+        "foma -q with `quit` should exit 0, got {status:?}"
+    );
 }
