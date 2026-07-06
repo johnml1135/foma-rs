@@ -4,11 +4,19 @@
 //! prototype id.
 //!
 //! fsm_coaccessible prunes states from which no final state is reachable,
-//! compacting the line array in place. Kept quirks: mapping[0] = 0 is set
-//! unconditionally ("state 0 always exists") — if state 0 is NOT
-//! coaccessible, surviving states are numbered from 1 and the result has no
-//! state 0; when the write index has caught up with the read index the
-//! post-write re-reads of line i observe the remapped values, as in C.
+//! compacting the line array in place. All scratch (inverse adjacency,
+//! coacc/mapping/added marker arrays) is locally owned — nothing survives the
+//! call. Kept quirks:
+//! - mapping[0] = 0 is set unconditionally ("state 0 always exists"). Evaluated
+//!   in Wave 4 and KEPT: foma only ever prunes accessible nets (every state is
+//!   reachable from start state 0), so whenever the language is nonempty state 0
+//!   reaches a final and is itself coaccessible, making mapping[0] = 0 correct;
+//!   the empty-language case is diverted through the markcount == 0 branch. The
+//!   renumber-from-1 outcome only arises for a disconnected net (state 0 not
+//!   reachable to any final while another component is) that the pipeline never
+//!   builds — pinned by a test but benign, so it stays C-compatible.
+//! - when the write index has caught up with the read index the post-write
+//!   re-reads of line i observe the remapped values, as in C.
 
 use crate::constructions::add_fsm_arc;
 use crate::int_stack::{int_stack_clear, int_stack_isempty, int_stack_pop, int_stack_push};
@@ -31,9 +39,7 @@ pub fn fsm_coaccessible(net: Box<Fsm>) -> Box<Fsm> {
 
     /* C: fsm = net->states — reads/writes below index net.states directly */
     let mut new_arccount = 0;
-    /* printf("statecount %i\n",net->statecount); */
-    let _old_statecount = net.statecount;
-    /* calloc(net->statecount, sizeof(struct invtable)) — zeroed heads */
+    /* one inverse-adjacency head per state (zeroed) */
     let mut inverses: Vec<Invtable> = (0..net.statecount)
         .map(|_| Invtable {
             state: 0,
@@ -41,8 +47,7 @@ pub fn fsm_coaccessible(net: Box<Fsm>) -> Box<Fsm> {
         })
         .collect();
     let mut coacc: Vec<i32> = vec![0; net.statecount as usize];
-    /* C mallocs mapping uninitialized; only entries of coaccessible
-    states (and slot 0) are ever read back */
+    /* only entries of coaccessible states (and slot 0) are ever read back */
     let mut mapping: Vec<i32> = vec![0; net.statecount as usize];
     let mut added: Vec<i32> = vec![0; net.statecount as usize];
 
@@ -199,11 +204,6 @@ pub fn fsm_coaccessible(net: Box<Fsm>) -> Box<Fsm> {
     }
 
     /* printf("Markccount %i \n",markcount); */
-
-    /* C frees each inverse list's malloc'd chain nodes (heads live in the
-    array and are not individually freed), then the head array, coacc,
-    added and mapping — all dropped here */
-    drop(inverses);
 
     net.is_pruned = YES;
     net

@@ -3,19 +3,20 @@
 //! (per-file ids) plus the fomalib.h prototype ids.
 //!
 //! fsm_topsort renumbers states in topological order (Kahn's algorithm over
-//! inverse-arc counts) while counting accepting paths. invcount stays an
-//! `unsigned short` (u16) and silently wraps past 65535 in-arcs, exactly as
-//! in C; states unreachable from state 0 make the net be misreported as
-//! cyclic (documented quirk).
+//! inverse-arc counts) while counting accepting paths. Wave 4 widens invcount
+//! from the C's `unsigned short` to `i32`, so in-degrees past 65535 no longer
+//! wrap (a latent correctness bug — see the `+1`-bumped `fsm-topsort-fn` sem
+//! rule). States unreachable from state 0 still make the net be misreported as
+//! cyclic (a genuine C-compatible quirk, kept).
 
 use crate::constructions::{add_fsm_arc, fsm_count};
 use crate::int_stack::{int_stack_clear, int_stack_isempty, int_stack_pop, int_stack_push};
 use crate::types::{Fsm, FsmState, PATHCOUNT_CYCLIC, PATHCOUNT_OVERFLOW};
 
 // [spec:foma:def:topsort.fsm-topsort-fn]
-// [spec:foma:sem:topsort.fsm-topsort-fn]
+// [spec:foma:sem:topsort.fsm-topsort-fn+1]
 // [spec:foma:def:fomalib.fsm-topsort-fn]
-// [spec:foma:sem:fomalib.fsm-topsort-fn]
+// [spec:foma:sem:fomalib.fsm-topsort-fn+1]
 pub fn fsm_topsort(net: Box<Fsm>) -> Box<Fsm> {
     /* We topologically sort the network by looking for a state          */
     /* with inverse count 0. We then examine all the arcs from that      */
@@ -45,7 +46,9 @@ pub fn fsm_topsort(net: Box<Fsm>) -> Box<Fsm> {
     /* C mallocs newnum uninitialized; only entries of treated states are
     ever read back */
     let mut newnum: Vec<i32> = vec![0; net.statecount as usize];
-    let mut invcount: Vec<u16> = vec![0; net.statecount as usize];
+    /* Wave 4 fix: i32 in-degree (was unsigned short, which wrapped past
+    65535 in-arcs); +1-bumped fsm-topsort-fn sem rule */
+    let mut invcount: Vec<i32> = vec![0; net.statecount as usize];
     let mut treated: Vec<u8> = vec![0; net.statecount as usize];
 
     /* the vec! initializers above subsume C's explicit init loop over
@@ -60,8 +63,7 @@ pub fn fsm_topsort(net: Box<Fsm>) -> Box<Fsm> {
             lc += 1;
             if net.states[i as usize].target != -1 {
                 let target = net.states[i as usize].target;
-                /* unsigned short in-degree: >65535 in-arcs wraps silently */
-                invcount[target as usize] = invcount[target as usize].wrapping_add(1);
+                invcount[target as usize] += 1;
                 /* Do a fast check here to see if we have a selfloop */
                 if net.states[i as usize].state_no == target {
                     net.pathcount = PATHCOUNT_CYCLIC;
@@ -96,7 +98,7 @@ pub fn fsm_topsort(net: Box<Fsm>) -> Box<Fsm> {
             while net.states[curr_fsm].state_no == curr_state {
                 if net.states[curr_fsm].target != -1 {
                     let target = net.states[curr_fsm].target;
-                    invcount[target as usize] = invcount[target as usize].wrapping_sub(1);
+                    invcount[target as usize] -= 1;
 
                     /* Check if we overflow the path counter */
 
@@ -236,8 +238,8 @@ mod tests {
             .collect()
     }
 
-    // [spec:foma:sem:topsort.fsm-topsort-fn/test]
-    // [spec:foma:sem:fomalib.fsm-topsort-fn/test]
+    // [spec:foma:sem:topsort.fsm-topsort-fn+1/test]
+    // [spec:foma:sem:fomalib.fsm-topsort-fn+1/test]
     #[test]
     fn topsort_renumbers_acyclic_net_topologically() {
         /* Non-topological numbering: 0 -a-> 2, 2 -b-> 1, 1 final.
@@ -262,8 +264,8 @@ mod tests {
         assert_eq!(net.is_loop_free, 1);
     }
 
-    // [spec:foma:sem:topsort.fsm-topsort-fn/test]
-    // [spec:foma:sem:fomalib.fsm-topsort-fn/test]
+    // [spec:foma:sem:topsort.fsm-topsort-fn+1/test]
+    // [spec:foma:sem:fomalib.fsm-topsort-fn+1/test]
     #[test]
     fn topsort_counts_paths_of_small_acyclic_languages() {
         for (re, expected) in [("[a|b] c", 2i64), ("[a|b] [c|d]", 4), ("a b c", 1)] {
@@ -289,8 +291,8 @@ mod tests {
         }
     }
 
-    // [spec:foma:sem:topsort.fsm-topsort-fn/test]
-    // [spec:foma:sem:fomalib.fsm-topsort-fn/test]
+    // [spec:foma:sem:topsort.fsm-topsort-fn+1/test]
+    // [spec:foma:sem:fomalib.fsm-topsort-fn+1/test]
     #[test]
     fn topsort_selfloop_marks_cyclic_and_leaves_states_untouched() {
         /* a+ has a self-loop: caught in pass 1 over the line array */
@@ -303,8 +305,8 @@ mod tests {
         assert_eq!(lines(&net), before, "state array left untouched");
     }
 
-    // [spec:foma:sem:topsort.fsm-topsort-fn/test]
-    // [spec:foma:sem:fomalib.fsm-topsort-fn/test]
+    // [spec:foma:sem:topsort.fsm-topsort-fn+1/test]
+    // [spec:foma:sem:fomalib.fsm-topsort-fn+1/test]
     #[test]
     fn topsort_two_state_cycle_marks_cyclic_via_treatcount() {
         /* [a b]+ has the cycle 1 -b-> 2 -a-> 1 and no self-loop: no state on
@@ -317,8 +319,8 @@ mod tests {
         assert_eq!(lines(&net), before, "state array left untouched");
     }
 
-    // [spec:foma:sem:topsort.fsm-topsort-fn/test]
-    // [spec:foma:sem:fomalib.fsm-topsort-fn/test]
+    // [spec:foma:sem:topsort.fsm-topsort-fn+1/test]
+    // [spec:foma:sem:fomalib.fsm-topsort-fn+1/test]
     #[test]
     fn topsort_back_edge_into_treated_state_marks_cyclic() {
         /* [a b]* loops back into the initial state: the arc into already-

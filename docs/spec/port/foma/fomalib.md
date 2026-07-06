@@ -2352,11 +2352,13 @@
 > [spec:foma:def:fomalib.fsm-topsort-fn]
 > fsm *fsm_topsort(struct fsm *net)
 
-> [spec:foma:sem:fomalib.fsm-topsort-fn]
+> [spec:foma:sem:fomalib.fsm-topsort-fn+1]
 > Topologically sorts an acyclic net's states (renumbering them in topological order) and
 > counts its paths; detects cycles. NULL → NULL. After fsm_count: one pass computes each
-> state's in-degree (invcount, an UNSIGNED SHORT — >65535 incoming arcs overflows silently)
-> and each state's first line index; a self-loop found here immediately marks the net cyclic.
+> state's in-degree (invcount) and each state's first line index; a self-loop found here
+> immediately marks the net cyclic. Wave 4 fix: invcount is a plain `i32` (was an UNSIGNED
+> SHORT that silently overflowed past 65535 incoming arcs) — a latent overflow widened per
+> the conventions; unchanged for ≤65535 in-arcs into any single state.
 > Kahn's algorithm on the shared int stack (cleared first), seeded with state 0 only and
 > pathcount[0] = 1: pop a state, mark it treated, record it as the i-th state in topological
 > `order` and newnum[state] = i; for each of its arcs, decrement the target's invcount, add

@@ -56,7 +56,7 @@ pub fn fsm_lower(net: Box<Fsm>) -> Box<Fsm> {
         i += 1;
     }
     fsm_state_end_state();
-    /* free(net->states) */
+    /* drop the old line table; fsm_state_close installs the rebuilt one */
     net.states = Vec::new();
     fsm_state_close(&mut net);
     fsm_update_flags(&mut net, NO, NO, NO, UNK, UNK, UNK);
@@ -105,7 +105,7 @@ pub fn fsm_upper(net: Box<Fsm>) -> Box<Fsm> {
         i += 1;
     }
     fsm_state_end_state();
-    /* free(net->states) */
+    /* drop the old line table; fsm_state_close installs the rebuilt one */
     net.states = Vec::new();
     fsm_state_close(&mut net);
     fsm_update_flags(&mut net, NO, NO, NO, UNK, UNK, UNK);

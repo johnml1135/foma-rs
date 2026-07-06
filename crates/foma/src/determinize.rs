@@ -17,10 +17,11 @@
 //! - trans_array/trans_list: per-state interior pointers into the shared
 //!   entry pool → base offsets (usize).
 //!
-//! File-static state → thread_local! per the conventions (non-reentrancy is
-//! part of the contract, exactly as in C).
-
-use std::cell::{Cell, RefCell};
+//! Wave 4: the C's file-static scratch (subset-construction pools, nhash
+//! table, sigma maps, the numss/mainloop counters, …) is owned by a per-call
+//! `Subset` struct — nothing survives a call. The shared `int_stack`/
+//! `ptr_stack` and the `fsm_state_*` line-array builder remain module-level
+//! (they belong to other concerns); this module keeps no state of its own.
 
 use crate::constructions::fsm_count;
 use crate::dynarray::{
@@ -100,60 +101,67 @@ pub struct TransArray {
     pub tail: u32,
 }
 
-thread_local! {
+/// Per-call subset-construction scratch. The C kept every field below as a
+/// file-static; Wave 4 folds them into one owned struct created fresh in
+/// `fsm_subset`, so a determinize/epsilon-remove call owns all its own state
+/// and nothing persists between calls. `Default` gives the C's zeroed BSS
+/// start (0 / false / empty Vec).
+#[derive(Debug, Default)]
+pub(crate) struct Subset {
     // C: static int fsm_linecount, num_states, num_symbols, epsilon_symbol,
     //    *single_sigma_array, *double_sigma_array, limit, num_start_states, op;
-    static FSM_LINECOUNT: Cell<i32> = const { Cell::new(0) };
-    static NUM_STATES: Cell<i32> = const { Cell::new(0) };
-    static NUM_SYMBOLS: Cell<i32> = const { Cell::new(0) };
-    static EPSILON_SYMBOL: Cell<i32> = const { Cell::new(0) };
-    static SINGLE_SIGMA_ARRAY: RefCell<Vec<i32>> = const { RefCell::new(Vec::new()) };
-    static DOUBLE_SIGMA_ARRAY: RefCell<Vec<i32>> = const { RefCell::new(Vec::new()) };
-    static LIMIT: Cell<i32> = const { Cell::new(0) };
-    static NUM_START_STATES: Cell<i32> = const { Cell::new(0) };
-    static OP: Cell<i32> = const { Cell::new(0) };
+    // written by init to mirror the C statics but never read back in the port
+    #[allow(dead_code)]
+    fsm_linecount: i32,
+    num_states: i32,
+    num_symbols: i32,
+    epsilon_symbol: i32,
+    single_sigma_array: Vec<i32>,
+    double_sigma_array: Vec<i32>,
+    #[allow(dead_code)]
+    limit: i32,
+    num_start_states: i32,
+    op: i32,
 
     // C: static _Bool *finals, deterministic, numss;
-    static FINALS: RefCell<Vec<bool>> = const { RefCell::new(Vec::new()) };
-    static DETERMINISTIC: Cell<bool> = const { Cell::new(false) };
-    static NUMSS: Cell<bool> = const { Cell::new(false) };
+    finals: Vec<bool>,
+    deterministic: bool,
+    numss: bool,
 
     // C: static struct e_closure_memo *e_closure_memo; — head-node array
     // plus malloc'd chain nodes, all in one pool here (see module docs)
-    static E_CLOSURE_MEMO: RefCell<Vec<EClosureMemo>> = const { RefCell::new(Vec::new()) };
+    e_closure_memo: Vec<EClosureMemo>,
 
-    // C: int T_last_unmarked, T_limit; (non-static globals, but referenced
-    // nowhere else in the tree)
-    static T_LAST_UNMARKED: Cell<i32> = const { Cell::new(0) };
-    static T_LIMIT: Cell<i32> = const { Cell::new(0) };
+    // C: int T_last_unmarked, T_limit;
+    #[allow(dead_code)]
+    t_last_unmarked: i32,
+    t_limit: i32,
 
-    // C: struct trans_list { ... } *trans_list_determinize; (non-static
-    // global, but referenced nowhere else in the tree)
-    static TRANS_LIST_DETERMINIZE: RefCell<Vec<TransList>> = const { RefCell::new(Vec::new()) };
-    // C: struct trans_array { ... } *trans_array_determinize; (ditto)
-    static TRANS_ARRAY_DETERMINIZE: RefCell<Vec<TransArray>> = const { RefCell::new(Vec::new()) };
+    // C: struct trans_list *trans_list_determinize; struct trans_array
+    // *trans_array_determinize;
+    trans_list_determinize: Vec<TransList>,
+    trans_array_determinize: Vec<TransArray>,
 
     // C: static struct T_memo *T_ptr;
-    static T_PTR: RefCell<Vec<TMemo>> = const { RefCell::new(Vec::new()) };
+    t_ptr: Vec<TMemo>,
 
     // C: static int nhash_tablesize, nhash_load, current_setnum, *e_table,
     //    *marktable, *temp_move, mainloop, maxsigma, *set_table,
-    //    set_table_size, star_free_mark;
-    static NHASH_TABLESIZE: Cell<i32> = const { Cell::new(0) };
-    static NHASH_LOAD: Cell<i32> = const { Cell::new(0) };
-    static CURRENT_SETNUM: Cell<i32> = const { Cell::new(0) };
-    static E_TABLE: RefCell<Vec<i32>> = const { RefCell::new(Vec::new()) };
-    static MARKTABLE: RefCell<Vec<i32>> = const { RefCell::new(Vec::new()) };
-    static TEMP_MOVE: RefCell<Vec<i32>> = const { RefCell::new(Vec::new()) };
-    static MAINLOOP: Cell<i32> = const { Cell::new(0) };
-    static MAXSIGMA: Cell<i32> = const { Cell::new(0) };
-    static SET_TABLE: RefCell<Vec<i32>> = const { RefCell::new(Vec::new()) };
-    static SET_TABLE_SIZE: Cell<i32> = const { Cell::new(0) };
-    static STAR_FREE_MARK: Cell<i32> = const { Cell::new(0) };
-    // C: static unsigned int set_table_offset;
-    static SET_TABLE_OFFSET: Cell<u32> = const { Cell::new(0) };
+    //    set_table_size, star_free_mark; unsigned int set_table_offset;
+    nhash_tablesize: i32,
+    nhash_load: i32,
+    current_setnum: i32,
+    e_table: Vec<i32>,
+    marktable: Vec<i32>,
+    temp_move: Vec<i32>,
+    mainloop: i32,
+    maxsigma: i32,
+    set_table: Vec<i32>,
+    set_table_size: i32,
+    star_free_mark: i32,
+    set_table_offset: u32,
     // C: static struct nhash_list *table;
-    static TABLE: RefCell<Vec<NhashList>> = const { RefCell::new(Vec::new()) };
+    table: Vec<NhashList>,
 }
 
 // [spec:foma:def:determinize.add-fsm-arc-fn]
@@ -192,69 +200,49 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
     if net.is_deterministic == YES && operation != SUBSET_TEST_STAR_FREE {
         return net;
     }
+    /* all subset-construction scratch is owned here and dropped on return */
+    let mut s = Subset::default();
     /* Export this var */
-    OP.set(operation);
+    s.op = operation;
     fsm_count(&mut net);
-    NUM_STATES.set(net.statecount);
-    DETERMINISTIC.set(true);
-    init(&mut net);
-    let num_states = NUM_STATES.get();
-    nhash_init(if num_states < 12 { 6 } else { num_states / 2 });
+    s.num_states = net.statecount;
+    s.deterministic = true;
+    init(&mut s, &mut net);
+    let num_states = s.num_states;
+    nhash_init(&mut s, if num_states < 12 { 6 } else { num_states / 2 });
 
-    T = initial_e_closure(&net);
+    T = initial_e_closure(&mut s, &net);
 
     int_stack_clear();
 
     /* numss is a C _Bool holding the truncated last-seen start state number,
-    so numss == 0 really means "the single start state is state 0" */
-    if DETERMINISTIC.get() && EPSILON_SYMBOL.get() == -1 && NUM_START_STATES.get() == 1 && !NUMSS.get()
-    {
+    so numss == 0 really means "the single start state is state 0". Benign
+    quirk kept: numss mis-tests any single start state != 0 as "not state 0",
+    but it only gates the already-deterministic shortcut — never the result
+    (the full path below produces the same language). */
+    if s.deterministic && s.epsilon_symbol == -1 && s.num_start_states == 1 && !s.numss {
         net.is_deterministic = YES;
         net.is_epsilon_free = YES;
-        let table = TABLE.with_borrow_mut(std::mem::take);
-        nhash_free(table, NHASH_TABLESIZE.get());
-        /* free(T_ptr); free(e_table); free(trans_list_determinize);
-        free(trans_array_determinize); free(double_sigma_array);
-        free(single_sigma_array); free(finals); free(temp_move);
-        free(set_table); */
-        T_PTR.with_borrow_mut(|v| *v = Vec::new());
-        E_TABLE.with_borrow_mut(|v| *v = Vec::new());
-        TRANS_LIST_DETERMINIZE.with_borrow_mut(|v| *v = Vec::new());
-        TRANS_ARRAY_DETERMINIZE.with_borrow_mut(|v| *v = Vec::new());
-        DOUBLE_SIGMA_ARRAY.with_borrow_mut(|v| *v = Vec::new());
-        SINGLE_SIGMA_ARRAY.with_borrow_mut(|v| *v = Vec::new());
-        FINALS.with_borrow_mut(|v| *v = Vec::new());
-        TEMP_MOVE.with_borrow_mut(|v| *v = Vec::new());
-        SET_TABLE.with_borrow_mut(|v| *v = Vec::new());
+        /* iterative free of the nhash Box chains; dropping `s` frees the rest */
+        nhash_free(std::mem::take(&mut s.table), s.nhash_tablesize);
         return net;
     }
 
-    if operation == SUBSET_EPSILON_REMOVE && EPSILON_SYMBOL.get() == -1 {
+    if operation == SUBSET_EPSILON_REMOVE && s.epsilon_symbol == -1 {
         net.is_epsilon_free = YES;
-        let table = TABLE.with_borrow_mut(std::mem::take);
-        nhash_free(table, NHASH_TABLESIZE.get());
-        T_PTR.with_borrow_mut(|v| *v = Vec::new());
-        E_TABLE.with_borrow_mut(|v| *v = Vec::new());
-        TRANS_LIST_DETERMINIZE.with_borrow_mut(|v| *v = Vec::new());
-        TRANS_ARRAY_DETERMINIZE.with_borrow_mut(|v| *v = Vec::new());
-        DOUBLE_SIGMA_ARRAY.with_borrow_mut(|v| *v = Vec::new());
-        SINGLE_SIGMA_ARRAY.with_borrow_mut(|v| *v = Vec::new());
-        FINALS.with_borrow_mut(|v| *v = Vec::new());
-        TEMP_MOVE.with_borrow_mut(|v| *v = Vec::new());
-        SET_TABLE.with_borrow_mut(|v| *v = Vec::new());
+        nhash_free(std::mem::take(&mut s.table), s.nhash_tablesize);
         return net;
     }
 
     if operation == SUBSET_TEST_STAR_FREE {
         let sm = sigma_max(net.sigma.as_deref());
         fsm_state_init(sm + 1);
-        STAR_FREE_MARK.set(0);
+        s.star_free_mark = 0;
     } else {
         let sm = sigma_max(net.sigma.as_deref());
         fsm_state_init(sm);
-        /* free(net->states) — the old line table is consumed here. (On the
-        STAR_FREE branch above the C leaks it instead; here fsm_state_close
-        drops it at the end.) */
+        /* consume the old line table; fsm_state_close installs the rebuilt
+        one at the end */
         net.states = Vec::new();
     }
 
@@ -265,25 +253,24 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
             let mut symbol_in: i32 = 0;
             let mut symbol_out: i32 = 0;
 
-            let finalstart = T_PTR.with_borrow(|tp| tp[T as usize].finalstart);
+            let finalstart = s.t_ptr[T as usize].finalstart;
             fsm_state_set_current_state(T, finalstart as i32, if T == 0 { 1 } else { 0 });
 
             /* Prepare set */
-            let setsize = T_PTR.with_borrow(|tp| tp[T as usize].size) as i32;
-            let mut theset = T_PTR.with_borrow(|tp| tp[T as usize].set_offset) as usize;
+            let setsize = s.t_ptr[T as usize].size as i32;
+            let mut theset = s.t_ptr[T as usize].set_offset as usize;
             let mut minsym: i32 = i32::MAX; /* INT_MAX */
             let mut has_trans = 0;
             for i in 0..setsize {
-                let stateno = SET_TABLE.with_borrow(|st| st[theset + i as usize]);
-                let (size0, tbase) = TRANS_ARRAY_DETERMINIZE.with_borrow_mut(|ta| {
-                    let tptr = &mut ta[stateno as usize];
-                    tptr.tail = 0;
-                    (tptr.size, tptr.transitions)
-                });
+                let stateno = s.set_table[theset + i as usize];
+                let tptr = &mut s.trans_array_determinize[stateno as usize];
+                tptr.tail = 0;
+                let size0 = tptr.size;
+                let tbase = tptr.transitions;
                 if size0 == 0 {
                     continue;
                 }
-                let inout0 = TRANS_LIST_DETERMINIZE.with_borrow(|tl| tl[tbase].inout);
+                let inout0 = s.trans_list_determinize[tbase].inout;
                 if inout0 < minsym {
                     minsym = inout0;
                     has_trans = 1;
@@ -299,45 +286,40 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
 
             let mut next_minsym: i32 = i32::MAX;
             while minsym != i32::MAX {
-                /* theset = set_table+(T_ptr+T)->set_offset — re-read each
-                round (move_set may have realloc'd set_table in C) */
-                theset = T_PTR.with_borrow(|tp| tp[T as usize].set_offset) as usize;
+                /* re-read each round (matches the C's set_table re-fetch) */
+                theset = s.t_ptr[T as usize].set_offset as usize;
 
                 let mut j: i32 = 0;
                 for i in 0..setsize {
-                    let stateno = SET_TABLE.with_borrow(|st| st[theset + i as usize]);
-                    /* C: tail is a local int copy of tptr->tail; transitions
-                    walks the pool from tptr->transitions + tail */
-                    let (mut tail, tbase, tsize) = TRANS_ARRAY_DETERMINIZE.with_borrow(|ta| {
-                        let tptr = &ta[stateno as usize];
-                        (tptr.tail, tptr.transitions, tptr.size)
-                    });
+                    let stateno = s.set_table[theset + i as usize];
+                    /* tail is a local copy; transitions walks the pool from
+                    tptr.transitions + tail */
+                    let tptr = &s.trans_array_determinize[stateno as usize];
+                    let (mut tail, tbase, tsize) = (tptr.tail, tptr.transitions, tptr.size);
 
                     while tail < tsize {
-                        let (inout, trgt) = TRANS_LIST_DETERMINIZE.with_borrow(|tl| {
-                            let transitions = &tl[tbase + tail as usize];
-                            (transitions.inout, transitions.target)
-                        });
+                        let transitions = &s.trans_list_determinize[tbase + tail as usize];
+                        let (inout, trgt) = (transitions.inout, transitions.target);
                         if inout != minsym {
                             break;
                         }
-                        let marked = E_TABLE.with_borrow(|et| et[trgt as usize]);
-                        if marked != MAINLOOP.get() {
-                            E_TABLE.with_borrow_mut(|et| et[trgt as usize] = MAINLOOP.get());
-                            TEMP_MOVE.with_borrow_mut(|tm| tm[j as usize] = trgt);
+                        let marked = s.e_table[trgt as usize];
+                        if marked != s.mainloop {
+                            s.e_table[trgt as usize] = s.mainloop;
+                            s.temp_move[j as usize] = trgt;
                             j += 1;
 
                             if operation == SUBSET_EPSILON_REMOVE {
-                                MAINLOOP.set(MAINLOOP.get() + 1);
-                                U = e_closure(j);
+                                s.mainloop += 1;
+                                U = e_closure(&mut s, j);
                                 if U != -1 {
                                     single_symbol_to_symbol_pair(
+                                        &s,
                                         minsym,
                                         &mut symbol_in,
                                         &mut symbol_out,
                                     );
-                                    let fs =
-                                        T_PTR.with_borrow(|tp| tp[T as usize].finalstart);
+                                    let fs = s.t_ptr[T as usize].finalstart;
                                     fsm_state_add_arc(
                                         T,
                                         symbol_in,
@@ -353,24 +335,23 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
                         tail += 1;
                     }
 
-                    TRANS_ARRAY_DETERMINIZE.with_borrow_mut(|ta| ta[stateno as usize].tail = tail);
+                    s.trans_array_determinize[stateno as usize].tail = tail;
 
                     if tail == tsize {
                         continue;
                     }
                     /* Check next minsym */
-                    let inout =
-                        TRANS_LIST_DETERMINIZE.with_borrow(|tl| tl[tbase + tail as usize].inout);
+                    let inout = s.trans_list_determinize[tbase + tail as usize].inout;
                     if inout < next_minsym {
                         next_minsym = inout;
                     }
                 }
                 if operation == SUBSET_DETERMINIZE {
-                    MAINLOOP.set(MAINLOOP.get() + 1);
-                    U = e_closure(j);
+                    s.mainloop += 1;
+                    U = e_closure(&mut s, j);
                     if U != -1 {
-                        single_symbol_to_symbol_pair(minsym, &mut symbol_in, &mut symbol_out);
-                        let fs = T_PTR.with_borrow(|tp| tp[T as usize].finalstart);
+                        single_symbol_to_symbol_pair(&s, minsym, &mut symbol_in, &mut symbol_out);
+                        let fs = s.t_ptr[T as usize].finalstart;
                         fsm_state_add_arc(
                             T,
                             symbol_in,
@@ -382,11 +363,11 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
                     }
                 }
                 if operation == SUBSET_TEST_STAR_FREE {
-                    MAINLOOP.set(MAINLOOP.get() + 1);
-                    U = e_closure(j);
+                    s.mainloop += 1;
+                    U = e_closure(&mut s, j);
                     if U != -1 {
-                        single_symbol_to_symbol_pair(minsym, &mut symbol_in, &mut symbol_out);
-                        let fs = T_PTR.with_borrow(|tp| tp[T as usize].finalstart);
+                        single_symbol_to_symbol_pair(&s, minsym, &mut symbol_in, &mut symbol_out);
+                        let fs = s.t_ptr[T as usize].finalstart;
                         fsm_state_add_arc(
                             T,
                             symbol_in,
@@ -395,9 +376,9 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
                             fs as i32,
                             if T == 0 { 1 } else { 0 },
                         );
-                        if STAR_FREE_MARK.get() == 1 {
+                        if s.star_free_mark == 1 {
                             //fsm_state_add_arc(T, maxsigma, maxsigma, U, (T_ptr+T)->finalstart, T == 0 ? 1 : 0);
-                            STAR_FREE_MARK.set(0);
+                            s.star_free_mark = 0;
                         }
                     }
                 }
@@ -413,51 +394,41 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
         }
     }
 
-    /* wrapup() */
-    let table = TABLE.with_borrow_mut(std::mem::take);
-    nhash_free(table, NHASH_TABLESIZE.get());
-    SET_TABLE.with_borrow_mut(|v| *v = Vec::new());
-    T_PTR.with_borrow_mut(|v| *v = Vec::new());
-    TEMP_MOVE.with_borrow_mut(|v| *v = Vec::new());
-    E_TABLE.with_borrow_mut(|v| *v = Vec::new());
-    TRANS_LIST_DETERMINIZE.with_borrow_mut(|v| *v = Vec::new());
-    TRANS_ARRAY_DETERMINIZE.with_borrow_mut(|v| *v = Vec::new());
-
-    if EPSILON_SYMBOL.get() != -1 {
-        e_closure_free();
+    /* wrapup(): iterative free of the nhash Box chains and the e-closure
+    memo; the rest of the scratch is freed when `s` drops */
+    nhash_free(std::mem::take(&mut s.table), s.nhash_tablesize);
+    if s.epsilon_symbol != -1 {
+        e_closure_free(&mut s);
     }
-    DOUBLE_SIGMA_ARRAY.with_borrow_mut(|v| *v = Vec::new());
-    SINGLE_SIGMA_ARRAY.with_borrow_mut(|v| *v = Vec::new());
-    FINALS.with_borrow_mut(|v| *v = Vec::new());
     fsm_state_close(&mut net);
     net
 }
 
 // [spec:foma:def:determinize.init-fn]
 // [spec:foma:sem:determinize.init-fn]
-pub(crate) fn init(net: &mut Fsm) {
+pub(crate) fn init(s: &mut Subset, net: &mut Fsm) {
     /* A temporary table for handling epsilon closure */
     /* to avoid doubles */
 
-    E_TABLE.with_borrow_mut(|v| *v = vec![0; net.statecount as usize]);
+    s.e_table = vec![0; net.statecount as usize];
 
     /* Counter for our access tables */
 
-    MAINLOOP.set(1);
+    s.mainloop = 1;
 
     /* Temporary table for storing sets and */
     /* passing to hash function */
 
-    /* Table for listing current results of move & e-closure */
-    /* (malloc — uninitialized in C; zero-filled here, write-before-read) */
-    TEMP_MOVE.with_borrow_mut(|v| *v = vec![0; (net.statecount + 1) as usize]);
+    /* Table for listing current results of move & e-closure
+    (write-before-read scratch) */
+    s.temp_move = vec![0; (net.statecount + 1) as usize];
 
     /* We malloc this much memory to begin with for the new fsm */
     /* Then grow it by the double as needed */
 
-    LIMIT.set(next_power_of_two(net.linecount));
-    FSM_LINECOUNT.set(0);
-    sigma_to_pairs(net);
+    s.limit = next_power_of_two(net.linecount);
+    s.fsm_linecount = 0;
+    sigma_to_pairs(s, net);
 
     /* Optimistically malloc T_ptr array */
     /* We allocate memory for a number of pointers to a set of states */
@@ -465,24 +436,21 @@ pub(crate) fn init(net: &mut Fsm) {
     /* Optimistically, we choose the initial size to be the number of */
     /* states in the non-deterministic fsm */
 
-    T_LAST_UNMARKED.set(0);
-    T_LIMIT.set(next_power_of_two(NUM_STATES.get()));
+    s.t_last_unmarked = 0;
+    s.t_limit = next_power_of_two(s.num_states);
 
     /* T_ptr = calloc(T_limit,sizeof(struct T_memo)); */
-    let t_limit = T_LIMIT.get();
-    T_PTR.with_borrow_mut(|v| *v = vec![TMemo::default(); t_limit as usize]);
+    s.t_ptr = vec![TMemo::default(); s.t_limit as usize];
 
     /* Stores all sets consecutively in one table */
     /* T_ptr->set_offset and size                 */
     /* are used to retrieve the set               */
 
-    SET_TABLE_SIZE.set(next_power_of_two(NUM_STATES.get()));
-    /* set_table = malloc(...) — uninitialized in C; zero-filled here */
-    let set_table_size = SET_TABLE_SIZE.get();
-    SET_TABLE.with_borrow_mut(|v| *v = vec![0; set_table_size as usize]);
-    SET_TABLE_OFFSET.set(0);
+    s.set_table_size = next_power_of_two(s.num_states);
+    s.set_table = vec![0; s.set_table_size as usize];
+    s.set_table_offset = 0;
 
-    init_trans_array(net);
+    init_trans_array(s, net);
 }
 
 // [spec:foma:def:determinize.trans-sort-cmp-fn]
@@ -494,312 +462,286 @@ pub(crate) fn trans_sort_cmp(a: &TransList, b: &TransList) -> i32 {
 
 // [spec:foma:def:determinize.init-trans-array-fn]
 // [spec:foma:sem:determinize.init-trans-array-fn]
-pub(crate) fn init_trans_array(net: &Fsm) {
-    /* arrptr = trans_list_determinize = malloc(net->linecount * ...);
-       trans_array_determinize = calloc(net->statecount, ...);
-       (trans_list is uninitialized in C; Default-filled here) */
-    TRANS_LIST_DETERMINIZE
-        .with_borrow_mut(|v| *v = vec![TransList::default(); net.linecount as usize]);
-    TRANS_ARRAY_DETERMINIZE
-        .with_borrow_mut(|v| *v = vec![TransArray::default(); net.statecount as usize]);
+pub(crate) fn init_trans_array(s: &mut Subset, net: &Fsm) {
+    /* one entry pool sized to the line count, one per-state index array
+    (Default-filled) */
+    s.trans_list_determinize = vec![TransList::default(); net.linecount as usize];
+    s.trans_array_determinize = vec![TransArray::default(); net.statecount as usize];
 
     let fsm = &net.states;
 
-    TRANS_LIST_DETERMINIZE.with_borrow_mut(|tl| {
-        TRANS_ARRAY_DETERMINIZE.with_borrow_mut(|ta| {
-            let mut laststate: i32 = -1;
-            /* arrptr walks the shared entry pool — an index here */
-            let mut arrptr: usize = 0;
-            /* C: int size */
-            let mut size: u32 = 0;
+    let mut laststate: i32 = -1;
+    /* arrptr walks the shared entry pool — an index here */
+    let mut arrptr: usize = 0;
+    let mut size: u32 = 0;
 
-            let mut i = 0usize;
-            while fsm[i].state_no != -1 {
-                let state = fsm[i].state_no;
-                if state != laststate {
-                    if laststate != -1 {
-                        ta[laststate as usize].size = size;
-                    }
-                    ta[state as usize].transitions = arrptr;
-                    size = 0;
-                }
-                laststate = state;
-
-                if fsm[i].target == -1 {
-                    i += 1;
-                    continue;
-                }
-                let inout = symbol_pair_to_single_symbol(fsm[i].r#in as i32, fsm[i].out as i32);
-                if inout == EPSILON_SYMBOL.get() {
-                    i += 1;
-                    continue;
-                }
-
-                tl[arrptr].inout = inout;
-                tl[arrptr].target = fsm[i].target;
-                arrptr += 1;
-                size += 1;
-                i += 1;
-            }
-
+    let mut i = 0usize;
+    while fsm[i].state_no != -1 {
+        let state = fsm[i].state_no;
+        if state != laststate {
             if laststate != -1 {
-                ta[laststate as usize].size = size;
+                s.trans_array_determinize[laststate as usize].size = size;
             }
+            s.trans_array_determinize[state as usize].transitions = arrptr;
+            size = 0;
+        }
+        laststate = state;
 
-            for i in 0..net.statecount as usize {
-                let arrptr = ta[i].transitions;
-                let size = ta[i].size;
-                if size > 1 {
-                    /* qsort(arrptr, size, sizeof(struct trans_list),
-                    trans_sort_cmp) — unstable sort; equal keys keep an
-                    unspecified relative order */
-                    tl[arrptr..arrptr + size as usize]
-                        .sort_unstable_by(|a, b| trans_sort_cmp(a, b).cmp(&0));
-                    let mut lastsym = -1;
-                    /* Figure out if we're already deterministic */
-                    for j in 0..size as usize {
-                        if tl[arrptr + j].inout == lastsym {
-                            DETERMINISTIC.set(false);
-                        }
-                        lastsym = tl[arrptr + j].inout;
-                    }
+        if fsm[i].target == -1 {
+            i += 1;
+            continue;
+        }
+        let inout = symbol_pair_to_single_symbol(s, fsm[i].r#in as i32, fsm[i].out as i32);
+        if inout == s.epsilon_symbol {
+            i += 1;
+            continue;
+        }
+
+        s.trans_list_determinize[arrptr].inout = inout;
+        s.trans_list_determinize[arrptr].target = fsm[i].target;
+        arrptr += 1;
+        size += 1;
+        i += 1;
+    }
+
+    if laststate != -1 {
+        s.trans_array_determinize[laststate as usize].size = size;
+    }
+
+    for i in 0..net.statecount as usize {
+        let arrptr = s.trans_array_determinize[i].transitions;
+        let size = s.trans_array_determinize[i].size;
+        if size > 1 {
+            /* unstable sort by symbol; equal keys keep an unspecified order */
+            s.trans_list_determinize[arrptr..arrptr + size as usize]
+                .sort_unstable_by(|a, b| trans_sort_cmp(a, b).cmp(&0));
+            let mut lastsym = -1;
+            /* Figure out if we're already deterministic */
+            for j in 0..size as usize {
+                if s.trans_list_determinize[arrptr + j].inout == lastsym {
+                    s.deterministic = false;
                 }
+                lastsym = s.trans_list_determinize[arrptr + j].inout;
             }
-        })
-    });
+        }
+    }
 }
 
 // [spec:foma:def:determinize.e-closure-fn]
 // [spec:foma:sem:determinize.e-closure-fn]
 /* C: INLINE static int e_closure(int states) */
-pub(crate) fn e_closure(states: i32) -> i32 {
+pub(crate) fn e_closure(s: &mut Subset, states: i32) -> i32 {
     /* e_closure extends the list of states which are reachable */
     /* and appends these to e_table                             */
 
-    if EPSILON_SYMBOL.get() == -1 {
-        return TEMP_MOVE.with_borrow(|tm| set_lookup(tm, states));
+    if s.epsilon_symbol == -1 {
+        /* set_lookup reads only e_table/set_table/table/finals, never
+        temp_move, so lend the set out and hand it straight back */
+        let tm = std::mem::take(&mut s.temp_move);
+        let r = set_lookup(s, &tm, states);
+        s.temp_move = tm;
+        return r;
     }
 
     if states == 0 {
         return -1;
     }
 
-    MAINLOOP.set(MAINLOOP.get() - 1);
+    s.mainloop -= 1;
+    let mainloop = s.mainloop;
 
     let mut set_size = states;
 
-    E_CLOSURE_MEMO.with_borrow_mut(|em| {
-        MARKTABLE.with_borrow_mut(|marktable| {
-            E_TABLE.with_borrow_mut(|e_table| {
-                TEMP_MOVE.with_borrow_mut(|temp_move| {
-                    for i in 0..states {
-                        /* State number we want to do e-closure on */
-                        /* ptr = e_closure_memo + *(temp_move+i) — a pool index */
-                        let mut ptr = temp_move[i as usize] as usize;
-                        if em[ptr].target.is_none() {
-                            continue;
-                        }
-                        ptr_stack_push(ptr);
+    for i in 0..states {
+        /* State number we want to do e-closure on
+        (ptr = e_closure_memo + temp_move[i] — a pool index) */
+        let mut ptr = s.temp_move[i as usize] as usize;
+        if s.e_closure_memo[ptr].target.is_none() {
+            continue;
+        }
+        ptr_stack_push(ptr);
 
-                        while ptr_stack_isempty() == 0 {
-                            ptr = ptr_stack_pop();
-                            /* Don't follow if already seen */
-                            if marktable[em[ptr].state as usize] == MAINLOOP.get() {
-                                continue;
-                            }
+        while ptr_stack_isempty() == 0 {
+            ptr = ptr_stack_pop();
+            let state = s.e_closure_memo[ptr].state as usize;
+            /* Don't follow if already seen */
+            if s.marktable[state] == mainloop {
+                continue;
+            }
 
-                            em[ptr].mark = MAINLOOP.get();
-                            marktable[em[ptr].state as usize] = MAINLOOP.get();
-                            /* Add to tail of list */
-                            if e_table[em[ptr].state as usize] != MAINLOOP.get() {
-                                temp_move[set_size as usize] = em[ptr].state;
-                                e_table[em[ptr].state as usize] = MAINLOOP.get();
-                                set_size += 1;
-                            }
+            s.e_closure_memo[ptr].mark = mainloop;
+            s.marktable[state] = mainloop;
+            /* Add to tail of list */
+            if s.e_table[state] != mainloop {
+                s.temp_move[set_size as usize] = state as i32;
+                s.e_table[state] = mainloop;
+                set_size += 1;
+            }
 
-                            if em[ptr].target.is_none() {
-                                continue;
-                            }
-                            /* Traverse chain */
+            if s.e_closure_memo[ptr].target.is_none() {
+                continue;
+            }
+            /* Traverse chain */
 
-                            let mut p: Option<usize> = Some(ptr);
-                            while let Some(pi) = p {
-                                /* chain nodes always carry a target (head
-                                targets were checked above) */
-                                let tgt = em[pi].target.unwrap();
-                                if em[tgt].mark != MAINLOOP.get() {
-                                    /* Push */
-                                    em[tgt].mark = MAINLOOP.get();
-                                    ptr_stack_push(tgt);
-                                }
-                                p = em[pi].next;
-                            }
-                        }
-                    }
-                })
-            })
-        })
-    });
+            let mut p: Option<usize> = Some(ptr);
+            while let Some(pi) = p {
+                /* chain nodes always carry a target (head targets checked above) */
+                let tgt = s.e_closure_memo[pi].target.unwrap();
+                if s.e_closure_memo[tgt].mark != mainloop {
+                    /* Push */
+                    s.e_closure_memo[tgt].mark = mainloop;
+                    ptr_stack_push(tgt);
+                }
+                p = s.e_closure_memo[pi].next;
+            }
+        }
+    }
 
-    MAINLOOP.set(MAINLOOP.get() + 1);
-    TEMP_MOVE.with_borrow(|tm| set_lookup(tm, set_size))
+    s.mainloop += 1;
+    let tm = std::mem::take(&mut s.temp_move);
+    let r = set_lookup(s, &tm, set_size);
+    s.temp_move = tm;
+    r
 }
 
 // [spec:foma:def:determinize.set-lookup-fn]
 // [spec:foma:sem:determinize.set-lookup-fn]
 /* C: INLINE static int set_lookup (int *lookup_table, int size) */
-pub(crate) fn set_lookup(lookup_table: &[i32], size: i32) -> i32 {
+pub(crate) fn set_lookup(s: &mut Subset, lookup_table: &[i32], size: i32) -> i32 {
     /* Look up a set and its corresponding state number */
     /* if it doesn't exist from before, assign a state number */
 
-    nhash_find_insert(lookup_table, size)
+    nhash_find_insert(s, lookup_table, size)
 }
 
 // [spec:foma:def:determinize.add-t-ptr-fn]
 // [spec:foma:sem:determinize.add-t-ptr-fn]
 /* External linkage in C (not static) even though internal to the module */
 #[allow(non_snake_case)]
-pub fn add_T_ptr(setnum: i32, setsize: i32, theset: u32, fs: i32) {
-    if setnum >= T_LIMIT.get() {
-        T_LIMIT.set(T_LIMIT.get() * 2);
-        let t_limit = T_LIMIT.get();
-        T_PTR.with_borrow_mut(|tp| {
-            /* realloc leaves the grown region uninitialized in C; only
-            .size is cleared below (size == 0 is the "unused" sentinel).
-            Default-filled here first. */
-            tp.resize(t_limit as usize, TMemo::default());
-            for i in setnum..t_limit {
-                tp[i as usize].size = 0;
-            }
-        });
+pub(crate) fn add_T_ptr(s: &mut Subset, setnum: i32, setsize: i32, theset: u32, fs: i32) {
+    if setnum >= s.t_limit {
+        s.t_limit *= 2;
+        let t_limit = s.t_limit;
+        /* the grown region only needs .size == 0 (the "unused" sentinel);
+        Default gives that */
+        s.t_ptr.resize(t_limit as usize, TMemo::default());
+        for i in setnum..t_limit {
+            s.t_ptr[i as usize].size = 0;
+        }
     }
 
-    T_PTR.with_borrow_mut(|tp| {
-        tp[setnum as usize].size = setsize as u32;
-        tp[setnum as usize].set_offset = theset;
-        /* int → unsigned char truncation */
-        tp[setnum as usize].finalstart = fs as u8;
-    });
+    s.t_ptr[setnum as usize].size = setsize as u32;
+    s.t_ptr[setnum as usize].set_offset = theset;
+    /* int → unsigned char truncation */
+    s.t_ptr[setnum as usize].finalstart = fs as u8;
     int_stack_push(setnum);
 }
 
 // [spec:foma:def:determinize.initial-e-closure-fn]
 // [spec:foma:sem:determinize.initial-e-closure-fn]
-pub(crate) fn initial_e_closure(net: &Fsm) -> i32 {
+pub(crate) fn initial_e_closure(s: &mut Subset, net: &Fsm) -> i32 {
     /* finals = calloc(num_states, sizeof(_Bool)); */
-    let num_states = NUM_STATES.get();
-    FINALS.with_borrow_mut(|v| *v = vec![false; num_states as usize]);
+    let num_states = s.num_states;
+    s.finals = vec![false; num_states as usize];
 
-    NUM_START_STATES.set(0);
+    s.num_start_states = 0;
     let fsm = &net.states;
 
     /* Create lookups for each state */
     let mut j: i32 = 0;
-    FINALS.with_borrow_mut(|finals| {
-        E_TABLE.with_borrow_mut(|e_table| {
-            TEMP_MOVE.with_borrow_mut(|temp_move| {
-                let mut i = 0usize;
-                while fsm[i].state_no != -1 {
-                    if fsm[i].final_state != 0 {
-                        finals[fsm[i].state_no as usize] = true;
-                    }
-                    /* Add the start states as the initial set */
-                    if (OP.get() == SUBSET_TEST_STAR_FREE) || fsm[i].start_state != 0 {
-                        if e_table[fsm[i].state_no as usize] != MAINLOOP.get() {
-                            NUM_START_STATES.set(NUM_START_STATES.get() + 1);
-                            /* numss = (fsm+i)->state_no; — numss is a C _Bool,
-                            so the assignment truncates to state_no != 0 */
-                            NUMSS.set(fsm[i].state_no != 0);
-                            e_table[fsm[i].state_no as usize] = MAINLOOP.get();
-                            temp_move[j as usize] = fsm[i].state_no;
-                            j += 1;
-                        }
-                    }
-                    i += 1;
-                }
-            })
-        })
-    });
-    MAINLOOP.set(MAINLOOP.get() + 1);
-    /* Memoize e-closure(u) */
-    if EPSILON_SYMBOL.get() != -1 {
-        memoize_e_closure(fsm);
+    let mut i = 0usize;
+    while fsm[i].state_no != -1 {
+        let state = fsm[i].state_no as usize;
+        if fsm[i].final_state != 0 {
+            s.finals[state] = true;
+        }
+        /* Add the start states as the initial set */
+        if (s.op == SUBSET_TEST_STAR_FREE) || fsm[i].start_state != 0 {
+            if s.e_table[state] != s.mainloop {
+                s.num_start_states += 1;
+                /* numss = (fsm+i)->state_no; — numss is a C _Bool, so the
+                assignment truncates to state_no != 0 */
+                s.numss = fsm[i].state_no != 0;
+                s.e_table[state] = s.mainloop;
+                s.temp_move[j as usize] = fsm[i].state_no;
+                j += 1;
+            }
+        }
+        i += 1;
     }
-    e_closure(j)
+    s.mainloop += 1;
+    /* Memoize e-closure(u) */
+    if s.epsilon_symbol != -1 {
+        memoize_e_closure(s, fsm);
+    }
+    e_closure(s, j)
 }
 
 // [spec:foma:def:determinize.memoize-e-closure-fn]
 // [spec:foma:sem:determinize.memoize-e-closure-fn]
-pub(crate) fn memoize_e_closure(fsm: &[FsmState]) {
-    let num_states = NUM_STATES.get();
+pub(crate) fn memoize_e_closure(s: &mut Subset, fsm: &[FsmState]) {
+    let num_states = s.num_states;
 
-    /* e_closure_memo = calloc(num_states,sizeof(struct e_closure_memo)); */
-    E_CLOSURE_MEMO.with_borrow_mut(|v| *v = vec![EClosureMemo::default(); num_states as usize]);
-    /* marktable = calloc(num_states,sizeof(int)); */
-    MARKTABLE.with_borrow_mut(|v| *v = vec![0; num_states as usize]);
-    /* Table for avoiding redundant epsilon arcs in closure */
-    /* redcheck = malloc(num_states*sizeof(int)); — uninitialized; set to -1
-    in the init loop below exactly as in C */
-    let mut redcheck: Vec<i32> = vec![0; num_states as usize];
+    /* e_closure_memo = calloc(num_states,...); marktable = calloc(...) */
+    s.e_closure_memo = vec![EClosureMemo::default(); num_states as usize];
+    s.marktable = vec![0; num_states as usize];
+    /* Table for avoiding redundant epsilon arcs in closure (set to -1 below) */
+    let mut redcheck: Vec<i32> = vec![-1; num_states as usize];
 
-    E_CLOSURE_MEMO.with_borrow_mut(|em| {
-        for i in 0..num_states as usize {
-            em[i].state = i as i32;
-            em[i].target = None;
-            redcheck[i] = -1;
+    for i in 0..num_states as usize {
+        s.e_closure_memo[i].state = i as i32;
+        s.e_closure_memo[i].target = None;
+    }
+
+    let mut laststate: i32 = -1;
+
+    let mut i = 0usize;
+    loop {
+        let state = fsm[i].state_no;
+
+        if state != laststate {
+            if int_stack_isempty() == 0 {
+                s.deterministic = false;
+                /* ptr = e_closure_memo+laststate; */
+                let mut ptr = laststate as usize;
+                /* ptr->target = e_closure_memo+int_stack_pop(); — target
+                indices are head-node indices (state numbers) */
+                s.e_closure_memo[ptr].target = Some(int_stack_pop() as usize);
+                while int_stack_isempty() == 0 {
+                    /* append a chain node to the pool (its mark is never read
+                    on chain nodes; 0 here) */
+                    s.e_closure_memo.push(EClosureMemo {
+                        state: laststate,
+                        mark: 0,
+                        target: Some(int_stack_pop() as usize),
+                        next: None,
+                    });
+                    let ni = s.e_closure_memo.len() - 1;
+                    s.e_closure_memo[ptr].next = Some(ni);
+                    ptr = ni;
+                }
+            }
         }
-
-        let mut laststate: i32 = -1;
-
-        let mut i = 0usize;
-        loop {
-            let state = fsm[i].state_no;
-
-            if state != laststate {
-                if int_stack_isempty() == 0 {
-                    DETERMINISTIC.set(false);
-                    /* ptr = e_closure_memo+laststate; */
-                    let mut ptr = laststate as usize;
-                    /* ptr->target = e_closure_memo+int_stack_pop(); — target
-                    indices are head-node indices (state numbers) */
-                    em[ptr].target = Some(int_stack_pop() as usize);
-                    while int_stack_isempty() == 0 {
-                        /* ptr->next = malloc(sizeof(struct e_closure_memo));
-                        → append a chain node to the pool (its mark is malloc
-                        garbage in C and never read on chain nodes; 0 here) */
-                        em.push(EClosureMemo {
-                            state: laststate,
-                            mark: 0,
-                            target: Some(int_stack_pop() as usize),
-                            next: None,
-                        });
-                        let ni = em.len() - 1;
-                        em[ptr].next = Some(ni);
-                        ptr = ni;
-                    }
-                }
-            }
-            if state == -1 {
-                break;
-            }
-            if fsm[i].target == -1 {
-                i += 1;
-                continue;
-            }
-            /* Check if we have a redundant epsilon arc */
-            if fsm[i].r#in as i32 == EPSILON && fsm[i].out as i32 == EPSILON {
-                if redcheck[fsm[i].target as usize] != fsm[i].state_no {
-                    if fsm[i].target != fsm[i].state_no {
-                        int_stack_push(fsm[i].target);
-                        redcheck[fsm[i].target as usize] = fsm[i].state_no;
-                    }
-                }
-                laststate = state;
-            }
+        if state == -1 {
+            break;
+        }
+        if fsm[i].target == -1 {
             i += 1;
+            continue;
         }
-    });
-    /* free(redcheck) — dropped here */
+        /* Check if we have a redundant epsilon arc */
+        if fsm[i].r#in as i32 == EPSILON && fsm[i].out as i32 == EPSILON {
+            if redcheck[fsm[i].target as usize] != fsm[i].state_no {
+                if fsm[i].target != fsm[i].state_no {
+                    int_stack_push(fsm[i].target);
+                    redcheck[fsm[i].target as usize] = fsm[i].state_no;
+                }
+            }
+            laststate = state;
+        }
+        i += 1;
+    }
+    /* redcheck dropped here */
 }
 
 // [spec:foma:def:determinize.next-unmarked-fn]
@@ -817,43 +759,35 @@ pub(crate) fn next_unmarked() -> i32 {
 
 // [spec:foma:def:determinize.single-symbol-to-symbol-pair-fn]
 // [spec:foma:sem:determinize.single-symbol-to-symbol-pair-fn]
-pub(crate) fn single_symbol_to_symbol_pair(symbol: i32, symbol_in: &mut i32, symbol_out: &mut i32) {
-    SINGLE_SIGMA_ARRAY.with_borrow(|s| {
-        *symbol_in = s[(symbol * 2) as usize];
-        *symbol_out = s[(symbol * 2 + 1) as usize];
-    });
+pub(crate) fn single_symbol_to_symbol_pair(
+    s: &Subset,
+    symbol: i32,
+    symbol_in: &mut i32,
+    symbol_out: &mut i32,
+) {
+    *symbol_in = s.single_sigma_array[(symbol * 2) as usize];
+    *symbol_out = s.single_sigma_array[(symbol * 2 + 1) as usize];
 }
 
 // [spec:foma:def:determinize.symbol-pair-to-single-symbol-fn]
 // [spec:foma:sem:determinize.symbol-pair-to-single-symbol-fn]
-pub(crate) fn symbol_pair_to_single_symbol(r#in: i32, out: i32) -> i32 {
-    DOUBLE_SIGMA_ARRAY.with_borrow(|d| d[(MAXSIGMA.get() * r#in + out) as usize])
+pub(crate) fn symbol_pair_to_single_symbol(s: &Subset, r#in: i32, out: i32) -> i32 {
+    s.double_sigma_array[(s.maxsigma * r#in + out) as usize]
 }
 
 // [spec:foma:def:determinize.sigma-to-pairs-fn]
 // [spec:foma:sem:determinize.sigma-to-pairs-fn]
-pub(crate) fn sigma_to_pairs(net: &mut Fsm) {
+pub(crate) fn sigma_to_pairs(s: &mut Subset, net: &mut Fsm) {
     let mut next_x: i32 = 0;
 
-    EPSILON_SYMBOL.set(-1);
-    MAXSIGMA.set(sigma_max(net.sigma.as_deref()));
-    MAXSIGMA.set(MAXSIGMA.get() + 1);
-    let maxsigma = MAXSIGMA.get();
+    s.epsilon_symbol = -1;
+    s.maxsigma = sigma_max(net.sigma.as_deref()) + 1;
+    let maxsigma = s.maxsigma;
 
-    /* single_sigma_array = malloc(2*maxsigma*maxsigma*sizeof(int));
-       double_sigma_array = malloc(maxsigma*maxsigma*sizeof(int));
-       — malloc'd (uninitialized) in C; zero-filled here (double is
-       overwritten with -1 below, single only ever read where written) */
-    SINGLE_SIGMA_ARRAY.with_borrow_mut(|v| *v = vec![0; (2 * maxsigma * maxsigma) as usize]);
-    DOUBLE_SIGMA_ARRAY.with_borrow_mut(|v| *v = vec![0; (maxsigma * maxsigma) as usize]);
-
-    DOUBLE_SIGMA_ARRAY.with_borrow_mut(|d| {
-        for i in 0..maxsigma {
-            for j in 0..maxsigma {
-                d[(maxsigma * i + j) as usize] = -1;
-            }
-        }
-    });
+    /* two flat lookup tables: single (back-map, only read where written) and
+    double (forward map, initialized to -1 below) */
+    s.single_sigma_array = vec![0; (2 * maxsigma * maxsigma) as usize];
+    s.double_sigma_array = vec![-1; (maxsigma * maxsigma) as usize];
 
     /* f(x) -> y,z sigma pair */
     /* f(y,z) -> x simple entry */
@@ -867,39 +801,33 @@ pub(crate) fn sigma_to_pairs(net: &mut Fsm) {
     /* *(single_sigma_array+(symbol*2) = in(symbol) */
     /* *(single_sigma_array+(symbol*2+1) = out(symbol) */
 
-    /* Table for checking whether a state is final */
-
     let mut x: i32 = 0;
     net.arity = 1;
-    SINGLE_SIGMA_ARRAY.with_borrow_mut(|s| {
-        DOUBLE_SIGMA_ARRAY.with_borrow_mut(|d| {
-            let mut i = 0usize;
-            while net.states[i].state_no != -1 {
-                let y = net.states[i].r#in as i32;
-                let z = net.states[i].out as i32;
-                if (y == -1) || (z == -1) {
-                    i += 1;
-                    continue;
-                }
-                if y != z || y == UNKNOWN || z == UNKNOWN {
-                    net.arity = 2;
-                }
-                if d[(maxsigma * y + z) as usize] == -1 {
-                    d[(maxsigma * y + z) as usize] = x;
-                    s[next_x as usize] = y;
-                    next_x += 1;
-                    s[next_x as usize] = z;
-                    next_x += 1;
-                    if y == EPSILON && z == EPSILON {
-                        EPSILON_SYMBOL.set(x);
-                    }
-                    x += 1;
-                }
-                i += 1;
+    let mut i = 0usize;
+    while net.states[i].state_no != -1 {
+        let y = net.states[i].r#in as i32;
+        let z = net.states[i].out as i32;
+        if (y == -1) || (z == -1) {
+            i += 1;
+            continue;
+        }
+        if y != z || y == UNKNOWN || z == UNKNOWN {
+            net.arity = 2;
+        }
+        if s.double_sigma_array[(maxsigma * y + z) as usize] == -1 {
+            s.double_sigma_array[(maxsigma * y + z) as usize] = x;
+            s.single_sigma_array[next_x as usize] = y;
+            next_x += 1;
+            s.single_sigma_array[next_x as usize] = z;
+            next_x += 1;
+            if y == EPSILON && z == EPSILON {
+                s.epsilon_symbol = x;
             }
-        })
-    });
-    NUM_SYMBOLS.set(x);
+            x += 1;
+        }
+        i += 1;
+    }
+    s.num_symbols = x;
 }
 
 /* Functions for hashing n integers */
@@ -908,69 +836,71 @@ pub(crate) fn sigma_to_pairs(net: &mut Fsm) {
 
 // [spec:foma:def:determinize.nhash-find-insert-fn]
 // [spec:foma:sem:determinize.nhash-find-insert-fn]
-pub(crate) fn nhash_find_insert(set: &[i32], setsize: i32) -> i32 {
-    /* C: unsigned int hashval — hashf's int return converted; values stay
-    below nhash_tablesize, so i32 carries them losslessly */
-    let mut hashval = hashf(set, setsize);
-    let head_size = TABLE.with_borrow(|t| t[hashval as usize].size);
+pub(crate) fn nhash_find_insert(s: &mut Subset, set: &[i32], setsize: i32) -> i32 {
+    /* hashf's int return; values stay below nhash_tablesize */
+    let mut hashval = hashf(s, set, setsize);
+    let head_size = s.table[hashval as usize].size;
     if head_size == 0 {
-        nhash_insert(hashval, set, setsize)
+        nhash_insert(s, hashval, set, setsize)
     } else {
-        let found_setnum = TABLE.with_borrow(|t| {
-            SET_TABLE.with_borrow(|set_table| {
-                E_TABLE.with_borrow(|e_table| {
-                    let mut tableptr: Option<&NhashList> = Some(&t[hashval as usize]);
-                    while let Some(tp) = tableptr {
-                        if tp.size as i32 != setsize {
-                            tableptr = tp.next.as_deref();
-                            continue;
-                        }
-                        /* Compare the list at hashval position */
-                        /* to the current set by looking at etable */
-                        /* entries */
-                        let mut found = 1;
-                        let currlist = tp.set_offset as usize;
-                        for j in 0..setsize as usize {
-                            if e_table[set_table[currlist + j] as usize] != MAINLOOP.get() - 1 {
-                                found = 0;
-                                break;
-                            }
-                        }
-                        if OP.get() == SUBSET_TEST_STAR_FREE && found == 1 {
-                            for j in 0..setsize as usize {
-                                if set[j] != set_table[currlist + j] {
-                                    /* Set mark */
-                                    STAR_FREE_MARK.set(1);
-                                }
-                            }
-                        }
-                        if found == 1 {
-                            return Some(tp.setnum);
-                        }
-                        tableptr = tp.next.as_deref();
+        let mainloop = s.mainloop;
+        let op = s.op;
+        let mut found_setnum: Option<i32> = None;
+        let mut star_mark = false;
+        {
+            let mut tableptr: Option<&NhashList> = Some(&s.table[hashval as usize]);
+            while let Some(tp) = tableptr {
+                if tp.size as i32 != setsize {
+                    tableptr = tp.next.as_deref();
+                    continue;
+                }
+                /* Compare the list at this bucket to the current set by
+                looking at e_table entries */
+                let mut found = 1;
+                let currlist = tp.set_offset as usize;
+                for j in 0..setsize as usize {
+                    if s.e_table[s.set_table[currlist + j] as usize] != mainloop - 1 {
+                        found = 0;
+                        break;
                     }
-                    None
-                })
-            })
-        });
+                }
+                if op == SUBSET_TEST_STAR_FREE && found == 1 {
+                    for j in 0..setsize as usize {
+                        if set[j] != s.set_table[currlist + j] {
+                            /* Set mark (applied after the walk to keep the
+                            table borrow immutable) */
+                            star_mark = true;
+                        }
+                    }
+                }
+                if found == 1 {
+                    found_setnum = Some(tp.setnum);
+                    break;
+                }
+                tableptr = tp.next.as_deref();
+            }
+        }
+        if star_mark {
+            s.star_free_mark = 1;
+        }
         if let Some(setnum) = found_setnum {
             return setnum;
         }
 
         /* Growth check only runs on this collision-miss path — inserting
         into an empty bucket never triggers a rebuild */
-        if NHASH_LOAD.get() / NHASH_LOAD_LIMIT > NHASH_TABLESIZE.get() {
-            nhash_rebuild_table();
-            hashval = hashf(set, setsize);
+        if s.nhash_load / NHASH_LOAD_LIMIT > s.nhash_tablesize {
+            nhash_rebuild_table(s);
+            hashval = hashf(s, set, setsize);
         }
-        nhash_insert(hashval, set, setsize)
+        nhash_insert(s, hashval, set, setsize)
     }
 }
 
 // [spec:foma:def:determinize.hashf-fn]
 // [spec:foma:sem:determinize.hashf-fn]
 /* C: INLINE static int hashf(int *set, int setsize) */
-pub(crate) fn hashf(set: &[i32], setsize: i32) -> i32 {
+pub(crate) fn hashf(s: &Subset, set: &[i32], setsize: i32) -> i32 {
     let mut hashval: u32;
     let mut sum: u32 = 0;
     hashval = 6703271;
@@ -983,103 +913,91 @@ pub(crate) fn hashf(set: &[i32], setsize: i32) -> i32 {
         sum = sum.wrapping_add(set[i as usize].wrapping_add(i) as u32);
     }
     hashval = hashval.wrapping_add(sum.wrapping_mul(31));
-    hashval = hashval % (NHASH_TABLESIZE.get() as u32);
+    hashval = hashval % (s.nhash_tablesize as u32);
     hashval as i32
 }
 
 // [spec:foma:def:determinize.move-set-fn]
 // [spec:foma:sem:determinize.move-set-fn]
-pub(crate) fn move_set(set: &[i32], setsize: i32) -> u32 {
+pub(crate) fn move_set(s: &mut Subset, set: &[i32], setsize: i32) -> u32 {
     /* C compares set_table_offset + setsize >= set_table_size in unsigned
     arithmetic (note >=: growth also triggers on an exact fit) */
-    if SET_TABLE_OFFSET.get().wrapping_add(setsize as u32) >= SET_TABLE_SIZE.get() as u32 {
-        while SET_TABLE_OFFSET.get().wrapping_add(setsize as u32) >= SET_TABLE_SIZE.get() as u32 {
-            SET_TABLE_SIZE.set(SET_TABLE_SIZE.get() * 2);
+    if s.set_table_offset.wrapping_add(setsize as u32) >= s.set_table_size as u32 {
+        while s.set_table_offset.wrapping_add(setsize as u32) >= s.set_table_size as u32 {
+            s.set_table_size *= 2;
         }
-        /* realloc: the grown region is uninitialized in C; zero-filled here
-        (only written offsets are ever read) */
-        let set_table_size = SET_TABLE_SIZE.get();
-        SET_TABLE.with_borrow_mut(|st| st.resize(set_table_size as usize, 0));
+        /* grow (zero-filled; only written offsets are ever read) */
+        s.set_table.resize(s.set_table_size as usize, 0);
     }
     /* memcpy(set_table+set_table_offset, set, setsize * sizeof(int)); */
-    let old_offset = SET_TABLE_OFFSET.get();
-    SET_TABLE.with_borrow_mut(|st| {
-        let off = old_offset as usize;
-        st[off..off + setsize as usize].copy_from_slice(&set[..setsize as usize]);
-    });
-    SET_TABLE_OFFSET.set(old_offset + setsize as u32);
+    let old_offset = s.set_table_offset;
+    let off = old_offset as usize;
+    s.set_table[off..off + setsize as usize].copy_from_slice(&set[..setsize as usize]);
+    s.set_table_offset = old_offset + setsize as u32;
     old_offset
 }
 
 // [spec:foma:def:determinize.nhash-insert-fn]
 // [spec:foma:sem:determinize.nhash-insert-fn]
-pub(crate) fn nhash_insert(hashval: i32, set: &[i32], setsize: i32) -> i32 {
+pub(crate) fn nhash_insert(s: &mut Subset, hashval: i32, set: &[i32], setsize: i32) -> i32 {
     let mut fs = 0;
 
-    CURRENT_SETNUM.set(CURRENT_SETNUM.get() + 1);
-    let current_setnum = CURRENT_SETNUM.get();
+    s.current_setnum += 1;
+    let current_setnum = s.current_setnum;
 
-    NHASH_LOAD.set(NHASH_LOAD.get() + 1);
-    FINALS.with_borrow(|finals| {
-        for i in 0..setsize {
-            if finals[set[i as usize] as usize] {
-                fs = 1;
-            }
+    s.nhash_load += 1;
+    for i in 0..setsize {
+        if s.finals[set[i as usize] as usize] {
+            fs = 1;
         }
-    });
-    let head_empty = TABLE.with_borrow(|t| t[hashval as usize].size == 0);
+    }
+    let head_empty = s.table[hashval as usize].size == 0;
     if head_empty {
-        let set_offset = move_set(set, setsize);
-        TABLE.with_borrow_mut(|t| {
-            let tableptr = &mut t[hashval as usize];
-            tableptr.set_offset = set_offset;
-            tableptr.size = setsize as u32;
-            tableptr.setnum = current_setnum;
-        });
+        let set_offset = move_set(s, set, setsize);
+        let tableptr = &mut s.table[hashval as usize];
+        tableptr.set_offset = set_offset;
+        tableptr.size = setsize as u32;
+        tableptr.setnum = current_setnum;
 
-        add_T_ptr(current_setnum, setsize, set_offset, fs);
+        add_T_ptr(s, current_setnum, setsize, set_offset, fs);
         return current_setnum;
     }
 
-    /* tableptr = malloc(...); spliced in as the second chain element.
-    (C assigns set_offset = move_set(...) after the splice; move_set only
-    touches the set_table statics, so computing it first is unobservable) */
-    let set_offset = move_set(set, setsize);
-    TABLE.with_borrow_mut(|t| {
-        let head = &mut t[hashval as usize];
-        let tableptr = Box::new(NhashList {
-            setnum: current_setnum,
-            size: setsize as u32,
-            set_offset,
-            next: head.next.take(),
-        });
-        head.next = Some(tableptr);
+    /* spliced in as the second chain element. (C assigns set_offset =
+    move_set(...) after the splice; move_set only touches the set_table
+    fields, so computing it first is unobservable) */
+    let set_offset = move_set(s, set, setsize);
+    let head = &mut s.table[hashval as usize];
+    let tableptr = Box::new(NhashList {
+        setnum: current_setnum,
+        size: setsize as u32,
+        set_offset,
+        next: head.next.take(),
     });
+    head.next = Some(tableptr);
 
-    add_T_ptr(current_setnum, setsize, set_offset, fs);
+    add_T_ptr(s, current_setnum, setsize, set_offset, fs);
     current_setnum
 }
 
 // [spec:foma:def:determinize.nhash-rebuild-table-fn]
 // [spec:foma:sem:determinize.nhash-rebuild-table-fn]
-pub(crate) fn nhash_rebuild_table() {
-    let oldtable = TABLE.with_borrow_mut(std::mem::take);
-    let oldsize = NHASH_TABLESIZE.get();
+pub(crate) fn nhash_rebuild_table(s: &mut Subset) {
+    let oldtable = std::mem::take(&mut s.table);
+    let oldsize = s.nhash_tablesize;
 
-    NHASH_LOAD.set(0);
+    s.nhash_load = 0;
     /* C: for (i=0; primes[i] < nhash_tablesize; i++) {} — lands exactly on
     the current prime, then takes the following entry. If already at the
     last prime, primes[i+1] reads past the array in C — panics here
     (practically unreachable). */
     let mut i = 0usize;
-    while PRIMES[i] < NHASH_TABLESIZE.get() as u32 {
+    while PRIMES[i] < s.nhash_tablesize as u32 {
         i += 1;
     }
-    NHASH_TABLESIZE.set(PRIMES[i + 1] as i32);
+    s.nhash_tablesize = PRIMES[i + 1] as i32;
 
-    /* table = calloc(nhash_tablesize,sizeof(struct nhash_list)); */
-    let nhash_tablesize = NHASH_TABLESIZE.get();
-    TABLE.with_borrow_mut(|t| *t = vec![NhashList::default(); nhash_tablesize as usize]);
+    s.table = vec![NhashList::default(); s.nhash_tablesize as usize];
     for i in 0..oldsize as usize {
         if oldtable[i].size == 0 {
             continue;
@@ -1087,28 +1005,25 @@ pub(crate) fn nhash_rebuild_table() {
         let mut tableptr: Option<&NhashList> = Some(&oldtable[i]);
         while let Some(tp) = tableptr {
             /* rehash */
-            let hashval =
-                SET_TABLE.with_borrow(|st| hashf(&st[tp.set_offset as usize..], tp.size as i32));
-            TABLE.with_borrow_mut(|t| {
-                let ntableptr = &mut t[hashval as usize];
-                if ntableptr.size == 0 {
-                    /* quirk kept: nhash_load only counts occupied buckets
-                    here, understating the load factor for later checks */
-                    NHASH_LOAD.set(NHASH_LOAD.get() + 1);
-                    ntableptr.size = tp.size;
-                    ntableptr.set_offset = tp.set_offset;
-                    ntableptr.setnum = tp.setnum;
-                    ntableptr.next = None;
-                } else {
-                    let newptr = Box::new(NhashList {
-                        setnum: tp.setnum,
-                        size: tp.size,
-                        set_offset: tp.set_offset,
-                        next: ntableptr.next.take(),
-                    });
-                    ntableptr.next = Some(newptr);
-                }
-            });
+            let hashval = hashf(s, &s.set_table[tp.set_offset as usize..], tp.size as i32);
+            let ntableptr = &mut s.table[hashval as usize];
+            if ntableptr.size == 0 {
+                /* quirk kept: nhash_load only counts occupied buckets here,
+                understating the load factor for later checks */
+                s.nhash_load += 1;
+                ntableptr.size = tp.size;
+                ntableptr.set_offset = tp.set_offset;
+                ntableptr.setnum = tp.setnum;
+                ntableptr.next = None;
+            } else {
+                let newptr = Box::new(NhashList {
+                    setnum: tp.setnum,
+                    size: tp.size,
+                    set_offset: tp.set_offset,
+                    next: ntableptr.next.take(),
+                });
+                ntableptr.next = Some(newptr);
+            }
             tableptr = tp.next.as_deref();
         }
     }
@@ -1117,31 +1032,27 @@ pub(crate) fn nhash_rebuild_table() {
 
 // [spec:foma:def:determinize.nhash-init-fn]
 // [spec:foma:sem:determinize.nhash-init-fn]
-pub(crate) fn nhash_init(initial_size: i32) {
+pub(crate) fn nhash_init(s: &mut Subset, initial_size: i32) {
     /* C: for (i=0; primes[i] < initial_size; i++) {} — unsigned comparison;
     minimum table size is primes[0] == 61 */
     let mut i = 0usize;
     while PRIMES[i] < initial_size as u32 {
         i += 1;
     }
-    NHASH_LOAD.set(0);
-    NHASH_TABLESIZE.set(PRIMES[i] as i32);
-    /* table = calloc(nhash_tablesize , sizeof(struct nhash_list)); — zeroed
-    so size == 0 marks an empty bucket */
-    let nhash_tablesize = NHASH_TABLESIZE.get();
-    TABLE.with_borrow_mut(|t| *t = vec![NhashList::default(); nhash_tablesize as usize]);
-    CURRENT_SETNUM.set(-1);
+    s.nhash_load = 0;
+    s.nhash_tablesize = PRIMES[i] as i32;
+    /* zeroed table so size == 0 marks an empty bucket */
+    s.table = vec![NhashList::default(); s.nhash_tablesize as usize];
+    s.current_setnum = -1;
 }
 
 // [spec:foma:def:determinize.e-closure-free-fn]
 // [spec:foma:sem:determinize.e-closure-free-fn]
-pub(crate) fn e_closure_free() {
-    /* free(marktable); */
-    MARKTABLE.with_borrow_mut(|v| *v = Vec::new());
-    /* C walks each head node's ->next chain freeing the malloc'd chain
-    nodes, then frees the head array; heads and chain nodes share the
-    E_CLOSURE_MEMO pool here, so clearing it frees everything */
-    E_CLOSURE_MEMO.with_borrow_mut(|v| *v = Vec::new());
+pub(crate) fn e_closure_free(s: &mut Subset) {
+    /* the head array and its chain nodes share the E_CLOSURE_MEMO pool
+    (index-linked, so clearing the Vec frees everything with no recursion) */
+    s.marktable = Vec::new();
+    s.e_closure_memo = Vec::new();
 }
 
 // [spec:foma:def:determinize.nhash-free-fn]
@@ -1341,13 +1252,14 @@ mod tests {
     // [spec:foma:sem:determinize.hashf-fn/test]
     #[test]
     fn hashf_seed_and_permutation() {
-        NHASH_TABLESIZE.set(61);
-        assert_eq!(hashf(&[], 0), (6703271u32 % 61) as i32);
+        let mut s = Subset::default();
+        s.nhash_tablesize = 61;
+        assert_eq!(hashf(&s, &[], 0), (6703271u32 % 61) as i32);
         /* large prime table: modulo does not mask the permutation equality */
-        NHASH_TABLESIZE.set(2147483647);
-        let base = hashf(&[7, 3, 19, 2], 4);
-        assert_eq!(base, hashf(&[2, 19, 3, 7], 4));
-        assert_eq!(base, hashf(&[19, 2, 7, 3], 4));
+        s.nhash_tablesize = 2147483647;
+        let base = hashf(&s, &[7, 3, 19, 2], 4);
+        assert_eq!(base, hashf(&s, &[2, 19, 3, 7], 4));
+        assert_eq!(base, hashf(&s, &[19, 2, 7, 3], 4));
     }
 
     // nhash_init picks the smallest prime >= initial_size off the ladder
@@ -1355,28 +1267,30 @@ mod tests {
     // [spec:foma:sem:determinize.nhash-init-fn/test]
     #[test]
     fn nhash_init_prime_ladder() {
-        nhash_init(6);
-        assert_eq!(NHASH_TABLESIZE.get(), 61);
-        assert_eq!(CURRENT_SETNUM.get(), -1);
-        assert_eq!(NHASH_LOAD.get(), 0);
-        nhash_init(61);
-        assert_eq!(NHASH_TABLESIZE.get(), 61);
-        nhash_init(62);
-        assert_eq!(NHASH_TABLESIZE.get(), 127);
-        nhash_init(0);
-        assert_eq!(NHASH_TABLESIZE.get(), 61);
-        nhash_init(2000);
-        assert_eq!(NHASH_TABLESIZE.get(), 2039);
+        let mut s = Subset::default();
+        nhash_init(&mut s, 6);
+        assert_eq!(s.nhash_tablesize, 61);
+        assert_eq!(s.current_setnum, -1);
+        assert_eq!(s.nhash_load, 0);
+        nhash_init(&mut s, 61);
+        assert_eq!(s.nhash_tablesize, 61);
+        nhash_init(&mut s, 62);
+        assert_eq!(s.nhash_tablesize, 127);
+        nhash_init(&mut s, 0);
+        assert_eq!(s.nhash_tablesize, 61);
+        nhash_init(&mut s, 2000);
+        assert_eq!(s.nhash_tablesize, 2039);
     }
 
     // nhash_rebuild_table advances to the next prime and rehashes (empty here).
     // [spec:foma:sem:determinize.nhash-rebuild-table-fn/test]
     #[test]
     fn nhash_rebuild_advances_prime() {
-        nhash_init(6); /* 61, empty */
-        nhash_rebuild_table();
-        assert_eq!(NHASH_TABLESIZE.get(), 127);
-        assert_eq!(NHASH_LOAD.get(), 0);
+        let mut s = Subset::default();
+        nhash_init(&mut s, 6); /* 61, empty */
+        nhash_rebuild_table(&mut s);
+        assert_eq!(s.nhash_tablesize, 127);
+        assert_eq!(s.nhash_load, 0);
     }
 
     // Round-trip through the subset canonicaliser: set_lookup -> nhash_find_insert
@@ -1392,36 +1306,35 @@ mod tests {
     #[test]
     fn nhash_insert_find_roundtrip() {
         let n = 5usize;
-        FINALS.with_borrow_mut(|v| *v = vec![false; n]);
-        E_TABLE.with_borrow_mut(|v| *v = vec![0; n]);
-        MAINLOOP.set(1);
-        SET_TABLE_SIZE.set(64);
-        SET_TABLE.with_borrow_mut(|v| *v = vec![0; 64]);
-        SET_TABLE_OFFSET.set(0);
-        T_LIMIT.set(8);
-        T_PTR.with_borrow_mut(|v| *v = vec![TMemo::default(); 8]);
-        OP.set(SUBSET_DETERMINIZE);
+        let mut s = Subset::default();
+        s.finals = vec![false; n];
+        s.e_table = vec![0; n];
+        s.mainloop = 1;
+        s.set_table_size = 64;
+        s.set_table = vec![0; 64];
+        s.set_table_offset = 0;
+        s.t_limit = 8;
+        s.t_ptr = vec![TMemo::default(); 8];
+        s.op = SUBSET_DETERMINIZE;
         crate::int_stack::int_stack_clear();
-        nhash_init(6);
+        nhash_init(&mut s, 6);
 
         /* first insert of {2,0,1} -> subset 0, members copied to set_table */
-        assert_eq!(set_lookup(&[2, 0, 1], 3), 0);
-        assert_eq!(SET_TABLE_OFFSET.get(), 3);
-        SET_TABLE.with_borrow(|st| assert_eq!(&st[0..3], &[2, 0, 1]));
-        assert_eq!(T_PTR.with_borrow(|t| (t[0].size, t[0].set_offset)), (3, 0));
+        assert_eq!(set_lookup(&mut s, &[2, 0, 1], 3), 0);
+        assert_eq!(s.set_table_offset, 3);
+        assert_eq!(&s.set_table[0..3], &[2, 0, 1]);
+        assert_eq!((s.t_ptr[0].size, s.t_ptr[0].set_offset), (3, 0));
 
         /* find a permutation: mark members e_table == mainloop-1, bump mainloop */
-        E_TABLE.with_borrow_mut(|e| {
-            e[0] = 1;
-            e[1] = 1;
-            e[2] = 1;
-        });
-        MAINLOOP.set(2);
-        assert_eq!(set_lookup(&[0, 1, 2], 3), 0, "permutation canonicalises to 0");
+        s.e_table[0] = 1;
+        s.e_table[1] = 1;
+        s.e_table[2] = 1;
+        s.mainloop = 2;
+        assert_eq!(set_lookup(&mut s, &[0, 1, 2], 3), 0, "permutation canonicalises to 0");
 
         /* a distinct set gets the next number */
-        assert_eq!(set_lookup(&[3, 4], 2), 1);
-        assert_eq!(SET_TABLE_OFFSET.get(), 5);
+        assert_eq!(set_lookup(&mut s, &[3, 4], 2), 1);
+        assert_eq!(s.set_table_offset, 5);
 
         /* both subsets were pushed on the agenda by add_T_ptr (LIFO) */
         assert_eq!(next_unmarked(), 1);
@@ -1456,19 +1369,20 @@ mod tests {
         fsm_construct_add_arc(&mut hc, 0, 2, "@_EPSILON_SYMBOL_@", "@_EPSILON_SYMBOL_@");
         fsm_construct_set_final(&mut hc, 2);
         let mut net = fsm_construct_done(hc);
-        sigma_to_pairs(&mut net);
+        let mut s = Subset::default();
+        sigma_to_pairs(&mut s, &mut net);
         assert_eq!(net.arity, 2);
-        assert_ne!(EPSILON_SYMBOL.get(), -1);
-        assert_eq!(EPSILON_SYMBOL.get(), symbol_pair_to_single_symbol(EPSILON, EPSILON));
+        assert_ne!(s.epsilon_symbol, -1);
+        assert_eq!(s.epsilon_symbol, symbol_pair_to_single_symbol(&s, EPSILON, EPSILON));
         for st in net.states.iter() {
             let (i, o) = (st.r#in as i32, st.out as i32);
             if i < 0 || o < 0 {
                 continue;
             }
-            let c = symbol_pair_to_single_symbol(i, o);
-            assert!(c >= 0 && c < NUM_SYMBOLS.get());
+            let c = symbol_pair_to_single_symbol(&s, i, o);
+            assert!(c >= 0 && c < s.num_symbols);
             let (mut si, mut so) = (0, 0);
-            single_symbol_to_symbol_pair(c, &mut si, &mut so);
+            single_symbol_to_symbol_pair(&s, c, &mut si, &mut so);
             assert_eq!((si, so), (i, o), "back-map inverts forward-map");
         }
     }
@@ -1480,7 +1394,8 @@ mod tests {
     #[test]
     fn memoize_e_closure_builds_epsilon_graph() {
         crate::int_stack::int_stack_clear();
-        NUM_STATES.set(3);
+        let mut s = Subset::default();
+        s.num_states = 3;
         let e = EPSILON as i16;
         let fsm = vec![
             FsmState { state_no: 0, r#in: e, out: e, target: 1, final_state: 0, start_state: 1 },
@@ -1491,28 +1406,28 @@ mod tests {
             FsmState { state_no: 2, r#in: -1, out: -1, target: -1, final_state: 1, start_state: 0 },
             FsmState { state_no: -1, r#in: -1, out: -1, target: -1, final_state: -1, start_state: -1 },
         ];
-        memoize_e_closure(&fsm);
-        E_CLOSURE_MEMO.with_borrow(|em| {
-            /* head 0 -> successors {2,1} (LIFO), heads 1,2 have none */
-            assert_eq!(em[0].state, 0);
-            assert_eq!(em[0].target, Some(2));
-            let chain = em[0].next.expect("fanout chain node");
-            assert_eq!(em[chain].target, Some(1));
-            assert_eq!(em[chain].next, None);
-            assert_eq!(em[1].target, None);
-            assert_eq!(em[2].target, None);
-        });
+        memoize_e_closure(&mut s, &fsm);
+        let em = &s.e_closure_memo;
+        /* head 0 -> successors {2,1} (LIFO), heads 1,2 have none */
+        assert_eq!(em[0].state, 0);
+        assert_eq!(em[0].target, Some(2));
+        let chain = em[0].next.expect("fanout chain node");
+        assert_eq!(em[chain].target, Some(1));
+        assert_eq!(em[chain].next, None);
+        assert_eq!(em[1].target, None);
+        assert_eq!(em[2].target, None);
     }
 
     // e_closure_free drops marktable and the memo pool.
     // [spec:foma:sem:determinize.e-closure-free-fn/test]
     #[test]
     fn e_closure_free_clears_memo() {
-        MARKTABLE.with_borrow_mut(|v| *v = vec![1, 2, 3]);
-        E_CLOSURE_MEMO.with_borrow_mut(|v| *v = vec![EClosureMemo::default(); 4]);
-        e_closure_free();
-        assert!(MARKTABLE.with_borrow(|v| v.is_empty()));
-        assert!(E_CLOSURE_MEMO.with_borrow(|v| v.is_empty()));
+        let mut s = Subset::default();
+        s.marktable = vec![1, 2, 3];
+        s.e_closure_memo = vec![EClosureMemo::default(); 4];
+        e_closure_free(&mut s);
+        assert!(s.marktable.is_empty());
+        assert!(s.e_closure_memo.is_empty());
     }
 
     // nhash_free walks each bucket's ->next chain without panicking.
