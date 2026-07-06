@@ -429,4 +429,80 @@ children (
             }
         )
     }
+
+    {
+        id wave-4-idiomatize
+        title "Wave 4: idiomatize — native API, documented-bug fixes (+N bumps), publishing prep"
+        children (
+            {
+                id w4-conventions
+                title "Wave-4 API design: context handles over thread_locals, error type, module split map, bug-fix policy"
+            }
+
+            {
+                id w4-base-utils
+                title "Idiomatize mem, utf8, int_stack, stringhash, trie, sigma + bug fixes"
+                deps (w4-conventions)
+            }
+
+            {
+                id w4-structures-dynarray
+                title "Idiomatize structures, dynarray + bug fixes (fsm_isuniversal, quantifier quirks)"
+                deps (w4-base-utils)
+            }
+
+            {
+                id w4-graph-algorithms
+                title "Idiomatize determinize, minimize, topsort, reverse, coaccessible, extract + bug fixes"
+                deps (w4-structures-dynarray)
+            }
+
+            {
+                id w4-constructions
+                title "Idiomatize + split constructions (3.9k LOC) + bug fixes (letter_machine, compose dead branches)"
+                deps (w4-graph-algorithms)
+            }
+
+            {
+                id w4-flags-define-rewrite
+                title "Idiomatize flags, define, rewrite + bug fixes (flag_eliminate | filter)"
+                deps (w4-constructions)
+            }
+
+            {
+                id w4-apply-spelling
+                title "Idiomatize apply, spelling (iterator-based apply API) + bug fixes"
+                deps (w4-constructions)
+            }
+
+            {
+                id w4-io
+                title "Idiomatize io (Result-based, Read/Write generics) + bug fixes (BOM, prolog escape typo)"
+                deps (w4-structures-dynarray)
+            }
+
+            {
+                id w4-lexcread
+                title "Idiomatize lexcread (arena → owned graph where safe) + bug fixes"
+                deps (w4-constructions)
+            }
+
+            {
+                id w4-cli
+                title "Idiomatize stack, iface, binaries (rustyline REPL?, split iface) + bug fixes (stack_turn, iface_conc dd)"
+                deps (
+                    w4-flags-define-rewrite
+                    w4-apply-spelling
+                    w4-io
+                    w4-lexcread
+                )
+            }
+
+            {
+                id w4-publish
+                title "Publishing prep: crate layout, portable nfst deps, license headers, README, CI"
+                deps (w4-cli)
+            }
+        )
+    }
 )
