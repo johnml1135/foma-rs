@@ -53,13 +53,13 @@ pub(crate) fn sigptr(sigma: Option<&Sigma>, number: i32) -> String {
 // [spec:foma:def:iface.print-net-fn]
 // [spec:foma:sem:iface.print-net-fn]
 pub(crate) fn print_net(net: &mut Fsm, filename: Option<&str>) -> i32 {
-    let mut out: Box<dyn Write> = match filename {
-        None => Box::new(std::io::stdout()),
+    let mut out: Output = match filename {
+        None => Output::Stdout(std::io::stdout()),
         Some(name) => match File::create(name) {
-            Ok(f) => Box::new(f),
+            Ok(f) => Output::File(f),
             Err(_) => {
                 print!("Error writing to file {}. Using stdout.\n", name);
-                Box::new(std::io::stdout())
+                Output::Stdout(std::io::stdout())
             }
         },
     };
@@ -84,7 +84,7 @@ pub(crate) fn print_net(net: &mut Fsm, filename: Option<&str>) -> i32 {
         }
         i += 1;
     }
-    print_sigma(net.sigma.as_deref(), &mut *out);
+    print_sigma(net.sigma.as_deref(), &mut out);
     let _ = write!(out, "Net: {}\n", net.name);
     let _ = write!(out, "Flags: ");
     if net.is_deterministic == YES {
@@ -243,7 +243,7 @@ pub fn print_stats(net: &Fsm) -> i32 {
 
 // [spec:foma:def:iface.print-sigma-fn]
 // [spec:foma:sem:iface.print-sigma-fn]
-pub(crate) fn print_sigma(sigma: Option<&Sigma>, out: &mut dyn Write) -> i32 {
+pub(crate) fn print_sigma<W: std::io::Write + ?Sized>(sigma: Option<&Sigma>, out: &mut W) -> i32 {
     let mut size = 0;
     let _ = write!(out, "Sigma:");
     let mut s = sigma;
@@ -279,11 +279,11 @@ pub(crate) fn print_dot(net: &mut Fsm, filename: Option<&str>) -> i32 {
         finals[state_no as usize] = if net.states[i].final_state == 1 { 1 } else { 0 };
         i += 1;
     }
-    let mut dotfile: Box<dyn Write> = match filename {
+    let mut dotfile: Output = match filename {
         // C: `dotfile = fopen(filename,"w");` with NO NULL check (latent crash on
         // failure). DEVIATION from C: expect() panics at the nearest safe point.
-        Some(name) => Box::new(File::create(name).expect("Error opening dot file")),
-        None => Box::new(std::io::stdout()),
+        Some(name) => Output::File(File::create(name).expect("Error opening dot file")),
+        None => Output::Stdout(std::io::stdout()),
     };
     let _ = write!(dotfile, "digraph A {{\nrankdir = LR;\n");
     for i in 0..net.statecount {

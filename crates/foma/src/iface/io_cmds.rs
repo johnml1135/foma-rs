@@ -120,12 +120,12 @@ pub fn iface_write_att(filename: Option<&str>) -> i32 {
         return 1;
     }
     let top = stack_find_top().unwrap();
-    let mut outfile: Box<dyn Write> = match filename {
-        None => Box::new(std::io::stdout()),
+    let mut outfile: Output = match filename {
+        None => Output::Stdout(std::io::stdout()),
         Some(name) => {
             print!("Writing AT&T file: {}\n", name);
             match File::create(name) {
-                Ok(f) => Box::new(f),
+                Ok(f) => Output::File(f),
                 Err(_) => {
                     eprint!("{}: ", name);
                     perror("File error opening.");
@@ -134,7 +134,7 @@ pub fn iface_write_att(filename: Option<&str>) -> i32 {
             }
         }
     };
-    stack_entry_fsm(top, |f| net_print_att(f, &mut *outfile));
+    stack_entry_fsm(top, |f| net_print_att(f, &mut outfile));
     // fclose only when filename != NULL; stdout is not closed. Both drop here.
     0
 }

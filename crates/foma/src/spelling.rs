@@ -1021,7 +1021,7 @@ pub fn apply_med(medh: &mut ApplyMedHandle, word: Option<&str>) -> Option<String
 // [spec:foma:sem:spelling.cmatrix-print-att-fn]
 // [spec:foma:def:fomalib.cmatrix-print-att-fn]
 // [spec:foma:sem:fomalib.cmatrix-print-att-fn]
-pub fn cmatrix_print_att(net: &Fsm, outfile: &mut dyn std::io::Write) {
+pub fn cmatrix_print_att<W: std::io::Write + ?Sized>(net: &Fsm, outfile: &mut W) {
     let maxsigma = sigma_max(net.sigma.as_deref()) + 1;
     let cm = &net.medlookup.as_ref().unwrap().confusion_matrix;
 

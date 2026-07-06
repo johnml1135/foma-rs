@@ -33,7 +33,7 @@ pub(crate) use crate::determinize::fsm_determinize;
 pub(crate) use crate::extract::{fsm_lower, fsm_upper};
 pub(crate) use crate::flags::{flag_eliminate, flag_twosided};
 pub(crate) use crate::io::{
-    foma_write_prolog, fsm_read_binary_file_multiple, fsm_read_binary_file_multiple_init,
+    Output, foma_write_prolog, fsm_read_binary_file_multiple, fsm_read_binary_file_multiple_init,
     fsm_read_prolog, fsm_read_spaced_text_file, fsm_read_text_file, load_defined, net_print_att,
     read_att, save_defined,
 };

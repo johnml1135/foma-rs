@@ -604,4 +604,9 @@ children (
             }
         )
     }
+
+    {
+        id foma-mono-io
+        title "Monomorphise foma io writers (kill dyn Write): static-dispatch Output enum + generic W/R params; add generic fsm_read_binary/fsm_write_binary stream APIs"
+    }
 )

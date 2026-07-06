@@ -85,6 +85,29 @@ pub(crate) struct Bom {
     name: Option<&'static str>,
 }
 
+/* Static-dispatch stdout-or-File writer. Replaces the boxed trait-object writer
+used at the stdout-or-File selection sites so no trait-object dispatch remains;
+both the stdout and file arms forward to their inner writer. */
+pub(crate) enum Output {
+    Stdout(std::io::Stdout),
+    File(std::fs::File),
+}
+
+impl std::io::Write for Output {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            Output::Stdout(w) => w.write(buf),
+            Output::File(w) => w.write(buf),
+        }
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            Output::Stdout(w) => w.flush(),
+            Output::File(w) => w.flush(),
+        }
+    }
+}
+
 /* ------------------------------------------------------------------ */
 /* C library twins (no spec ids — these are libc, not io.c functions)  */
 /* ------------------------------------------------------------------ */
@@ -154,7 +177,7 @@ fn cstr_at(buf: &[u8], idx: usize) -> String {
 
 // [spec:foma:def:io.escape-print-fn]
 // [spec:foma:sem:io.escape-print-fn]
-pub fn escape_print(stream: &mut dyn Write, string: &str) {
+pub fn escape_print<W: std::io::Write + ?Sized>(stream: &mut W, string: &str) {
     if string.contains('"') {
         /* strchr(string, '"') != NULL: byte-by-byte, emitting \" for each " */
         for &c in string.as_bytes() {
@@ -175,19 +198,19 @@ pub fn escape_print(stream: &mut dyn Write, string: &str) {
 // [spec:foma:def:fomalib.foma-write-prolog-fn]
 // [spec:foma:sem:fomalib.foma-write-prolog-fn]
 pub fn foma_write_prolog(net: &mut Fsm, filename: Option<&str>) -> i32 {
-    let mut out: Box<dyn Write>;
+    let mut out: Output;
     match filename {
         None => {
-            out = Box::new(std::io::stdout());
+            out = Output::Stdout(std::io::stdout());
         }
         Some(fname) => {
             match File::create(fname) {
                 Ok(f) => {
-                    out = Box::new(f);
+                    out = Output::File(f);
                 }
                 Err(_) => {
                     print!("Error writing to file '{}'. Using stdout.\n", fname);
-                    out = Box::new(std::io::stdout());
+                    out = Output::Stdout(std::io::stdout());
                 }
             }
             /* printed whenever filename != NULL, even after the stdout fallback */
@@ -237,7 +260,7 @@ pub fn foma_write_prolog(net: &mut Fsm, filename: Option<&str>) -> i32 {
                 instring = "%0";
             }
             let _ = write!(out, "symbol({}, \"", identifier);
-            escape_print(&mut *out, instring);
+            escape_print(&mut out, instring);
             let _ = write!(out, "\").\n");
         }
     }
@@ -291,17 +314,17 @@ pub fn foma_write_prolog(net: &mut Fsm, filename: Option<&str>) -> i32 {
             let _ = write!(out, "\"?\").\n");
         } else if net.arity == 2 && in_ == out_ && in_ != UNKNOWN {
             let _ = write!(out, "\"");
-            escape_print(&mut *out, instring);
+            escape_print(&mut out, instring);
             let _ = write!(out, "\").\n");
         } else if net.arity == 2 {
             let _ = write!(out, "\"");
-            escape_print(&mut *out, instring);
+            escape_print(&mut out, instring);
             let _ = write!(out, "\":\"");
-            escape_print(&mut *out, outstring);
+            escape_print(&mut out, outstring);
             let _ = write!(out, "\").\n");
         } else if net.arity == 1 {
             let _ = write!(out, "\"");
-            escape_print(&mut *out, instring);
+            escape_print(&mut out, instring);
             let _ = write!(out, "\").\n");
         }
         i += 1;
@@ -726,6 +749,18 @@ pub fn fsm_write_binary_file(net: &Fsm, filename: &str) -> i32 {
     0
 }
 
+// [spec:foma:def:io.fsm-write-binary-fn]
+// [spec:foma:sem:io.fsm-write-binary-fn]
+// New public API (no C counterpart): stream the gzip-compressed foma binary
+// image of `net` to an arbitrary writer, mirroring fsm_write_binary_file's gzip
+// behavior but to any `Write` sink instead of a named file.
+pub fn fsm_write_binary<W: std::io::Write>(net: &Fsm, out: W) -> std::io::Result<()> {
+    let mut enc = GzEncoder::new(out, Compression::default());
+    foma_net_print(net, &mut enc);
+    enc.finish()?;
+    Ok(())
+}
+
 // [spec:foma:def:io.fsm-read-binary-file-multiple-fn]
 // [spec:foma:sem:io.fsm-read-binary-file-multiple-fn]
 // [spec:foma:def:fomalib.fsm-read-binary-file-multiple-fn]
@@ -785,6 +820,44 @@ pub fn fsm_read_binary_file(filename: &str) -> Result<Box<Fsm>, FomaError> {
     let net = io_net_read(&mut iobh).map(|(n, _net_name)| n);
     io_free(iobh);
     net.ok_or_else(|| FomaError::Format(format!("malformed foma binary file '{filename}'")))
+}
+
+// [spec:foma:def:io.fsm-read-binary-mem-fn]
+// [spec:foma:sem:io.fsm-read-binary-mem-fn]
+// New public API (no C counterpart): read a foma binary image already held in
+// memory. Sniffs the gzip magic (1f 8b) like io_gz_file_to_mem: if gzip,
+// GzDecoder-decompress into a Vec; otherwise use the bytes as-is. A trailing 0
+// terminates the buffer image, then io_net_read parses it.
+pub fn fsm_read_binary_mem(bytes: &[u8]) -> Result<Box<Fsm>, FomaError> {
+    let mut content: Vec<u8> = Vec::new();
+    if bytes.len() >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b {
+        let mut dec = GzDecoder::new(bytes);
+        dec.read_to_end(&mut content)
+            .map_err(|e| FomaError::Io(format!("gzip decode error: {e}")))?;
+    } else {
+        content.extend_from_slice(bytes);
+    }
+    /* buf[size] = '\0' — matches io_gz_file_to_mem's terminator */
+    content.push(0);
+    let mut iobh = IoBufHandle {
+        io_buf: Some(content),
+        io_buf_ptr: 0,
+    };
+    io_net_read(&mut iobh)
+        .map(|(net, _net_name)| net)
+        .ok_or_else(|| FomaError::Format("malformed foma binary image".to_string()))
+}
+
+// [spec:foma:def:io.fsm-read-binary-fn]
+// [spec:foma:sem:io.fsm-read-binary-fn]
+// New public API (no C counterpart): read a foma binary image from an arbitrary
+// reader by draining it to a Vec and delegating to fsm_read_binary_mem.
+pub fn fsm_read_binary<R: std::io::Read>(mut reader: R) -> Result<Box<Fsm>, FomaError> {
+    let mut bytes: Vec<u8> = Vec::new();
+    reader
+        .read_to_end(&mut bytes)
+        .map_err(|e| FomaError::Io(format!("read error: {e}")))?;
+    fsm_read_binary_mem(&bytes)
 }
 
 // [spec:foma:def:io.save-defined-fn]
@@ -1144,8 +1217,9 @@ pub(crate) fn io_gets(iobh: &mut IoBufHandle, target: &mut String) -> i32 {
 // [spec:foma:def:fomalib.foma-net-print-fn]
 // [spec:foma:sem:fomalib.foma-net-print-fn]
 // C signature: int foma_net_print(struct fsm *net, gzFile outfile). Here the
-// gzip layer is the GzEncoder the caller passes as `&mut dyn Write`.
-pub fn foma_net_print(net: &Fsm, outfile: &mut dyn Write) -> i32 {
+// gzip layer is the GzEncoder (or any other writer) the caller passes as
+// `&mut W`, dispatched statically.
+pub fn foma_net_print<W: std::io::Write + ?Sized>(net: &Fsm, outfile: &mut W) -> i32 {
     /* Header */
     let _ = outfile.write_all(b"##foma-net 1.0##\n");
     /* Properties */
@@ -1240,7 +1314,7 @@ pub fn foma_net_print(net: &Fsm, outfile: &mut dyn Write) -> i32 {
 // [spec:foma:sem:io.net-print-att-fn]
 // [spec:foma:def:fomalib.net-print-att-fn]
 // [spec:foma:sem:fomalib.net-print-att-fn]
-pub fn net_print_att(net: &Fsm, outfile: &mut dyn Write) -> i32 {
+pub fn net_print_att<W: std::io::Write + ?Sized>(net: &Fsm, outfile: &mut W) -> i32 {
     let mut sl = sigma_to_list(net.sigma.as_deref());
     if sigma_max(net.sigma.as_deref()) >= 0 {
         /* (sl+0)->symbol = g_att_epsilon */
@@ -1865,6 +1939,28 @@ mod tests {
             net.medlookup.as_ref().unwrap().confusion_matrix,
             back.medlookup.as_ref().unwrap().confusion_matrix
         );
+    }
+
+    // [spec:foma:sem:io.fsm-write-binary-fn/test]
+    // [spec:foma:sem:io.fsm-read-binary-fn/test]
+    // [spec:foma:sem:io.fsm-read-binary-mem-fn/test]
+    #[test]
+    fn stream_binary_round_trip() {
+        let mut net = fsm_parse_regex("a:b;", None, None).expect("regex should compile");
+        net.name = "stream".to_string();
+        /* write the gzip-compressed image to an in-memory Vec */
+        let mut buf: Vec<u8> = Vec::new();
+        fsm_write_binary(&net, &mut buf).unwrap();
+        /* gzip magic 1f 8b at the head */
+        assert_eq!(&buf[..2], &[0x1f, 0x8b]);
+        /* read it back through the Read-based entry point */
+        let back = fsm_read_binary(&buf[..]).unwrap();
+        assert_net_eq(&net, &back);
+        /* the recognized relation survives the round trip */
+        assert_eq!(drain_down(&back, "a"), vec!["b".to_string()]);
+        /* and via the in-memory entry point directly */
+        let back2 = fsm_read_binary_mem(&buf).unwrap();
+        assert_net_eq(&net, &back2);
     }
 
     // [spec:foma:sem:io.io-gz-file-to-mem-fn/test]

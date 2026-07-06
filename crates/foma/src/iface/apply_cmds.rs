@@ -89,13 +89,13 @@ pub fn iface_apply_file(infilename: &str, outfilename: Option<&str>, direction: 
     // C: OUTFILE = fopen(outfilename, "w") happens BEFORE the "Writing output to
     // file" message, which is BEFORE the NULL check — so the message prints even
     // when the open fails.
-    let mut outfile: Box<dyn Write> = match outfilename {
-        None => Box::new(std::io::stdout()),
+    let mut outfile: Output = match outfilename {
+        None => Output::Stdout(std::io::stdout()),
         Some(name) => {
             let res = File::create(name);
             print!("Writing output to file {}.\n", name);
             match res {
-                Ok(f) => Box::new(f),
+                Ok(f) => Output::File(f),
                 Err(_) => {
                     eprint!("{}: ", name);
                     perror("Error opening output file.");

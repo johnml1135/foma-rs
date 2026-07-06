@@ -145,6 +145,25 @@
 > structurally malformed image (io_net_read returns None) is `Err(FomaError::Format(..))`,
 > and a parsed net is `Ok`.
 
+> [spec:foma:def:io.fsm-read-binary-fn]
+> fn fsm_read_binary<R: Read>(reader: R) -> Result<Box<Fsm>, FomaError>
+
+> [spec:foma:sem:io.fsm-read-binary-fn]
+> New public API (no C counterpart): generic stream binary read. Drains `reader`
+> to a Vec and delegates to `[spec:foma:sem:io.fsm-read-binary-mem-fn]`. A read
+> error is `Err(FomaError::Io(..))`.
+
+> [spec:foma:def:io.fsm-read-binary-mem-fn]
+> fn fsm_read_binary_mem(bytes: &[u8]) -> Result<Box<Fsm>, FomaError>
+
+> [spec:foma:sem:io.fsm-read-binary-mem-fn]
+> New public API (no C counterpart): read a foma binary image from memory. Sniffs
+> the gzip magic (1f 8b) like `[spec:foma:sem:io.io-gz-file-to-mem-fn]`: if gzip,
+> GzDecoder-decompress into a Vec, else use the bytes as-is; push a trailing 0
+> terminator and parse with `[spec:foma:sem:io.io-net-read-fn]`. A malformed image
+> (io_net_read None) is `Err(FomaError::Format(..))`, gzip decode failure is
+> `Err(FomaError::Io(..))`.
+
 > [spec:foma:def:io.fsm-read-binary-file-multiple-fn]
 > struct fsm *fsm_read_binary_file_multiple(fsm_read_binary_handle fsrh)
 
@@ -234,6 +253,17 @@
 > if that fails return 1; otherwise write the net with
 > `[spec:foma:sem:io.foma-net-print-fn]`, gzclose, and return 0. Note the return
 > convention: 0 = success, 1 = failure.
+
+> [spec:foma:def:io.fsm-write-binary-fn]
+> fn fsm_write_binary<W: Write>(net: &Fsm, out: W) -> std::io::Result<()>
+
+> [spec:foma:sem:io.fsm-write-binary-fn]
+> New public API (no C counterpart): generic stream binary write. Wraps `out` in a
+> GzEncoder (Compression::default()), writes the net with
+> `[spec:foma:sem:io.foma-net-print-fn]`, finishes the gzip stream, and returns
+> `Ok(())`. Mirrors `[spec:foma:sem:io.fsm-write-binary-file-fn]`'s gzip behavior
+> but to an arbitrary writer; round-trips with
+> `[spec:foma:sem:io.fsm-read-binary-fn]`.
 
 > [spec:foma:def:io.io-buf-handle]
 > struct io_buf_handle {
