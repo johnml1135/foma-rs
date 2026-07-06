@@ -403,54 +403,30 @@ pub fn fsm_compose(net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm> {
                     bout = UNKNOWN;
                 }
 
-                if g_compose_tristate == 0 {
-                    if bin == aout && bin != -1 && (bin != EPSILON || mode == 0) {
-                        /* mode -> 0 */
-                        let atarget = net1.states[ai].target;
-                        let btarget = outarray[iptr].target;
-                        let mut target_number = triplet_hash_find(&th, atarget, btarget, 0);
-                        if target_number == -1 {
-                            /* STACK_3_PUSH(0, iptr->target, machine_a->target) */
-                            int_stack_push(0);
-                            int_stack_push(btarget);
-                            int_stack_push(atarget);
-                            target_number = triplet_hash_insert(&mut th, atarget, btarget, 0);
-                        }
-
-                        fsm_state_add_arc(
-                            current_state,
-                            ain,
-                            bout,
-                            target_number,
-                            current_final,
-                            current_start,
-                        );
+                /* The C branched on g_compose_tristate here, but the bistate
+                and tristate arms were byte-identical over complementary
+                conditions, so the match-and-emit runs unconditionally. */
+                if bin == aout && bin != -1 && (bin != EPSILON || mode == 0) {
+                    /* mode -> 0 */
+                    let atarget = net1.states[ai].target;
+                    let btarget = outarray[iptr].target;
+                    let mut target_number = triplet_hash_find(&th, atarget, btarget, 0);
+                    if target_number == -1 {
+                        /* STACK_3_PUSH(0, iptr->target, machine_a->target) */
+                        int_stack_push(0);
+                        int_stack_push(btarget);
+                        int_stack_push(atarget);
+                        target_number = triplet_hash_insert(&mut th, atarget, btarget, 0);
                     }
-                } else if g_compose_tristate != 0 {
-                    /* C: this branch is literally identical to the bistate
-                    branch above — reproduced */
-                    if bin == aout && bin != -1 && (bin != EPSILON || mode == 0) {
-                        /* mode -> 0 */
-                        let atarget = net1.states[ai].target;
-                        let btarget = outarray[iptr].target;
-                        let mut target_number = triplet_hash_find(&th, atarget, btarget, 0);
-                        if target_number == -1 {
-                            /* STACK_3_PUSH(0, iptr->target, machine_a->target) */
-                            int_stack_push(0);
-                            int_stack_push(btarget);
-                            int_stack_push(atarget);
-                            target_number = triplet_hash_insert(&mut th, atarget, btarget, 0);
-                        }
 
-                        fsm_state_add_arc(
-                            current_state,
-                            ain,
-                            bout,
-                            target_number,
-                            current_final,
-                            current_start,
-                        );
-                    }
+                    fsm_state_add_arc(
+                        current_state,
+                        ain,
+                        bout,
+                        target_number,
+                        current_final,
+                        current_start,
+                    );
                 }
 
                 iptr += 1;

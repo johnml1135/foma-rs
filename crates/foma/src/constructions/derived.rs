@@ -16,9 +16,9 @@ pub fn fsm_escape(symbol: &str) -> Box<Fsm> {
 /* are single utf8 letters.                           */
 
 // [spec:foma:def:constructions.fsm-letter-machine-fn]
-// [spec:foma:sem:constructions.fsm-letter-machine-fn]
+// [spec:foma:sem:constructions.fsm-letter-machine-fn+1]
 // [spec:foma:def:fomalib.fsm-letter-machine-fn]
-// [spec:foma:sem:fomalib.fsm-letter-machine-fn]
+// [spec:foma:sem:fomalib.fsm-letter-machine-fn+1]
 pub fn fsm_letter_machine(net: Box<Fsm>) -> Box<Fsm> {
     /* C: char tmpin[128], tmpout[128] — uninitialized stack buffers reused
     across iterations; zero-initialized here (stale bytes persist between
@@ -96,24 +96,21 @@ pub fn fsm_letter_machine(net: Box<Fsm>) -> Box<Fsm> {
                         currout = String::from_utf8_lossy(out_bytes).into_owned();
                     }
                 } else {
-                    /* C BUG (reproduced): strncpy(tmpout, out, utf8skip(in)+1)
-                    sizes the copy by the INPUT cursor's current character
-                    (`in` already advanced above), while the NUL terminator is
-                    placed at utf8skip(out)+1 — correct only when the input
-                    character's encoding is at least as long as the output's */
-                    let nbug = (utf8skip(in_bytes) + 1) as usize;
-                    let nout = (utf8skip(out_bytes) + 1) as usize;
-                    let copy = std::cmp::min(nbug, out_bytes.len());
+                    /* Wave 4 fix: size the output copy by the OUTPUT cursor's
+                    current character (utf8skip(out)+1), mirroring the input
+                    side. The C used utf8skip(in) here (a copy-past-the-char
+                    bug when the input char was shorter than the output char);
+                    utf8skip(out) copies exactly one UTF-8 output character. */
+                    let n = (utf8skip(out_bytes) + 1) as usize;
+                    let copy = std::cmp::min(n, out_bytes.len());
                     tmpout[..copy].copy_from_slice(&out_bytes[..copy]);
-                    for k in copy..nbug {
+                    for k in copy..n {
                         tmpout[k] = 0;
                     }
-                    tmpout[nout] = 0;
+                    tmpout[n] = 0;
                     let end = tmpout.iter().position(|&b| b == 0).unwrap_or(128);
-                    // DEVIATION from C (stale/garbage buffer bytes may not be
-                    // UTF-8; lossy-decoded here — C passes raw bytes through)
                     currout = String::from_utf8_lossy(&tmpout[..end]).into_owned();
-                    out_bytes = &out_bytes[nout..];
+                    out_bytes = &out_bytes[n..];
                     outlen -= 1;
                 }
                 if i == 0 && steps > 1 {
@@ -150,10 +147,7 @@ pub fn fsm_letter_machine(net: Box<Fsm>) -> Box<Fsm> {
         }
         fsm_construct_set_initial(&mut outh, i);
     }
-    /* fsm_read_done(inh) — C never fsm_destroy's the minimized input net
-    (leaked); the returned Box is dropped here */
-    let minimized = fsm_read_done(inh);
-    drop(minimized);
+    drop(fsm_read_done(inh));
     fsm_construct_done(outh)
 }
 
@@ -290,8 +284,6 @@ pub fn fsm_substitute_label(net: &mut Fsm, original: &str, substitute: &mut Fsm)
     let mut subh = fsm_read_init(Some(Box::new(substitute.clone()))).unwrap();
     let repsym = fsm_get_symbol_number(&inh, original);
     if repsym == -1 {
-        /* fsm_read_done(inh) — subh and the substitute handle are leaked
-        in C (dropped here) */
         let _ = fsm_read_done(inh);
         // DEVIATION from C (C returns the input net aliased; a deep copy here)
         return Box::new(net.clone());
@@ -495,9 +487,10 @@ pub fn fsm_unflatten(net: Box<Fsm>, epsilon_sym: &str, repeat_sym: &str) -> Box<
     while int_stack_isempty() == 0 {
         /* Get a pair of states to examine */
 
-        /* C: both pops are assigned to a (pairs are always (s,s)) */
-        let mut a = int_stack_pop();
-        a = int_stack_pop();
+        /* C: both pops are assigned to a; the pair is always (s, s), so the
+        first pop is discarded and the second is the state to examine. */
+        let _ = int_stack_pop();
+        let a = int_stack_pop();
 
         let current_state = triplet_hash_find(&th, a, a, 0);
         let current_start = if point_a[a as usize].start == 1 { 1 } else { 0 };
@@ -943,10 +936,10 @@ pub fn fsm_priority_union_lower(net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm> {
 // [spec:foma:def:fomalib.fsm-lenient-compose-fn]
 // [spec:foma:sem:fomalib.fsm-lenient-compose-fn]
 pub fn fsm_lenient_compose(net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm> {
-    /* A .O. B = [A .o. B] .P. B */
-    /* NOTE: the C comment above (reproduced) claims .P. B, but the code
-    passes a COPY OF NET1 (A) as the fallback — [A .o. B] .P. A. Port of
-    the code, not the comment. */
+    /* A .O. B = [A .o. B] .P. A — lenient composition, with A (net1) as the
+    priority-union fallback for inputs outside dom([A .o. B]). (The upstream
+    C source comment read ".P. B", but its code passes a copy of A as the
+    fallback; this is the actual foma semantics.) */
     let mut net1 = net1;
     let ret = fsm_priority_union_upper(fsm_compose(fsm_copy(&mut net1), net2), fsm_copy(&mut net1));
     fsm_destroy(net1);
@@ -2008,7 +2001,6 @@ pub fn fsm_context_restrict(x: Box<Fsm>, lr: Option<Box<Fsmcontexts>>) -> Box<Fs
     the loops, so the LR context list is never freed (latent leak;
     fsm_clear_contexts(LR) was clearly intended). Literal NULL call: */
     fsm_clear_contexts(None);
-    /* C leaks LR; the owned list drops here (nothing to reproduce) */
     drop(lr);
     result
 }

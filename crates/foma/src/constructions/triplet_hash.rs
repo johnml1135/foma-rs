@@ -26,28 +26,21 @@ pub struct Triplethash {
 // [spec:foma:def:constructions.triplet-hash-init-fn]
 // [spec:foma:sem:constructions.triplet-hash-init-fn]
 pub fn triplet_hash_init() -> Box<Triplethash> {
-    let mut th = Box::new(Triplethash {
-        tablesize: 128,
+    let tablesize: u32 = 128;
+    // Empty slots are marked by key == -1; a/b/c stay don't-care until filled.
+    Box::new(Triplethash {
+        tablesize,
         occupancy: 0,
-        /* C: malloc'd — the a/b/c fields of empty slots are uninitialized
-        (zeroed here); only key is initialized below */
-        triplets: Vec::new(),
-    });
-    th.triplets = vec![
-        TriplethashTriplets {
-            a: 0,
-            b: 0,
-            c: 0,
-            key: 0,
-        };
-        th.tablesize as usize
-    ];
-    let mut i = 0usize;
-    while i < th.tablesize as usize {
-        th.triplets[i].key = -1;
-        i += 1;
-    }
-    th
+        triplets: vec![
+            TriplethashTriplets {
+                a: 0,
+                b: 0,
+                c: 0,
+                key: -1,
+            };
+            tablesize as usize
+        ],
+    })
 }
 
 // [spec:foma:def:constructions.triplethash-hashf-fn]
@@ -99,7 +92,7 @@ pub fn triplet_hash_insert(th: &mut Triplethash, a: i32, b: i32, c: i32) -> i32 
             th.triplets[hash as usize].a = a;
             th.triplets[hash as usize].b = b;
             th.triplets[hash as usize].c = c;
-            th.occupancy = th.occupancy + 1;
+            th.occupancy += 1;
             /* C: int occupancy > unsigned tablesize/2 — the int converts
             to unsigned in the comparison (occupancy is never negative) */
             if th.occupancy as u32 > th.tablesize / 2 {
@@ -118,8 +111,6 @@ pub fn triplet_hash_insert(th: &mut Triplethash, a: i32, b: i32, c: i32) -> i32 
 // [spec:foma:sem:constructions.triplet-hash-rehash-fn]
 pub fn triplet_hash_rehash(th: &mut Triplethash) {
     let newtablesize = th.tablesize * 2;
-    let oldtablesize = th.tablesize;
-    /* C: malloc'd new table (a/b/c uninitialized; zeroed here) */
     let oldtriplets = std::mem::replace(
         &mut th.triplets,
         vec![
@@ -127,28 +118,18 @@ pub fn triplet_hash_rehash(th: &mut Triplethash) {
                 a: 0,
                 b: 0,
                 c: 0,
-                key: 0,
+                key: -1,
             };
             newtablesize as usize
         ],
     );
     /* tablesize updated BEFORE reinserting so probes use the new size */
     th.tablesize = newtablesize;
-    for i in 0..newtablesize as usize {
-        th.triplets[i].key = -1;
-    }
-    for i in 0..oldtablesize as usize {
-        if oldtriplets[i].key != -1 {
-            triplet_hash_insert_with_key(
-                th,
-                oldtriplets[i].a,
-                oldtriplets[i].b,
-                oldtriplets[i].c,
-                oldtriplets[i].key,
-            );
+    for slot in &oldtriplets {
+        if slot.key != -1 {
+            triplet_hash_insert_with_key(th, slot.a, slot.b, slot.c, slot.key);
         }
     }
-    /* free(oldtriplets) — dropped here */
 }
 
 // [spec:foma:def:constructions.triplet-hash-find-fn]

@@ -787,7 +787,7 @@
 > [spec:foma:def:constructions.fsm-letter-machine-fn]
 > struct fsm *fsm_letter_machine(struct fsm *net)
 
-> [spec:foma:sem:constructions.fsm-letter-machine-fn]
+> [spec:foma:sem:constructions.fsm-letter-machine-fn+1]
 > Converts a machine whose labels may be multi-character strings into an
 > equivalent "letter machine" where every arc carries a single UTF-8 character,
 > by splitting each multi-character arc into a chain of arcs through fresh
@@ -810,12 +810,14 @@
 >   step (e.g. @:xyz becomes @:x @:y @:z); if ordinary, the next single UTF-8
 >   character of `in` is consumed (copied into a 128-byte buffer), and once
 >   exhausted (inlen reaches 0) "@_EPSILON_SYMBOL_@" is used. Same for the
->   output side. BUG (document, do not fix silently): the output-side character
->   copy uses the byte length of the current INPUT character
->   (strncpy(tmpout, out, utf8skip(in)+1), with `in` possibly already advanced)
->   while the NUL terminator is placed at utf8skip(out)+1; the copy is correct
->   only when the input character's encoding is at least as long as the output
->   character's, otherwise the output label contains garbage bytes.
+>   output side: the next single UTF-8 character of `out` is consumed (copy
+>   sized by utf8skip(out)+1) and once exhausted "@_EPSILON_SYMBOL_@" is used.
+> Wave 4 fix: the C sized the output-side copy by the byte length of the
+> current INPUT character (strncpy(tmpout, out, utf8skip(in)+1), with `in`
+> possibly already advanced) while NUL-terminating at utf8skip(out)+1, so a
+> multibyte output character following a shorter input character was garbled.
+> The port sizes the output copy by utf8skip(out)+1, consuming exactly one
+> UTF-8 output character per step.
 > Finals and initials are copied from the input. Returns the machine built by
 > fsm_construct_done (sigma rebuilt from the label strings actually used).
 > Ownership: `net` is consumed by fsm_minimize; the minimized net itself is

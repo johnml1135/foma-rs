@@ -861,8 +861,8 @@ fn fsm_concat_n_exact_repetition() {
 
 /* ---- letter machine ----------------------------------------------- */
 
-// [spec:foma:sem:constructions.fsm-letter-machine-fn/test]
-// [spec:foma:sem:fomalib.fsm-letter-machine-fn/test]
+// [spec:foma:sem:constructions.fsm-letter-machine-fn+1/test]
+// [spec:foma:sem:fomalib.fsm-letter-machine-fn+1/test]
 #[test]
 fn fsm_letter_machine_splits_multichar_symbol_and_names_it_literally() {
     // The single 3-char symbol "abc" becomes a chain a b c.
@@ -879,17 +879,17 @@ fn fsm_letter_machine_splits_multichar_symbol_and_names_it_literally() {
     );
 }
 
-// [spec:foma:sem:constructions.fsm-letter-machine-fn/test]
-// [spec:foma:sem:fomalib.fsm-letter-machine-fn/test]
+// [spec:foma:sem:constructions.fsm-letter-machine-fn+1/test]
+// [spec:foma:sem:fomalib.fsm-letter-machine-fn+1/test]
 #[test]
-fn fsm_letter_machine_output_side_utf8_bug_garbles_multibyte_output() {
+fn fsm_letter_machine_splits_multibyte_output_across_letters() {
     // a:"éé" — the output character (2 bytes) is longer than the input
-    // character (1 byte), so the strncpy(tmpout, out, utf8skip(in)+1) bug
-    // copies only the first byte of each "é"; DEVIATION lossy-decodes the
-    // stray lead byte 0xC3 to U+FFFD, twice.
+    // character (1 byte). Wave 4 fix: the output copy is sized by
+    // utf8skip(out), so each step copies one full "é"; the chain is
+    // a:é then 0:é, and applying "a" downward yields the intact "éé".
     let t = fsm_cross_product(fsm_symbol("a"), fsm_symbol("éé"));
     let lm = fsm_letter_machine(t);
-    assert_eq!(down(&lm, "a"), ws(&["\u{fffd}\u{fffd}"]));
+    assert_eq!(down(&lm, "a"), ws(&["éé"]));
 }
 
 /* ---- substitutions ------------------------------------------------ */

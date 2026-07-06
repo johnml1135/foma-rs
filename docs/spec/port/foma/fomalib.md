@@ -1663,7 +1663,7 @@
 > [spec:foma:def:fomalib.fsm-letter-machine-fn]
 > fsm *fsm_letter_machine(struct fsm *net)
 
-> [spec:foma:sem:fomalib.fsm-letter-machine-fn]
+> [spec:foma:sem:fomalib.fsm-letter-machine-fn+1]
 > Converts a net whose sigma may contain multicharacter symbols into an equivalent machine
 > whose arcs carry only single UTF-8 letters. Minimizes net and iterates its arcs via a read
 > handle, building the output with a construct handle (named literally "name"). Arcs where
@@ -1678,10 +1678,12 @@
 > through. Returns the newly constructed net. Latent bugs to preserve/flag: (1) statecount is
 > read via the old `net` pointer after fsm_minimize(net) may have returned a different
 > pointer (potential use-after-free); (2) the minimized input net is never destroyed (the
-> read handle does not own it) — it leaks; (3) when splitting, the output-side copy length
-> uses utf8skip(in) instead of utf8skip(out), corrupting the copied letter when the two
-> sides' current letters have different UTF-8 widths; (4) letters are staged through fixed
-> 128-byte buffers.
+> read handle does not own it) — it leaks; (3) letters are staged through fixed 128-byte
+> buffers.
+> Wave 4 fix: the C sized the output-side copy by utf8skip(in) instead of utf8skip(out),
+> corrupting the copied letter when the two sides' current letters had different UTF-8
+> widths; the port sizes the output copy by utf8skip(out)+1, so each step copies exactly one
+> UTF-8 output character.
 
 > [spec:foma:def:fomalib.fsm-lexc-parse-file-fn]
 > fsm *fsm_lexc_parse_file(char *myfile, int verbose)
