@@ -31,5 +31,5 @@ assertions (
     {id w3-cli, kind @complete, author "brendan@necessary.nu", at 2026-07-05T01:25:27.296591Z}
     {id w4-conventions, kind @complete, author "brendan@necessary.nu", at 2026-07-06T10:01:59.696667Z}
     {id w4-base-utils, kind @complete, author "brendan@necessary.nu", at 2026-07-06T10:30:46.55819Z}
-    {id w4-structures-dynarray, kind @doing, author "brendan@necessary.nu", at 2026-07-06T10:31:01.26597Z}
+    {id w4-structures-dynarray, kind @complete, author "brendan@necessary.nu", at 2026-07-06T10:59:29.702537Z}
 )

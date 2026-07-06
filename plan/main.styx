@@ -467,6 +467,15 @@ children (
                 id w4-structures-dynarray
                 title "Idiomatize structures, dynarray + bug fixes (fsm_isuniversal, quantifier quirks)"
                 deps (w4-base-utils)
+                sealed true
+                log (
+                    {
+                        at 2026-07-06T10:59:29.702537Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan complete)"
+                    }
+                )
             }
 
             {
