@@ -121,7 +121,6 @@ pub fn apply_med_set_heap_max(medh: &mut ApplyMedHandle, max: i32) {
 // [spec:foma:def:fomalib.apply-med-set-align-symbol-fn]
 // [spec:foma:sem:fomalib.apply-med-set-align-symbol-fn]
 pub fn apply_med_set_align_symbol(medh: &mut ApplyMedHandle, align: &str) {
-    /* Latent leak in C (previous align_symbol not freed); harmless here. */
     medh.align_symbol = Some(align.to_string()); /* C: strdup(align) */
 }
 
@@ -405,8 +404,7 @@ fn node_insert(
             return 0;
         }
         medh.agenda_size *= 2;
-        /* realloc; new slots zero-initialized (C leaves them uninitialized but
-        every slot is written before it is read). */
+        /* Grow the agenda pool (every new slot is written before it is read). */
         medh.agenda.resize(
             medh.agenda_size as usize,
             Astarnode {
@@ -458,7 +456,7 @@ fn letterbits_union(v: i32, vp: i32, ptr: &mut [u8], bytes_per_letter_array: i32
     let vbase = (v * bytes_per_letter_array) as usize;
     let vpbase = (vp * bytes_per_letter_array) as usize;
     for i in 0..bytes_per_letter_array as usize {
-        ptr[vbase + i] = ptr[vbase + i] | ptr[vpbase + i];
+        ptr[vbase + i] |= ptr[vpbase + i];
     }
 }
 
@@ -467,9 +465,8 @@ fn letterbits_union(v: i32, vp: i32, ptr: &mut [u8], bytes_per_letter_array: i32
 fn letterbits_copy(source: i32, target: i32, ptr: &mut [u8], bytes_per_letter_array: i32) {
     let sourcebase = (source * bytes_per_letter_array) as usize;
     let targetbase = (target * bytes_per_letter_array) as usize;
-    for i in 0..bytes_per_letter_array as usize {
-        ptr[targetbase + i] = ptr[sourcebase + i];
-    }
+    let bpla = bytes_per_letter_array as usize;
+    ptr.copy_within(sourcebase..sourcebase + bpla, targetbase);
 }
 
 // [spec:foma:def:spelling.letterbits-add-fn]
@@ -1168,8 +1165,6 @@ pub fn cmatrix_init(net: &mut Fsm) {
             }
         }
     }
-    /* C overwrites any previous matrix pointer without freeing (latent leak);
-    the assignment drops the old Vec here (no leak). */
     net.medlookup.as_mut().unwrap().confusion_matrix = cm;
 }
 

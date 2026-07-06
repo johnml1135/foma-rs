@@ -166,9 +166,7 @@ pub fn apply_set_show_flags(h: &mut ApplyHandle, value: i32) {
 // [spec:foma:sem:fomalib.apply-set-print-space-fn]
 pub fn apply_set_print_space(h: &mut ApplyHandle, value: i32) {
     h.print_space = value;
-    // C strdup(" ") unconditionally, leaking any previous space symbol
-    // (leak is a no-op in Rust).
-    h.space_symbol = Some(" ".to_string());
+    h.space_symbol = Some(" ".to_string()); // C: strdup(" ")
 }
 
 // [spec:foma:def:apply.apply-set-separator-fn]
@@ -176,7 +174,6 @@ pub fn apply_set_print_space(h: &mut ApplyHandle, value: i32) {
 // [spec:foma:def:fomalib.apply-set-separator-fn]
 // [spec:foma:sem:fomalib.apply-set-separator-fn]
 pub fn apply_set_separator(h: &mut ApplyHandle, symbol: &str) {
-    // C leaks the previous separator (no-op in Rust).
     h.separator = Some(symbol.to_string());
 }
 
@@ -198,7 +195,6 @@ pub fn apply_set_epsilon(h: &mut ApplyHandle, symbol: &str) {
 // [spec:foma:def:fomalib.apply-set-space-symbol-fn]
 // [spec:foma:sem:fomalib.apply-set-space-symbol-fn]
 pub fn apply_set_space_symbol(h: &mut ApplyHandle, space: &str) {
-    // C leaks the previous space symbol (no-op in Rust).
     h.space_symbol = Some(space.to_string());
     h.print_space = 1;
 }
@@ -324,7 +320,7 @@ pub(crate) fn apply_stack_push(
 // [spec:foma:def:apply.apply-enumerate-fn]
 // [spec:foma:sem:apply.apply-enumerate-fn]
 pub fn apply_enumerate(h: &mut ApplyHandle) -> Option<String> {
-    let mut result: Option<String> = None;
+    let result: Option<String>;
 
     if h.last_net.is_none() || h.last_net.as_ref().unwrap().finalcount == 0 {
         return None;
@@ -425,8 +421,6 @@ pub fn apply_clear(mut h: Box<ApplyHandle>) {
     h.outstring = Vec::new();
     h.separator = None;
     h.epsilon_symbol = None;
-    // C leaks h->flag_list nodes (and their name strings), h->space_symbol and
-    // any strdup'd flag values; those are freed here on drop instead.
     drop(h);
 }
 
@@ -600,6 +594,102 @@ pub fn apply_reset_enumerator(h: &mut ApplyHandle) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Idiomatic iterator front-ends (Wave 4 — additive sugar)            */
+/* ------------------------------------------------------------------ */
+
+/* Which C-shaped entry point an ApplyIter drives. */
+#[derive(Clone, Copy)]
+enum ApplyDir {
+    Down,
+    Up,
+    Words,
+    UpperWords,
+    LowerWords,
+    Enumerate,
+}
+
+/// Lazy iterator over the results of applying a word (or enumerating the
+/// relation) through an [`ApplyHandle`]. Each `next()` yields one result
+/// `String` by driving the existing C-shaped `apply_*` / NULL-resume
+/// protocol: the first call seeds the search with the word, subsequent
+/// calls resume it (`apply_down(h, None)`) until it is exhausted. This is
+/// pure sugar over the resume protocol — it adds no new search behaviour.
+pub struct ApplyIter<'a> {
+    h: &'a mut ApplyHandle,
+    dir: ApplyDir,
+    word: Option<String>,
+    started: bool,
+    done: bool,
+}
+
+impl Iterator for ApplyIter<'_> {
+    type Item = String;
+    fn next(&mut self) -> Option<String> {
+        if self.done {
+            return None;
+        }
+        // down/up seed with the word on the first pull, then resume with None;
+        // the enumerate-family entry points ignore the word entirely.
+        let seed = if self.started { None } else { self.word.as_deref() };
+        let result = match self.dir {
+            ApplyDir::Down => apply_down(self.h, seed),
+            ApplyDir::Up => apply_up(self.h, seed),
+            ApplyDir::Words => apply_words(self.h),
+            ApplyDir::UpperWords => apply_upper_words(self.h),
+            ApplyDir::LowerWords => apply_lower_words(self.h),
+            ApplyDir::Enumerate => apply_enumerate(self.h),
+        };
+        self.started = true;
+        if result.is_none() {
+            self.done = true;
+        }
+        result
+    }
+}
+
+impl ApplyHandle {
+    fn apply_iter(&mut self, dir: ApplyDir, word: Option<&str>) -> ApplyIter<'_> {
+        ApplyIter {
+            h: self,
+            dir,
+            word: word.map(str::to_string),
+            started: false,
+            done: false,
+        }
+    }
+
+    /// Apply `word` downward (input → output side), yielding every output.
+    pub fn down(&mut self, word: &str) -> ApplyIter<'_> {
+        self.apply_iter(ApplyDir::Down, Some(word))
+    }
+
+    /// Apply `word` upward (output → input side), yielding every input.
+    pub fn up(&mut self, word: &str) -> ApplyIter<'_> {
+        self.apply_iter(ApplyDir::Up, Some(word))
+    }
+
+    /// Enumerate the language/relation, yielding both sides per path.
+    pub fn words(&mut self) -> ApplyIter<'_> {
+        self.apply_iter(ApplyDir::Words, None)
+    }
+
+    /// Enumerate the upper (input) side of the relation.
+    pub fn upper_words(&mut self) -> ApplyIter<'_> {
+        self.apply_iter(ApplyDir::UpperWords, None)
+    }
+
+    /// Enumerate the lower (output) side of the relation.
+    pub fn lower_words(&mut self) -> ApplyIter<'_> {
+        self.apply_iter(ApplyDir::LowerWords, None)
+    }
+
+    /// Drive `apply_enumerate` in whatever mode the handle is already set to.
+    pub fn enumerate(&mut self) -> ApplyIter<'_> {
+        self.apply_iter(ApplyDir::Enumerate, None)
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /* Index (built externally by flookup/cgflookup)                      */
 /* ------------------------------------------------------------------ */
 
@@ -689,11 +779,9 @@ pub fn apply_index(
         i += 1;
     }
 
-    let mut indexed: Vec<Option<Box<ApplyStateIndex>>> = Vec::new();
-    let mut cnt: u32 = 0;
-    cnt = cnt.wrapping_add(round_up_to_power_of_two(
+    let mut cnt: u32 = round_up_to_power_of_two(
         (statecount as u32).wrapping_mul(std::mem::size_of::<usize>() as u32),
-    ));
+    );
 
     if cnt as i32 > mem_limit {
         // cnt -= ...; goto memlimitnoindex — no index built.
@@ -706,7 +794,7 @@ pub fn apply_index(
     }
 
     // calloc(statecount) per-state chain heads.
-    indexed = vec![None; statecount as usize];
+    let mut indexed: Vec<Option<Box<ApplyStateIndex>>> = vec![None; statecount as usize];
 
     if h.has_flags != 0 && flags_only != 0 && h.flagstates.is_empty() {
         apply_mark_flagstates(h);
@@ -771,7 +859,6 @@ pub fn apply_index(
         }
         indexed[s] = chain;
     }
-    let _ = inout;
 
     if inout == APPLY_INDEX_INPUT {
         h.index_in = indexed;
@@ -872,13 +959,13 @@ pub fn apply_binarysearch(h: &mut ApplyHandle) -> i32 {
 // [spec:foma:def:apply.apply-follow-next-arc-fn]
 // [spec:foma:sem:apply.apply-follow-next-arc-fn]
 pub fn apply_follow_next_arc(h: &mut ApplyHandle) -> i32 {
-    let mut fname: Option<String>;
-    let mut fvalue: Option<String>;
+    let fname: Option<String>;
+    let fvalue: Option<String>;
     let mut eatupi: i32;
-    let mut eatupo: i32;
+    let eatupo: i32;
     let mut symin: i32;
     let mut symout: i32;
-    let mut fneg: i32;
+    let fneg: i32;
     let mut vcount: i32;
     let mut marksource: i32;
     let mut marktarget: i32;
@@ -2140,6 +2227,54 @@ mod tests {
         // input not in the relation yields nothing.
         assert!(drain_down(&net, "x").is_empty());
         assert!(drain_up(&net, "a").is_empty());
+    }
+
+    // Iterator front-ends are additive Wave-4 sugar over the C-shaped resume
+    // protocol; these tests pin the sugar's equivalence and carry no /test
+    // facet (the underlying rules are pinned by the manual-protocol tests).
+    #[test]
+    fn iterator_down_up_match_manual_protocol() {
+        // Backtracking net: two outputs for one input, drained via the iterator.
+        let net = parse("{cat}:{dog} | {cat}:{cot}");
+        let mut h = apply_init(&net);
+        let mut got: Vec<String> = h.down("cat").collect();
+        got.sort();
+        let mut manual = drain_down(&net, "cat");
+        manual.sort();
+        assert_eq!(got, manual);
+        assert_eq!(got, vec!["cot".to_string(), "dog".to_string()]);
+
+        // Up direction.
+        let tnet = parse("a:b");
+        let mut hu = apply_init(&tnet);
+        assert_eq!(hu.up("b").collect::<Vec<_>>(), vec!["a".to_string()]);
+
+        // A non-matching input yields an empty (fused) iterator.
+        let mut hx = apply_init(&tnet);
+        let mut it = hx.down("z");
+        assert!(it.next().is_none());
+        assert!(it.next().is_none());
+    }
+
+    #[test]
+    fn iterator_words_enumeration() {
+        let net = parse("{ab}|{cd}|a");
+        let mut h = apply_init(&net);
+        assert_eq!(
+            h.words().collect::<Vec<_>>(),
+            vec!["a".to_string(), "ab".to_string(), "cd".to_string()]
+        );
+        let tnet = parse("{ab}:{xy}|{cd}");
+        let mut hu = apply_init(&tnet);
+        assert_eq!(
+            hu.upper_words().collect::<Vec<_>>(),
+            vec!["ab".to_string(), "cd".to_string()]
+        );
+        let mut hl = apply_init(&tnet);
+        assert_eq!(
+            hl.lower_words().collect::<Vec<_>>(),
+            vec!["xy".to_string(), "cd".to_string()]
+        );
     }
 
     // [spec:foma:sem:apply.apply-skip-this-arc-fn/test]
