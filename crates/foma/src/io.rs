@@ -848,6 +848,39 @@ pub fn fsm_read_binary_mem(bytes: &[u8]) -> Result<Box<Fsm>, FomaError> {
         .ok_or_else(|| FomaError::Format("malformed foma binary image".to_string()))
 }
 
+// New public API (no C counterpart): like `fsm_read_binary_mem`, but reads
+// exactly ONE gzip member (one foma image) off the front of `bytes` and reports
+// how many input bytes it consumed. Lets a caller reading a multi-image stream
+// (e.g. HFST's per-transducer [header][gzip-image] framing) leave the remaining
+// images in place instead of swallowing the whole tail.
+pub fn fsm_read_binary_mem_prefix(bytes: &[u8]) -> Result<(Box<Fsm>, usize), FomaError> {
+    let mut content: Vec<u8> = Vec::new();
+    let consumed = if bytes.len() >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b {
+        // A BUFREAD gzip decoder advances the underlying BufRead by exactly the
+        // bytes it consumes (via `consume()`), unlike the `read` variant which
+        // buffers ahead and would over-report. Reading one member off a Cursor
+        // leaves the cursor exactly at that member's end.
+        let mut cursor = std::io::Cursor::new(bytes);
+        let mut dec = flate2::bufread::GzDecoder::new(&mut cursor);
+        dec.read_to_end(&mut content)
+            .map_err(|e| FomaError::Io(format!("gzip decode error: {e}")))?;
+        drop(dec);
+        cursor.position() as usize
+    } else {
+        content.extend_from_slice(bytes);
+        bytes.len()
+    };
+    content.push(0);
+    let mut iobh = IoBufHandle {
+        io_buf: Some(content),
+        io_buf_ptr: 0,
+    };
+    let net = io_net_read(&mut iobh)
+        .map(|(net, _net_name)| net)
+        .ok_or_else(|| FomaError::Format("malformed foma binary image".to_string()))?;
+    Ok((net, consumed))
+}
+
 // [spec:foma:def:io.fsm-read-binary-fn]
 // [spec:foma:sem:io.fsm-read-binary-fn]
 // New public API (no C counterpart): read a foma binary image from an arbitrary
