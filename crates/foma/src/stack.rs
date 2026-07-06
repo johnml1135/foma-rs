@@ -59,6 +59,32 @@ fn arena_alloc(entry: StackEntry) -> usize {
     })
 }
 
+/// malloc a fresh sentinel node {number = -1, fsm/ah/amedh/next NULL}. Only the
+/// terminating sentinel carries these defaults; `previous` links it to whatever
+/// precedes it (None on a fresh empty stack).
+fn arena_alloc_sentinel(previous: Option<usize>) -> usize {
+    arena_alloc(StackEntry {
+        number: -1,
+        ah: None,
+        amedh: None,
+        fsm: None,
+        next: None,
+        previous,
+    })
+}
+
+/// Walk from main_stack to the top real entry (the one whose `next` is the
+/// sentinel). Requires a non-empty stack: on an empty stack e_next(sentinel) is
+/// None → unwrap panics. DEVIATION from C: the C walk dereferences the
+/// sentinel's NULL `next` here (UB/crash); the port panics instead.
+fn walk_to_top() -> usize {
+    let mut stack_ptr = main_stack();
+    while e_number(e_next(stack_ptr).unwrap()) != -1 {
+        stack_ptr = e_next(stack_ptr).unwrap();
+    }
+    stack_ptr
+}
+
 /// Read `main_stack`. DEVIATION from C: unwrap panics if stack_init was never
 /// called (C would dereference a NULL/garbage global and crash).
 fn main_stack() -> usize {
@@ -164,14 +190,7 @@ pub fn stack_init() -> i32 {
     // malloc a fresh sentinel {number = -1, fsm = NULL, next = NULL,
     // previous = NULL} (ah/amedh left uninitialized in C; None here — never
     // read on the sentinel). Does not free any previous list (leaks, as in C).
-    let idx = arena_alloc(StackEntry {
-        number: -1,
-        ah: None,
-        amedh: None,
-        fsm: None,
-        next: None,
-        previous: None,
-    });
+    let idx = arena_alloc_sentinel(None);
     set_main_stack(idx);
     1
 }
@@ -198,14 +217,7 @@ pub fn stack_add(mut fsm: Box<Fsm>) -> i32 {
     }
     // Allocate the fresh sentinel that becomes stack_ptr->next; its number = -1,
     // fsm = NULL, next = NULL, previous = stack_ptr.
-    let new_sentinel = arena_alloc(StackEntry {
-        number: -1,
-        ah: None,
-        amedh: None,
-        fsm: None,
-        next: None,
-        previous: Some(stack_ptr),
-    });
+    let new_sentinel = arena_alloc_sentinel(Some(stack_ptr));
     // Convert the old sentinel (stack_ptr) into the new top entry, in C order.
     ARENA.with(|a| {
         let mut a = a.borrow_mut();
@@ -280,12 +292,8 @@ pub fn stack_pop() -> Option<Box<Fsm>> {
         return fsm;
     }
     // Walk to the top entry (its next is the sentinel). No empty-stack guard:
-    // on an empty stack e_next(sentinel) is None → unwrap panics (C dereferences
-    // the sentinel's NULL next → crash). DEVIATION from C: UB → panic.
-    let mut stack_ptr = main_stack();
-    while e_number(e_next(stack_ptr).unwrap()) != -1 {
-        stack_ptr = e_next(stack_ptr).unwrap();
-    }
+    // walk_to_top panics on an empty stack (DEVIATION: C's UB null-deref).
+    let stack_ptr = walk_to_top();
     // (stack_ptr->previous)->next = stack_ptr->next;
     // (stack_ptr->next)->previous = stack_ptr->previous;
     let prev = e_previous(stack_ptr).unwrap();
@@ -318,10 +326,18 @@ pub fn stack_isempty() -> i32 {
 }
 
 // [spec:foma:def:stack.stack-turn-fn]
-// [spec:foma:sem:stack.stack-turn-fn]
+// [spec:foma:sem:stack.stack-turn-fn+1]
 // [spec:foma:def:foma.stack-turn-fn]
-// [spec:foma:sem:foma.stack-turn-fn]
+// [spec:foma:sem:foma.stack-turn-fn+1]
 pub fn stack_turn() -> i32 {
+    // Wave 4 fix: the C reversal's final previous-link fix-up loop never
+    // advanced its cursor, so on any stack of >= 2 entries it spun forever
+    // (dead code — "turn stack" reaches iface_turn → stack_rotate, never here).
+    // Implement the evident intent: reverse the order of the real entries in
+    // place, relinking next/previous correctly and leaving the sentinel at the
+    // tail. Each entry travels with its own fsm/ah/amedh/number (numbers are
+    // not renumbered, matching the C code's evident intent), so afterwards the
+    // former top is the new bottom and the former bottom is the new top.
     if stack_isempty() != 0 {
         println!("Stack is empty.");
         return 0;
@@ -330,26 +346,26 @@ pub fn stack_turn() -> i32 {
         return 1;
     }
 
-    let mut stack_ptr = stack_find_top().unwrap();
-    let ms = main_stack();
-    set_next(ms, e_next(stack_ptr)); // main_stack->next = stack_ptr->next
-    set_previous(e_next(stack_ptr).unwrap(), Some(ms)); // (stack_ptr->next)->previous = main_stack
-    set_main_stack(stack_ptr); // main_stack = stack_ptr
-
-    while e_previous(stack_ptr).is_some() {
-        set_next(stack_ptr, e_previous(stack_ptr)); // stack_ptr->next = stack_ptr->previous
-        stack_ptr = e_next(stack_ptr).unwrap(); // stack_ptr = stack_ptr->next
-    }
-    // [spec:foma:sem:stack.stack-turn-fn]: this previous-pointer fix-up loop
-    // never advances stack_ptr, and the new head is a real entry (number != -1),
-    // so on any stack of >= 2 entries it loops forever, repeatedly writing
-    // new-second->previous = new-head. Dead code (the "turn stack" command goes
-    // through iface_turn → stack_rotate). Reproduced literally — safe Rust
-    // reproduces the non-terminating loop faithfully.
-    stack_ptr = main_stack();
+    // Collect the real entries bottom -> top, stopping at the sentinel.
+    let mut entries = Vec::new();
+    let mut stack_ptr = main_stack();
     while e_number(stack_ptr) != -1 {
-        set_previous(e_next(stack_ptr).unwrap(), Some(stack_ptr)); // (stack_ptr->next)->previous = stack_ptr
+        entries.push(stack_ptr);
+        stack_ptr = e_next(stack_ptr).unwrap();
     }
+    let sentinel = stack_ptr;
+
+    // Relink in reversed order: new head = old top, ..., new top = old bottom.
+    entries.reverse();
+    set_main_stack(entries[0]);
+    set_previous(entries[0], None);
+    for pair in entries.windows(2) {
+        set_next(pair[0], Some(pair[1]));
+        set_previous(pair[1], Some(pair[0]));
+    }
+    let new_top = *entries.last().unwrap();
+    set_next(new_top, Some(sentinel));
+    set_previous(sentinel, Some(new_top));
     1
 }
 
@@ -361,11 +377,7 @@ pub fn stack_find_top() -> Option<usize> {
     if e_number(main_stack()) == -1 {
         return None;
     }
-    let mut stack_ptr = main_stack();
-    while e_number(e_next(stack_ptr).unwrap()) != -1 {
-        stack_ptr = e_next(stack_ptr).unwrap();
-    }
-    Some(stack_ptr)
+    Some(walk_to_top())
 }
 
 // [spec:foma:def:stack.stack-find-bottom-fn]
@@ -384,14 +396,9 @@ pub fn stack_find_bottom() -> Option<usize> {
 // [spec:foma:def:foma.stack-find-second-fn]
 // [spec:foma:sem:foma.stack-find-second-fn]
 pub fn stack_find_second() -> Option<usize> {
-    // C's empty-stack guard is commented out. On an empty stack the walk
-    // dereferences the sentinel's NULL next → crash; here e_next(sentinel) is
-    // None → unwrap panics. DEVIATION from C: UB → panic.
-    let mut stack_ptr = main_stack();
-    while e_number(e_next(stack_ptr).unwrap()) != -1 {
-        stack_ptr = e_next(stack_ptr).unwrap();
-    }
-    e_previous(stack_ptr)
+    // C's empty-stack guard is commented out, so walk_to_top runs unconditionally
+    // and panics on an empty stack (DEVIATION: C's UB null-deref of the sentinel).
+    e_previous(walk_to_top())
 }
 
 // [spec:foma:def:stack.stack-clear-fn]
@@ -722,14 +729,10 @@ mod tests {
         assert_eq!(e_number(main_stack()), -1);
     }
 
-    // [spec:foma:sem:stack.stack-turn-fn/test]
-    // [spec:foma:sem:foma.stack-turn-fn/test]
+    // [spec:foma:sem:stack.stack-turn-fn+1/test]
+    // [spec:foma:sem:foma.stack-turn-fn+1/test]
     #[test]
-    fn stack_turn_terminates_only_for_sizes_0_and_1() {
-        // Per the sem rule, for stacks of >= 2 entries the final previous-link
-        // fix-up loop never advances and stack_turn never returns; the port
-        // reproduces that non-terminating loop literally, so it MUST NOT be
-        // called here with 2+ entries. Only the terminating paths are pinned:
+    fn stack_turn_reverses_the_stack() {
         stack_init();
         // Empty: prints "Stack is empty." and returns 0.
         assert_eq!(stack_turn(), 0);
@@ -738,5 +741,40 @@ mod tests {
         assert_eq!(stack_turn(), 1);
         assert_eq!(stack_size(), 1);
         assert_eq!(top_fsm_name(), "solo");
+
+        // Wave 4 fix: a real reversal of a 3-entry stack. Push first (bottom),
+        // second, third (top).
+        stack_init();
+        add_named("a", "first");
+        add_named("b", "second");
+        add_named("c", "third");
+        assert_eq!(stack_turn(), 1);
+        // Former top is now the bottom, former bottom is now the top, the
+        // middle is unchanged; the stack keeps all three entries.
+        assert_eq!(stack_size(), 3);
+        assert_eq!(bottom_fsm_name(), "third");
+        assert_eq!(top_fsm_name(), "first");
+        assert_eq!(
+            stack_entry_fsm(stack_find_second().unwrap(), |f| f.name.clone()),
+            "second"
+        );
+        // Entries travel with their own number (not renumbered): the new bottom
+        // carries the former top's number 2, the new top the former bottom's 0.
+        assert_eq!(e_number(stack_find_bottom().unwrap()), 2);
+        assert_eq!(e_number(stack_find_top().unwrap()), 0);
+        // Forward (next) order from the bottom is fully relinked...
+        let bottom = stack_find_bottom().unwrap();
+        let mid = e_next(bottom).unwrap();
+        let top = e_next(mid).unwrap();
+        assert_eq!(top, stack_find_top().unwrap());
+        // ...and the previous links mirror it: bottom has no previous, and each
+        // forward hop is matched by a backward hop.
+        assert_eq!(e_previous(bottom), None);
+        assert_eq!(e_previous(mid), Some(bottom));
+        assert_eq!(e_previous(top), Some(mid));
+        // Reversal is an involution: turning again restores the original order.
+        assert_eq!(stack_turn(), 1);
+        assert_eq!(bottom_fsm_name(), "first");
+        assert_eq!(top_fsm_name(), "third");
     }
 }

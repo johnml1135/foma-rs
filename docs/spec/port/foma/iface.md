@@ -156,12 +156,12 @@
 > [spec:foma:def:iface.iface-conc-fn]
 > void iface_conc()
 
-> [spec:foma:sem:iface.iface-conc-fn]
+> [spec:foma:sem:iface.iface-conc-fn+1]
 > "concatenate": requires ≥2 nets (iface_stack_check(2)). Folds the entire stack: while stack_size() > 1,
-> prints the literal string "dd" to stdout (no newline — leftover debug printf; document-and-flag: this is
-> a latent bug but is the shipped behavior), then pops `one` (top), pops `two` (next), pushes
-> fsm_topsort(fsm_minimize(fsm_concat(one, two))) — the top net is the left/first operand of the
-> concatenation. Both operands consumed each iteration.
+> pops `one` (top), pops `two` (next), pushes fsm_topsort(fsm_minimize(fsm_concat(one, two))) — the top
+> net is the left/first operand of the concatenation. Both operands consumed each iteration.
+> Wave 4 fix: the C emitted a stray debug printf("dd") (no newline) once per iteration — a leftover
+> latent bug; it is now deleted, so no "dd" is written.
 
 > [spec:foma:def:iface.iface-crossproduct-fn]
 > void iface_crossproduct()
@@ -204,11 +204,12 @@
 > [spec:foma:def:iface.iface-extract-number-fn]
 > int iface_extract_number(char *s)
 
-> [spec:foma:sem:iface.iface-extract-number-fn]
+> [spec:foma:sem:iface.iface-extract-number-fn+1]
 > Utility: scans string s forward to the first ASCII digit ('0'–'9', compared as unsigned char) and
-> returns atoi() of the string starting at that digit. If s contains no digit, the scan stops at the
-> terminating NUL and atoi("") returns 0. Minus signs are skipped, so negative numbers are read as
-> positive (e.g. "abc-5" → 5). s is not modified.
+> returns atoi() of the string starting at that digit (or at an immediately preceding '-' — see fix).
+> If s contains no digit, the scan stops at the terminating NUL and atoi("") returns 0. s is not modified.
+> Wave 4 fix: the C scan stopped AT the first digit, dropping any leading '-', so negatives read as
+> positive ("abc-5" → 5). A '-' immediately before the first digit is now included, so "abc-5" → -5.
 
 > [spec:foma:def:iface.iface-extract-unambiguous-fn]
 > void iface_extract_unambiguous()
@@ -421,13 +422,14 @@
 > [spec:foma:def:iface.iface-print-defined-fn]
 > void iface_print_defined()
 
-> [spec:foma:sem:iface.iface-print-defined-fn]
+> [spec:foma:sem:iface.iface-print-defined-fn+1]
 > "print defined": if g_defines == NULL prints "No defined symbols.\n" (and then still falls through to
 > the loops, which are no-ops over NULL lists). For every node in the g_defines linked list whose name is
 > non-NULL: prints "%s\t" (name, TAB) followed by print_stats(net) (the one-line size summary; see
 > `[spec:foma:sem:iface.print-stats-fn]`). Then for every node in g_defines_f (defined regex functions)
-> with non-NULL name: prints "%s@%i)\t" — name, '@', numargs, then a literal unmatched ')' and TAB
-> (literal quirk in the format string) — followed by the function's regex source and "\n".
+> with non-NULL name: prints "%s@%i\t" — name, '@', numargs, then TAB — followed by the function's regex
+> source and "\n". Wave 4 fix: the C format was "%s@%i)\t" with a stray unmatched ')' before the TAB —
+> the ')' is now dropped.
 
 > [spec:foma:def:iface.iface-print-dot-fn]
 > void iface_print_dot(char *filename)
@@ -525,12 +527,13 @@
 > [spec:foma:def:iface.iface-random-pairs-fn]
 > void iface_random_pairs(int limit)
 
-> [spec:foma:sem:iface.iface-random-pairs-fn]
-> "print random-pairs": pure delegate — calls iface_pairs_call(limit, 1) (see
-> `[spec:foma:sem:iface.iface-pairs-call-fn]`); random == 1 makes the driver draw results with
-> apply_random_words and print each as "upper\tlower\n" after splitting. limit == -1 becomes
-> g_list_limit (default 100) inside iface_pairs_call — note: the list limit, NOT g_list_random_limit,
-> unlike the other random commands.
+> [spec:foma:sem:iface.iface-random-pairs-fn+1]
+> "print random-pairs": resolves limit == -1 to g_list_random_limit (default 15), then calls
+> iface_pairs_call(limit, 1) (see `[spec:foma:sem:iface.iface-pairs-call-fn]`); random == 1 makes the
+> driver draw results with apply_random_words and print each as "upper\tlower\n" after splitting.
+> Wave 4 fix: the C passed limit straight through, so limit == -1 became g_list_limit (default 100)
+> inside iface_pairs_call — the list limit, unlike the other random commands. It now uses
+> g_list_random_limit like random-lower/upper/words.
 
 > [spec:foma:def:iface.iface-random-upper-fn]
 > void iface_random_upper(int limit)
@@ -649,13 +652,14 @@
 > [spec:foma:def:iface.iface-show-variable-fn]
 > void iface_show_variable(char *name)
 
-> [spec:foma:sem:iface.iface-show-variable-fn]
+> [spec:foma:sem:iface.iface-show-variable-fn+1]
 > "show variable <name>": scans global_vars with the same 8-character-prefix strncmp match as
-> iface_set_variable; on the first match prints "%s = %s\n" with the full variable name and
-> ON/OFF computed as *(int*)ptr == 1 ? "ON" : "OFF" REGARDLESS of the variable's type — latent bug:
-> for FVAR_INT it prints ON only when the value is exactly 1, and for FVAR_STRING (att-epsilon) it
-> reinterprets the char* pointer bytes as an int (effectively garbage, practically "OFF"). If nothing
-> matches prints "*There is no global variable '%s'.\n".
+> iface_set_variable; on the first match prints "%s = %s\n" with the full variable name and a value
+> formatted BY the variable's declared type: FVAR_BOOL as "ON"/"OFF" (value == 1 ? ON : OFF), FVAR_INT
+> as the integer value, FVAR_STRING as the string. If nothing matches prints
+> "*There is no global variable '%s'.\n". Wave 4 fix: the C printed ON/OFF from *(int*)ptr == 1 for
+> EVERY type — INT variables only showed ON at value 1, and FVAR_STRING (att-epsilon) reinterpreted the
+> char* pointer bytes as an int (garbage). Now formatted per declared type.
 
 > [spec:foma:def:iface.iface-show-variables-fn]
 > void iface_show_variables()
@@ -905,12 +909,12 @@
 > [spec:foma:def:iface.iface-words-file-fn]
 > void iface_words_file(char *filename, int type)
 
-> [spec:foma:sem:iface.iface-words-file-fn]
-> "print words/upper-words/lower-words > filename": type selects the enumerator — 1 → 
-> apply_upper_words, 2 → apply_lower_words, otherwise the current value of a STATIC function-pointer
-> variable initialized to apply_words. Latent bug: because the pointer is static and type 0 never
-> resets it, after any call with type 1 or 2 a later type-0 call reuses the previous
-> upper/lower enumerator. Requires ≥1 net. If top->fsm->pathcount == PATHCOUNT_CYCLIC (-1) prints
+> [spec:foma:sem:iface.iface-words-file-fn+1]
+> "print words/upper-words/lower-words > filename": type selects the enumerator fresh on every call —
+> 1 → apply_upper_words, 2 → apply_lower_words, otherwise (type 0) → apply_words. Wave 4 fix: the C held
+> the pointer in a function-local STATIC that type 0 never reset, so after any type-1/2 call a later
+> type-0 call reused the stale upper/lower enumerator; the enumerator is now a per-call local.
+> Requires ≥1 net. If top->fsm->pathcount == PATHCOUNT_CYCLIC (-1) prints
 > "FSM is cyclic: can't write all words to file.\n" and returns. Prints "Writing to %s.\n" (before
 > opening), fopen(filename, "w"); on failure perror("Error opening file") and return. Gets the cached
 > apply handle, sets params from globals, then loops with NO limit writing every enumerated word plus

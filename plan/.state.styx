@@ -38,4 +38,5 @@ assertions (
     {id w4-flags-define-rewrite, kind @complete, author "brendan@necessary.nu", at 2026-07-06T13:06:12.023685Z}
     {id w4-apply-spelling, kind @complete, author "brendan@necessary.nu", at 2026-07-06T13:06:12.055342Z}
     {id w4-lexcread, kind @complete, author "brendan@necessary.nu", at 2026-07-06T13:06:12.082426Z}
+    {id w4-cli, kind @doing, author "brendan@necessary.nu", at 2026-07-06T13:06:52.508223Z}
 )

@@ -215,12 +215,12 @@
 > [spec:foma:def:foma.iface-conc-fn]
 > void iface_conc(void)
 
-> [spec:foma:sem:foma.iface-conc-fn]
+> [spec:foma:sem:foma.iface-conc-fn+1]
 > Implemented in foma/iface.c. Requires >= 2 networks (stack-check diagnostic otherwise).
-> Folds the entire stack: while stack_size() > 1, prints the stray debug string "dd" to stdout
-> (no newline — latent leftover debug output, emitted once per iteration), pops one = former
-> top and two = next, and pushes fsm_topsort(fsm_minimize(fsm_concat(one, two))) with the
-> popped top as the LEFT/first concatenand. Ends with one concatenated network on the stack.
+> Folds the entire stack: while stack_size() > 1, pops one = former top and two = next, and pushes
+> fsm_topsort(fsm_minimize(fsm_concat(one, two))) with the popped top as the LEFT/first concatenand.
+> Ends with one concatenated network on the stack. Wave 4 fix: the C emitted a stray debug string "dd"
+> (no newline) to stdout once per iteration — a leftover latent bug, now deleted.
 
 > [spec:foma:def:foma.iface-crossproduct-fn]
 > void iface_crossproduct(void)
@@ -266,13 +266,14 @@
 > [spec:foma:def:foma.iface-extract-number-fn]
 > int iface_extract_number(char *s)
 
-> [spec:foma:sem:foma.iface-extract-number-fn]
+> [spec:foma:sem:foma.iface-extract-number-fn+1]
 > Implemented in foma/iface.c. Scans s byte-by-byte from index 0 until it reaches either the
 > NUL terminator or a byte in '0'..'9' (each byte compared as unsigned char), then returns
-> atoi() of the suffix starting at that position.
-> Returns 0 when the string contains no digit (atoi of the empty suffix). A '-' sign is a
-> non-digit and is skipped over, so "-5" yields 5; conversion stops at the first non-digit
-> after the digits per atoi; overflow behavior is atoi's (undefined).
+> atoi() of the suffix starting at that position — or at an immediately preceding '-' (see fix).
+> Returns 0 when the string contains no digit (atoi of the empty suffix); conversion stops at the
+> first non-digit after the digits per atoi; overflow behavior is atoi's (undefined). Wave 4 fix:
+> the C scan skipped a leading '-' (a non-digit), so "abc-5" yielded 5; a '-' immediately before the
+> first digit is now included, so "abc-5" yields -5.
 
 > [spec:foma:def:foma.iface-extract-unambiguous-fn]
 > void iface_extract_unambiguous(void)
@@ -523,15 +524,15 @@
 > [spec:foma:def:foma.iface-print-defined-fn]
 > void iface_print_defined(void)
 
-> [spec:foma:sem:foma.iface-print-defined-fn]
+> [spec:foma:sem:foma.iface-print-defined-fn+1]
 > Implemented in foma/iface.c. If the global define list g_defines is NULL, prints "No defined
 > symbols.\n" (both loops below are then no-ops). Walks g_defines in list order: every entry
 > with a non-NULL name prints "<name>\t" followed by print_stats(entry->net) — the same
 > "<memsize> N states, N arcs, N paths.\n" line as `print stats` (see
 > foma.iface-print-stats-fn). Then walks the defined-functions list g_defines_f: every entry
-> with a non-NULL name prints "<fname>@<numargs>)\t" (format literally "%s@%i)\t", including
-> the stray closing paren) followed by the stored regex string and "\n". Read-only; nothing
-> is popped or modified.
+> with a non-NULL name prints "<fname>@<numargs>\t" (format "%s@%i\t") followed by the stored
+> regex string and "\n". Read-only; nothing is popped or modified. Wave 4 fix: the C format was
+> "%s@%i)\t" with a stray unmatched closing paren before the TAB — the ')' is now dropped.
 
 > [spec:foma:def:foma.iface-print-dot-fn]
 > void iface_print_dot(char *filename)
@@ -679,15 +680,17 @@
 > [spec:foma:def:foma.iface-random-pairs-fn]
 > void iface_random_pairs(int limit)
 
-> [spec:foma:sem:foma.iface-random-pairs-fn]
-> Implemented in foma/iface.c as iface_pairs_call(limit, 1): the same driver as iface_pairs
-> (see foma.iface-pairs-fn) — limit == -1 replaced by g_list_limit (default 100), temporary
+> [spec:foma:sem:foma.iface-random-pairs-fn+1]
+> Implemented in foma/iface.c. Resolves limit == -1 to g_list_random_limit (default 15), then calls
+> iface_pairs_call(limit, 1): the same driver as iface_pairs (see foma.iface-pairs-fn) — temporary
 > markers space "\001"/epsilon "\002"/separator "\003" installed on the cached apply handle —
 > except random = 1 makes each of the up-to-`limit` iterations call apply_random_words(ah)
 > (one random path per call) instead of sequential enumeration. Each result is split into
 > upper/lower and printed as "<upper>\t<lower>\n"; duplicates are possible and are not
 > deduplicated or counted (unlike iface_apply_random). Markers are then restored and the
-> enumerator reset.
+> enumerator reset. Wave 4 fix: the C passed limit straight through, so limit == -1 became
+> g_list_limit (default 100) inside iface_pairs_call — it now uses g_list_random_limit like the
+> other random commands.
 
 > [spec:foma:def:foma.iface-random-upper-fn]
 > void iface_random_upper(int limit)
@@ -824,13 +827,14 @@
 > [spec:foma:def:foma.iface-show-variable-fn]
 > void iface_show_variable(char *name)
 
-> [spec:foma:sem:foma.iface-show-variable-fn]
+> [spec:foma:sem:foma.iface-show-variable-fn+1]
 > Implemented in foma/iface.c. Finds the variable using the same 8-character strncmp prefix
-> match against global_vars as iface_set_variable (first match wins) and prints
-> "%s = ON\n" when *(int *)ptr == 1, else "%s = OFF\n". This int/ON-OFF rendering is applied
-> regardless of the variable's type (latent bug): med-limit/med-cutoff show ON only when the
-> value is exactly 1, and att-epsilon reinterprets the leading bytes of its char* pointer as
-> an int. If nothing matches, prints "*There is no global variable '%s'.\n".
+> match against global_vars as iface_set_variable (first match wins) and prints "%s = %s\n" with
+> the value formatted by the variable's declared type: FVAR_BOOL as "ON"/"OFF" (value == 1 ? ON :
+> OFF), FVAR_INT as the integer value, FVAR_STRING as the string. If nothing matches, prints
+> "*There is no global variable '%s'.\n". Wave 4 fix: the C printed ON/OFF from *(int *)ptr == 1
+> regardless of type — med-limit/med-cutoff showed ON only at value 1, and att-epsilon reinterpreted
+> the leading bytes of its char* pointer as an int. Now formatted per declared type.
 
 > [spec:foma:def:foma.iface-show-variables-fn]
 > void iface_show_variables(void)
@@ -1099,11 +1103,12 @@
 > [spec:foma:def:foma.iface-words-file-fn]
 > void iface_words_file(char *filename, int type)
 
-> [spec:foma:sem:foma.iface-words-file-fn]
-> Implemented in foma/iface.c. type selects the enumerator: 0 = apply_words (whole words /
-> pairs), 1 = apply_upper_words, 2 = apply_lower_words. The function pointer is a STATIC local
-> initialized once to apply_words and only overwritten when type is 1 or 2 — a later call with
-> type 0 silently reuses whatever a previous call installed (latent bug). Requires >= 1
+> [spec:foma:sem:foma.iface-words-file-fn+1]
+> Implemented in foma/iface.c. type selects the enumerator fresh on every call: 0 = apply_words
+> (whole words / pairs), 1 = apply_upper_words, 2 = apply_lower_words. Wave 4 fix: the C held the
+> function pointer in a STATIC local initialized once to apply_words and only overwritten for type 1
+> or 2, so a later type-0 call silently reused whatever a previous call installed — it is now a
+> per-call local. Requires >= 1
 > network on the stack. If top->fsm->pathcount == PATHCOUNT_CYCLIC (-1) prints "FSM is cyclic:
 > can't write all words to file.\n" and returns. Prints "Writing to %s.\n" then
 > fopen(filename, "w"); on NULL perror("Error opening file") and return. Fetches the cached
@@ -1411,15 +1416,18 @@
 > [spec:foma:def:foma.stack-turn-fn]
 > int stack_turn()
 
-> [spec:foma:sem:foma.stack-turn-fn]
-> Implemented in foma/stack.c. Intended to reverse the entire stack. Empty stack: prints
+> [spec:foma:sem:foma.stack-turn-fn+1]
+> Implemented in foma/stack.c. Reverses the entire stack in place. Empty stack: prints
 > "Stack is empty.\n" and returns 0. Exactly one entry: returns 1, no change. Otherwise it
-> splices the sentinel directly after the old bottom, points main_stack at the old top, and
-> reverses the ->next chain by following ->previous pointers down to the old bottom — but the
-> final previous-pointer fixup loop, `for (stack_ptr = main_stack; stack_ptr->number != -1;) {
-> (stack_ptr->next)->previous = stack_ptr; }`, never advances stack_ptr, so with >= 2 entries
-> the function LOOPS FOREVER (bug). It is dead code: nothing in the tree calls it — the
-> "turn stack" command goes through iface_turn, which calls stack_rotate.
+> reverses the order of the real entries so the former top becomes the new bottom
+> (main_stack) and the former bottom becomes the new top, relinking every ->next/->previous
+> pointer and leaving the sentinel at the tail; entries keep their own fsm/ah/amedh/number
+> (numbers are not renumbered). Returns 1. Wave 4 fix: the C code's final previous-pointer
+> fixup loop `for (stack_ptr = main_stack; stack_ptr->number != -1;) {
+> (stack_ptr->next)->previous = stack_ptr; }` never advanced stack_ptr, so with >= 2 entries
+> the function looped forever (dead code: the "turn stack" command goes through iface_turn,
+> which calls stack_rotate). The evident intent — a genuine terminating reversal — is
+> implemented.
 
 > [spec:foma:def:foma.union-quantifiers-fn]
 > struct fsm *union_quantifiers()

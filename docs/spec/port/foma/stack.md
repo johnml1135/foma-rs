@@ -159,20 +159,18 @@
 > [spec:foma:def:stack.stack-turn-fn]
 > int stack_turn ()
 
-> [spec:foma:sem:stack.stack-turn-fn]
-> Intended to reverse the order of the global network stack in place. If empty:
+> [spec:foma:sem:stack.stack-turn-fn+1]
+> Reverses the order of the real entries on the global network stack in place. If empty:
 > prints "Stack is empty.\n" to stdout and returns 0. If stack_size() == 1: returns 1,
-> no change. For size >= 2, as written: (1) let T = stack_find_top(); (2) splice the
-> sentinel behind the old head: old-head->next = T->next (the sentinel),
-> sentinel->previous = old head, and set main_stack = T; (3) walk from T setting each
-> entry's `next` to its old `previous`, advancing along those links, stopping at the
-> old head (whose previous is NULL) — this reverses the forward chain, with the old
-> head's `next` already pointing at the sentinel from step 2; (4) a final fix-up pass
-> `for (p = main_stack; p->number != -1;) { p->next->previous = p; }` is supposed to
-> restore `previous` links but never advances p, and since the new head is a real
-> entry (number != -1) it loops forever: in this source, stack_turn never returns for
-> stacks of 2+ entries (repeatedly writing new-second->previous = new head). The
-> evident intent is to advance p = p->next each iteration; even then the new head's
-> `previous` would be left stale (pointing at the new second entry, not NULL) and
-> entry `number` fields are not renumbered (they end up in descending order from the
-> head). On the unreachable normal path it returns 1.
+> no change. For size >= 2: reverse the sequence of real entries so the former top
+> becomes the new bottom (head/main_stack) and the former bottom becomes the new top
+> (the entry immediately before the sentinel), relinking every `next`/`previous`
+> pointer to match and leaving the sentinel at the tail (its `next` stays NULL, its
+> `previous` becomes the new top). Each entry travels with its own fsm, ah, amedh and
+> number — numbers are NOT renumbered, so from the head they now descend (new bottom
+> carries the former top's number, new top carries the former bottom's 0). Returns 1.
+> Wave 4 fix: the C code's final previous-link fix-up loop
+> `for (p = main_stack; p->number != -1;) { p->next->previous = p; }` never advanced p,
+> so for stacks of 2+ entries the function looped forever (dead code: the "turn stack"
+> command reaches iface_turn → stack_rotate, never this function). This implements the
+> evident intent — a genuine, terminating stack reversal.
