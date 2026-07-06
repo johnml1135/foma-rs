@@ -40,4 +40,5 @@ assertions (
     {id w4-lexcread, kind @complete, author "brendan@necessary.nu", at 2026-07-06T13:06:12.082426Z}
     {id w4-cli, kind @complete, author "brendan@necessary.nu", at 2026-07-06T13:50:29.107392Z}
     {id w4-publish, kind @complete, author "brendan@necessary.nu", at 2026-07-06T14:02:49.816047Z}
+    {id foma-mono-io, kind @complete, author "brendan@necessary.nu", at 2026-07-06T15:51:27.700318Z}
 )
