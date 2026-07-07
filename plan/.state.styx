@@ -45,4 +45,5 @@ assertions (
     {id w5-robustness, kind @complete, author "brendan@necessary.nu", at 2026-07-07T01:02:33.161891Z}
     {id w5-cli, kind @complete, author "brendan@necessary.nu", at 2026-07-07T01:19:24.858324Z}
     {id w5-degenerate, kind @complete, author "brendan@necessary.nu", at 2026-07-07T01:35:21.321192Z}
+    {id w5-cleanup, kind @complete, author "brendan@necessary.nu", at 2026-07-07T01:39:07.616293Z}
 )

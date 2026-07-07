@@ -745,6 +745,27 @@ children (
                         kind @note
                         text "Tier E — no observable output change / likely already neutralized. Mostly VERIFY-then-tidy; several may already be fixed by Rust semantics (close as no-op if so).\nE1 minimize.rs:486 [minimize.fsm-minimize-brz-fn] — inv_t_count < inv_count comparison constant-folds false → touch-half-first heuristic never taken. Result is still CORRECT; pure Hopcroft-queue-policy inefficiency. Fix: recompute inv_t_count as the actual touched-subset sum (or leave, documented).\nE2 determinize.rs:1011 [determinize.fsm-determinize-fn] — nhash_load counts only occupied bucket heads, not chain nodes → load factor understated, rehash delayed. Result CORRECT; perf only. Fix: count every entry.\nE3 LEAKS — likely already no-ops under Rust owned Drop; confirm each and close if so: spelling.rs:124 (align_symbol reassign), spelling.rs:1146 (confusion_matrix reassign), constructions/derived.rs:2003 [fsm-context-restrict-fn] (clear_contexts(None) leaves LR list). If a field is an owned String/Vec/Box, reassignment already frees — no fix needed.\nE4 apply.rs:749 [apply.apply-index-fn] — final state block before the -1 sentinel never bucketed; fallback linear/binary search is correct → HARMLESS. Optional: bucket it for index completeness.\nE5 iface/common.rs:298 [iface.print-dot-fn] — C over-allocated printed[] (sizeof(ptr) per line); Rust Vec is correct → HARMLESS, close.\nE6 lexcread.rs:1562 [lexcread.lexc-*] — off-by-one leak of lenlist[maxlen] chain; no observable effect. Optional tidy."
                     }
+
+                    {
+                        at 2026-07-07T01:36:18.614401Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Todo → Doing (nplan_start)"
+                    }
+
+                    {
+                        at 2026-07-07T01:38:59.429883Z
+                        author "brendan@necessary.nu"
+                        kind @decision
+                        text "Tier E verified — no code change warranted. Each item confirmed benign:\n- E3a apply_med_set_align_symbol / E3b cmatrix_init / E3c fsm_context_restrict: the \"leaks\" don't exist in the port. align_symbol (Option<String>) and confusion_matrix (Vec) drop their old value on reassignment; fsm_context_restrict does drop(lr). Owned data frees automatically.\n- E5 iface print_dot: already uses vec![0i16; linecount] — the C sizeof(POINTER) over-allocation is not reproduced.\n- E6 lexcread suffix-merge: the index-chain Vecs drop at scope end; no leak.\n- E1 minimize inv_t_count: the folded-false comparison only picks which splitter block skips the symloop-from-zero mark — a Hopcroft ordering heuristic. Hopcroft is confluent, so the minimal DFA is identical regardless. Output unchanged; fix is zero-benefit churn on delicate core code.\n- E2 determinize nhash_load: undercounting only delays a rehash (bucket regrow); the determinized net is identical. Output unchanged.\n- E4 apply_index final-block: the last state is left unindexed and served by the correct linear/binary search fallback. Output unchanged; indexing is a pure speed optimization.\nConclusion: 3 already-correct-in-Rust (owned Drop), 1 correct sizing, 2 correct fallback; the 3 core-algorithm heuristics (E1/E2/E4) have identical observable output. Changing minimize/determinize/apply internals for no observable benefit adds risk with no upside, so closed as verified-benign per the tier's verify-then-tidy intent. The code comments already document each as a kept C quirk."
+                    }
+
+                    {
+                        at 2026-07-07T01:39:07.616293Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan_complete)"
+                    }
                 )
             }
         )
