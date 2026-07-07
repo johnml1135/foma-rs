@@ -797,4 +797,50 @@ children (
             }
         )
     }
+
+    {
+        id wave-7-idiomatize
+        title "Wave 7: idiomatize string handling — replace C-string byte-buffer idioms with &str/String/char/iterators (bug-for-bug faithfulness dropped)"
+        children (
+            {
+                id w7-lexcread
+                title "Tier 1: lexcread tokenizer → &str/char/iterators. Delete mystrncpy/cstrlen/cstrdup/cstr/sym_eq/lexc_find_delim/lexc_deescape_string/to_cbuf/foma_reescape; fuse de-escape into tokenizer (0xff marker gone); feed nfst-lexc EntrySpec strings directly."
+                priority 0
+                log (
+                    {
+                        at 2026-07-07T14:58:48.037171Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Todo → Doing (nplan_start)"
+                    }
+
+                    {
+                        at 2026-07-07T15:15:53.755746Z
+                        author "brendan@necessary.nu"
+                        kind @note
+                        text "Done. Deleted the C-string suite (cstrlen/cstrdup/cstr/sym_eq, mystrncpy, lexc_find_delim, lexc_deescape_string, to_cbuf, foma_reescape) and the mchash prefilter. Tokenizer now walks &str via chars()/char_indices()/strip_prefix; the 0xff epsilon marker is gone — de-escape is fused into tokenization (@ZERO@ → literal \"0\", bare '0' → EPSILON, longest-first multichar via starts_with). All sigma-hash/lexicon/mc/find-lex-state helpers take &str. Key simplification: nfst-lexc already de-escapes %X and splits upper:lower pairs, so fsm_lexc_parse_string feeds EntrySpec strings straight into lexc_set_current_word(upper, lower: Option). Removed 4 C-only tests (find_delim/deescape/mystrncpy/malformed-utf8); migrated the rest to &str asserts — observable tokenization identical. 557 tests pass. Spec: lexc-find-delim/deescape/mystrncpy rules marked not-ported (folded into the tokenizer); tokenizer/set-current-word/add-mc bodies updated to &str."
+                    }
+
+                    {
+                        at 2026-07-07T15:16:06.706708Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan_complete)"
+                    }
+                )
+            }
+
+            {
+                id w7-utf8-io
+                title "Tier 2: utf8.rs std swaps (utf8strlen/ishexstr/streqrep/strip_newline/dequote_string); rewrite fsm_read_prolog parser (kill field! wall); FSM_NAME_LEN char-boundary truncation (fix codepoint splitting)."
+                priority 1
+            }
+
+            {
+                id w7-apply-runtime
+                title "Tier 3: apply/spelling runtime — ApplyHandle instring/outstring Vec<u8>→String; delete buf_strcpy/buf_memcpy/buf_sprintf/outstring_result/cstr/wtail; MED print_match via char_indices; sigma-trie stays byte-level on .as_bytes()."
+                priority 2
+            }
+        )
+    }
 )

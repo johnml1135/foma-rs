@@ -29,7 +29,6 @@ use crate::sigma::{
 use crate::structures::{fsm_create, fsm_empty_set};
 use crate::topsort::fsm_topsort;
 use crate::types::{DefinedNetworks, EPSILON, Fsm, FsmState, IDENTITY, Sigma, UNK, UNKNOWN};
-use crate::utf8::{utf8skip, utf8strlen};
 
 const SIGMA_HASH_TABLESIZE: usize = 3079;
 
@@ -159,8 +158,6 @@ struct LexcCompiler {
     cwordout: Vec<i32>,
     medcwordin: Vec<i32>,
     medcwordout: Vec<i32>,
-    /* C: static _Bool *mchash — calloc(256*256) two-byte-prefix filter */
-    mchash: Vec<bool>,
 
     /* C scalar file-statics */
     carity: i32,
@@ -193,7 +190,6 @@ impl LexcCompiler {
             cwordout: Vec::new(),
             medcwordin: Vec::new(),
             medcwordout: Vec::new(),
-            mchash: Vec::new(),
             carity: 0,
             lexc_statecount: 0,
             maxlen: 0,
@@ -214,38 +210,6 @@ fn vset(v: &mut Vec<i32>, idx: usize, val: i32) {
         v.resize(idx + 1, 0);
     }
     v[idx] = val;
-}
-
-/* ------------------------------------------------------------------ */
-/* C-string helpers over NUL-terminated byte buffers                   */
-/* ------------------------------------------------------------------ */
-
-/// strlen: byte offset of the first NUL in `buf` (buf.len() if none — the C
-/// callers always supply a NUL-terminated buffer).
-fn cstrlen(buf: &[u8]) -> usize {
-    buf.iter().position(|&b| b == 0).unwrap_or(buf.len())
-}
-
-/// strdup of the NUL-terminated content of `buf`.
-/// DEVIATION from C (symbols are stored as String; malformed UTF-8 — only
-/// reachable on the invalid-input infinite-loop path — is lossy-decoded).
-fn cstrdup(buf: &[u8]) -> String {
-    let n = cstrlen(buf);
-    String::from_utf8_lossy(&buf[..n]).into_owned()
-}
-
-/// The NUL-terminated content bytes of `buf` (up to the first NUL).
-fn cstr(buf: &[u8]) -> &[u8] {
-    &buf[..cstrlen(buf)]
-}
-
-/// strcmp(stored_symbol, buf) == 0 — compares a stored String against the
-/// NUL-terminated content of `buf`.
-fn sym_eq(sym: &Option<String>, buf: &[u8]) -> bool {
-    match sym {
-        Some(s) => s.as_bytes() == cstr(buf),
-        None => false,
-    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -274,11 +238,11 @@ fn lexc_suffix_hash(lx: &LexcCompiler, offset: i32) -> u32 {
 
 // [spec:foma:def:lexcread.lexc-symbol-hash-fn]
 // [spec:foma:sem:lexcread.lexc-symbol-hash-fn]
-fn lexc_symbol_hash(s: &[u8]) -> u32 {
+fn lexc_symbol_hash(s: &str) -> u32 {
     let mut hash: u32 = 5381;
     /* while ((c = *s++)) — signed char sign-extension into int c, per the
     conventions (bytes >= 0x80 add a wrapped large value) */
-    for &b in cstr(s) {
+    for &b in s.as_bytes() {
         let c = b as i8 as i32;
         hash = ((hash << 5).wrapping_add(hash)).wrapping_add(c as u32);
     }
@@ -287,19 +251,19 @@ fn lexc_symbol_hash(s: &[u8]) -> u32 {
 
 // [spec:foma:def:lexcread.lexc-find-sigma-hash-fn]
 // [spec:foma:sem:lexcread.lexc-find-sigma-hash-fn]
-fn lexc_find_sigma_hash(lx: &LexcCompiler, symbol: &[u8]) -> i32 {
+fn lexc_find_sigma_hash(lx: &LexcCompiler, symbol: &str) -> i32 {
     let ptr = lexc_symbol_hash(symbol) as usize;
 
     if lx.hashtable[ptr].symbol.is_none() {
         return -1;
     }
     /* for (h = head; h != NULL; h = h->next) */
-    if sym_eq(&lx.hashtable[ptr].symbol, symbol) {
+    if lx.hashtable[ptr].symbol.as_deref() == Some(symbol) {
         return lx.hashtable[ptr].sigma_number;
     }
     let mut h = lx.hashtable[ptr].next.as_deref();
     while let Some(node) = h {
-        if sym_eq(&node.symbol, symbol) {
+        if node.symbol.as_deref() == Some(symbol) {
             return node.sigma_number;
         }
         h = node.next.as_deref();
@@ -309,7 +273,7 @@ fn lexc_find_sigma_hash(lx: &LexcCompiler, symbol: &[u8]) -> i32 {
 
 // [spec:foma:def:lexcread.lexc-add-sigma-hash-fn]
 // [spec:foma:sem:lexcread.lexc-add-sigma-hash-fn]
-fn lexc_add_sigma_hash(lx: &mut LexcCompiler, symbol: &[u8], number: i32) {
+fn lexc_add_sigma_hash(lx: &mut LexcCompiler, symbol: &str, number: i32) {
     let ptr = lexc_symbol_hash(symbol) as usize;
 
     if lx.net_has_unknown == 1 {
@@ -317,7 +281,7 @@ fn lexc_add_sigma_hash(lx: &mut LexcCompiler, symbol: &[u8], number: i32) {
     }
 
     if lx.hashtable[ptr].symbol.is_none() {
-        lx.hashtable[ptr].symbol = Some(cstrdup(symbol));
+        lx.hashtable[ptr].symbol = Some(symbol.to_string());
         lx.hashtable[ptr].sigma_number = number;
         return;
     }
@@ -327,7 +291,7 @@ fn lexc_add_sigma_hash(lx: &mut LexcCompiler, symbol: &[u8], number: i32) {
         tail_next = &mut tail_next.as_mut().unwrap().next;
     }
     *tail_next = Some(Box::new(LexcHashtable {
-        symbol: Some(cstrdup(symbol)),
+        symbol: Some(symbol.to_string()),
         sigma_number: number,
         next: None,
     }));
@@ -360,7 +324,6 @@ fn lexc_init(lx: &mut LexcCompiler) {
 
     lx.maxlen = 0;
 
-    lx.mchash = vec![false; 256 * 256];
     /* Does not free structures from a previous run (that is lexc_cleanup's
     job); calling lexc_init twice without an intervening cleanup leaks the old
     tables — reproduced by not clearing the arenas here (they are cleared in
@@ -458,8 +421,7 @@ fn lexc_add_network(lx: &mut LexcCompiler) {
                 break;
             }
             let sym = s.symbol.as_deref().unwrap_or("");
-            let symbytes = sym.as_bytes();
-            let signumber = lexc_find_sigma_hash(lx, symbytes);
+            let signumber = lexc_find_sigma_hash(lx, sym);
             if signumber == -1 {
                 /* Add to existing lexc sigma */
                 let signumber = sigma_add(sym, lx.lexsigma.as_deref_mut().unwrap());
@@ -468,7 +430,7 @@ fn lexc_add_network(lx: &mut LexcCompiler) {
                 } else {
                     signumber
                 };
-                lexc_add_sigma_hash(lx, symbytes, signumber);
+                lexc_add_sigma_hash(lx, sym, signumber);
                 sigreplace[s.number as usize] = signumber;
             } else {
                 /* We already have it, add to conversion table */
@@ -640,12 +602,12 @@ fn lexc_set_network(lx: &mut LexcCompiler, net: Box<Fsm>) {
 // [spec:foma:sem:lexcread.lexc-set-current-lexicon-fn]
 // [spec:foma:def:lexc.lexc-set-current-lexicon-fn]
 // [spec:foma:sem:lexc.lexc-set-current-lexicon-fn]
-fn lexc_set_current_lexicon(lx: &mut LexcCompiler, name: &[u8], which: i32) {
+fn lexc_set_current_lexicon(lx: &mut LexcCompiler, name: &str, which: i32) {
     /* Sets the global lexicon variable to point to a new lexicon */
     /* which == 0 indicates source, which == 1 indicates target */
     let mut l = lx.lexstates;
     while let Some(lidx) = l {
-        if sym_eq(&lx.lexstates_arena[lidx].name, name) {
+        if lx.lexstates_arena[lidx].name.as_deref() == Some(name) {
             if which == 0 {
                 lx.lexstates_arena[lidx].has_outgoing = 1;
                 lx.clexicon = Some(lidx);
@@ -658,7 +620,7 @@ fn lexc_set_current_lexicon(lx: &mut LexcCompiler, name: &[u8], which: i32) {
     }
     let lidx = lx.lexstates_arena.len();
     lx.lexstates_arena.push(Lexstates {
-        name: Some(cstrdup(name)),
+        name: Some(name.to_string()),
         /* state assigned below after lexc_add_state */
         state: 0,
         next: lx.lexstates,
@@ -692,55 +654,6 @@ fn lexc_set_current_lexicon(lx: &mut LexcCompiler, name: &[u8], which: i32) {
     }
 }
 
-// [spec:foma:def:lexcread.lexc-find-delim-fn]
-// [spec:foma:sem:lexcread.lexc-find-delim-fn]
-fn lexc_find_delim(name: &[u8], delimiter: u8, escape: u8) -> Option<usize> {
-    let mut i = 0usize;
-    while name[i] != 0 {
-        if name[i] == escape && name[i + 1] != 0 {
-            i += 1; /* body i++ */
-            i += 1; /* for-loop i++ on continue */
-            continue;
-        }
-        if name[i] == delimiter {
-            return Some(i);
-        }
-        i += 1; /* for-loop i++ */
-    }
-    None
-}
-
-// [spec:foma:def:lexcread.lexc-deescape-string-fn]
-// [spec:foma:sem:lexcread.lexc-deescape-string-fn]
-fn lexc_deescape_string(name: &mut [u8], escape: u8, mode: i32) {
-    let mut i = 0usize;
-    let mut j = 0usize;
-    while name[i] != 0 {
-        name[j] = name[i];
-        if name[i] == escape {
-            name[j] = name[i + 1];
-            j += 1;
-            i += 1; /* body i++ */
-            i += 1; /* for-loop i++ */
-            continue;
-        } else if mode == 1 && name[i] == b'0' {
-            /* Marks alignment EPSILON */
-            name[j] = 0xff;
-            j += 1;
-            i += 1; /* for-loop i++ */
-            continue;
-        } else if name[i] != escape && name[i] != b'0' {
-            j += 1;
-            i += 1; /* for-loop i++ */
-            continue;
-        }
-        /* char == '0' && mode != 1: no branch taken, j not advanced (the '0'
-        is silently deleted) */
-        i += 1; /* for-loop i++ */
-    }
-    name[j] = 0;
-}
-
 /* Read a string and fill cwordin, cwordout arrays */
 /* with the sigma numbers of the current word, -1 terminated */
 
@@ -748,28 +661,21 @@ fn lexc_deescape_string(name: &mut [u8], escape: u8, mode: i32) {
 // [spec:foma:sem:lexcread.lexc-set-current-word-fn]
 // [spec:foma:def:lexc.lexc-set-current-word-fn]
 // [spec:foma:sem:lexc.lexc-set-current-word-fn]
-fn lexc_set_current_word(lx: &mut LexcCompiler, name: &mut [u8]) {
-    lx.carity = 1;
-    /* instring = name; outstring = lexc_find_delim(name, ':', '%') */
-    let outstring = lexc_find_delim(name, b':', b'%');
-    let mut out_off = 0usize;
-    if let Some(colon) = outstring {
-        name[colon] = 0;
-        out_off = colon + 1;
-        lexc_deescape_string(&mut name[out_off..], b'%', 1);
-        lx.carity = 2;
-    }
-    lexc_deescape_string(&mut name[..], b'%', 1);
+fn lexc_set_current_word(lx: &mut LexcCompiler, upper: &str, lower: Option<&str>) {
+    /* nfst-lexc already de-escaped %X and split upper:lower pairs, so the two
+    sides arrive as plain &str. The tokenizer decodes the remaining conventions
+    (@ZERO@ -> the literal "0" symbol, a bare '0' -> alignment EPSILON). */
+    lx.carity = if lower.is_some() { 2 } else { 1 };
 
-    /* lexc_string_to_tokens(instring, cwordin) — cwordin moved out so it can be
+    /* lexc_string_to_tokens(upper, cwordin) — cwordin moved out so it can be
     a &mut param disjoint from &mut lx, then moved back */
     let mut intarr = std::mem::take(&mut lx.cwordin);
-    lexc_string_to_tokens(lx, &name[..], &mut intarr);
+    lexc_string_to_tokens(lx, upper, &mut intarr);
     lx.cwordin = intarr;
 
-    if lx.carity == 2 {
+    if let Some(lower) = lower {
         let mut intarr = std::mem::take(&mut lx.cwordout);
-        lexc_string_to_tokens(lx, &name[out_off..], &mut intarr);
+        lexc_string_to_tokens(lx, lower, &mut intarr);
         lx.cwordout = intarr;
         if G_LEXC_ALIGN.with(|v| v.get()) != 0 {
             lexc_medpad(lx);
@@ -985,96 +891,68 @@ fn lexc_pad(lx: &mut LexcCompiler) {
 
 // [spec:foma:def:lexcread.lexc-string-to-tokens-fn]
 // [spec:foma:sem:lexcread.lexc-string-to-tokens-fn+1]
-fn lexc_string_to_tokens(lx: &mut LexcCompiler, string: &[u8], intarr: &mut Vec<i32>) {
-    let len = cstrlen(string) as i32;
-    let mut tmpstring = [0u8; 5];
-    let mut i = 0i32;
+fn lexc_string_to_tokens(lx: &mut LexcCompiler, string: &str, intarr: &mut Vec<i32>) {
     let mut pos = 0usize;
-    while i < len {
-        /* EPSILON for alignment is marked as 0xff */
-        if string[i as usize] == 0xff {
-            /* Wave 4: intarr is a growable Vec (the C cwordin/cwordout were
-            fixed 1000-int arrays that overflowed on 1000+ tokens); vset grows
-            it instead of the OOB write. */
-            vset(intarr, pos, EPSILON);
+    let mut rest = string;
+    while let Some(c) = rest.chars().next() {
+        // nfst-lexc encodes an escaped literal zero (%0) as the marker @ZERO@,
+        // which denotes the literal "0" symbol.
+        if let Some(r) = rest.strip_prefix("@ZERO@") {
+            vset(intarr, pos, intern_symbol(lx, "0"));
             pos += 1;
-            i += 1;
+            rest = r;
             continue;
         }
-
-        let mut multi = 0;
-        let mut mcs_idx: Option<usize> = None;
-        let b0 = string[i as usize] as usize;
-        let b1 = if ((i + 1) as usize) < string.len() {
-            string[(i + 1) as usize] as usize
-        } else {
-            0
-        };
-        let mchashval = b0 * 256 + b1;
-        if i < len - 1 && lx.mchash[mchashval] {
-            let mut mcs = lx.mc;
-            while let Some(m) = mcs {
-                let sym = lx.mc_arena[m].symbol.as_deref().unwrap().as_bytes();
-                if string[i as usize..].starts_with(sym) {
-                    multi = 1;
-                    mcs_idx = Some(m);
-                    break;
-                }
-                mcs = lx.mc_arena[m].next;
-            }
-        }
-
-        if multi == 1 {
-            let m = mcs_idx.unwrap();
-            let n = lx.mc_arena[m].sigma_number as i32;
-            vset(intarr, pos, n);
+        // A bare '0' is the alignment EPSILON.
+        if c == '0' {
+            vset(intarr, pos, EPSILON);
             pos += 1;
-            i += lx.mc_arena[m].symbol.as_deref().unwrap().len() as i32;
-        } else {
-            /* Wave 4: utf8skip returns -1 on a malformed lead byte, making the
-            C's skip+1 == 0 so i never advanced (infinite loop, then buffer
-            overflow). Force forward progress by consuming the byte as a single
-            symbol. */
-            let skip = utf8skip(&string[i as usize..]);
-            let skip = if skip < 0 { 0 } else { skip };
-            mystrncpy(&mut tmpstring, &string[i as usize..], skip + 1);
-            let signumber = lexc_find_sigma_hash(lx, &tmpstring);
-            if signumber != -1 {
-                vset(intarr, pos, signumber);
-                pos += 1;
-                i = i + skip + 1;
-            } else {
-                mystrncpy(&mut tmpstring, &string[i as usize..], skip + 1);
-                let signumber =
-                    sigma_add(&cstrdup(&tmpstring), lx.lexsigma.as_deref_mut().unwrap());
-                lexc_add_sigma_hash(lx, &tmpstring, signumber);
-                vset(intarr, pos, signumber);
-                pos += 1;
-                i = i + skip + 1;
-            }
+            rest = &rest[c.len_utf8()..];
+            continue;
         }
+        // The longest matching multichar symbol (the chain is kept longest-first,
+        // so the first prefix hit is the longest).
+        if let Some(m) = first_mc_prefix(lx, rest) {
+            vset(intarr, pos, lx.mc_arena[m].sigma_number as i32);
+            pos += 1;
+            let mclen = lx.mc_arena[m].symbol.as_deref().unwrap().len();
+            rest = &rest[mclen..];
+            continue;
+        }
+        // A single character.
+        let sym = &rest[..c.len_utf8()];
+        let n = intern_symbol(lx, sym);
+        vset(intarr, pos, n);
+        pos += 1;
+        rest = &rest[c.len_utf8()..];
     }
     vset(intarr, pos, -1);
 }
 
-// [spec:foma:def:lexcread.mystrncpy-fn]
-// [spec:foma:sem:lexcread.mystrncpy-fn+1]
-fn mystrncpy(dest: &mut [u8], src: &[u8], len: i32) {
-    let len = len.max(0) as usize;
-    let mut i = 0usize;
-    // Copy up to len bytes, stopping at NUL — but never read past src or write
-    // past dest. A truncated multi-byte UTF-8 tail at end-of-input can make len
-    // (skip+1) exceed the bytes actually available; C read past the end.
-    while i < len && i < src.len() && i < dest.len() {
-        dest[i] = src[i];
-        if src[i] == 0 {
-            return;
+/// Look `sym` up in the lex sigma hash, adding it (and registering the number)
+/// on a miss; returns the sigma number. Mirrors the C find -> sigma_add ->
+/// add_sigma_hash order exactly, so symbol numbering is preserved.
+fn intern_symbol(lx: &mut LexcCompiler, sym: &str) -> i32 {
+    let n = lexc_find_sigma_hash(lx, sym);
+    if n != -1 {
+        return n;
+    }
+    let n = sigma_add(sym, lx.lexsigma.as_deref_mut().unwrap());
+    lexc_add_sigma_hash(lx, sym, n);
+    n
+}
+
+/// The first (hence longest, since the chain is length-sorted) multichar symbol
+/// that is a prefix of `rest`.
+fn first_mc_prefix(lx: &LexcCompiler, rest: &str) -> Option<usize> {
+    let mut m = lx.mc;
+    while let Some(i) = m {
+        if rest.starts_with(lx.mc_arena[i].symbol.as_deref().unwrap()) {
+            return Some(i);
         }
-        i += 1;
+        m = lx.mc_arena[i].next;
     }
-    if i < dest.len() {
-        dest[i] = 0;
-    }
+    None
 }
 
 /* Add MC to front of chain */
@@ -1084,15 +962,17 @@ fn mystrncpy(dest: &mut [u8], src: &[u8], len: i32) {
 // [spec:foma:sem:lexcread.lexc-add-mc-fn]
 // [spec:foma:def:lexc.lexc-add-mc-fn]
 // [spec:foma:sem:lexc.lexc-add-mc-fn]
-fn lexc_add_mc(lx: &mut LexcCompiler, symbol: &mut [u8]) {
-    lexc_deescape_string(symbol, b'%', 0);
-    if lexc_find_mc(lx, symbol) == 0 {
-        let len = utf8strlen(symbol);
+fn lexc_add_mc(lx: &mut LexcCompiler, raw: &str) {
+    // nfst-lexc already de-escaped %X; decode the remaining conventions the way
+    // the C mode-0 de-escape did: @ZERO@ -> the literal "0"; a bare '0' dropped.
+    let symbol = normalize_mc_symbol(raw);
+    if lexc_find_mc(lx, &symbol) == 0 {
+        let len = symbol.chars().count();
         let mut mcprev: Option<usize> = None;
         /* for (mcs = mc; mcs != NULL && utf8strlen(mcs->symbol) > len; ...) */
         let mut mcs = lx.mc;
         while let Some(m) = mcs {
-            if !(utf8strlen(lx.mc_arena[m].symbol.as_deref().unwrap().as_bytes()) > len) {
+            if !(lx.mc_arena[m].symbol.as_deref().unwrap().chars().count() > len) {
                 break;
             }
             mcprev = Some(m);
@@ -1100,7 +980,7 @@ fn lexc_add_mc(lx: &mut LexcCompiler, symbol: &mut [u8]) {
         }
         let mcnew = lx.mc_arena.len();
         lx.mc_arena.push(MulticharSymbols {
-            symbol: Some(cstrdup(symbol)),
+            symbol: Some(symbol.clone()),
             sigma_number: 0, /* set below */
             next: mcs,
         });
@@ -1111,26 +991,39 @@ fn lexc_add_mc(lx: &mut LexcCompiler, symbol: &mut [u8]) {
             lx.mc_arena[p].next = Some(mcnew);
         }
 
-        let s = sigma_add(&cstrdup(symbol), lx.lexsigma.as_deref_mut().unwrap());
-        /* mchashval = (unsigned char)symbol[0]*256 + (unsigned char)symbol[1]
-        — raw second byte (NUL for a 1-byte symbol) */
-        let b0 = symbol[0] as usize;
-        let b1 = symbol.get(1).copied().unwrap_or(0) as usize;
-        let mchashval = b0 * 256 + b1;
-        lexc_add_sigma_hash(lx, symbol, s);
-        lx.mchash[mchashval] = true;
+        let s = sigma_add(&symbol, lx.lexsigma.as_deref_mut().unwrap());
+        lexc_add_sigma_hash(lx, &symbol, s);
         lx.mc_arena[mcnew].sigma_number = s as i16;
     }
+}
+
+/// Decode nfst-lexc's already-de-escaped multichar symbol: @ZERO@ -> "0"; a bare
+/// '0' is dropped (the C mode-0 de-escape silently deleted an unescaped '0').
+fn normalize_mc_symbol(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut rest = raw;
+    while let Some(c) = rest.chars().next() {
+        if let Some(r) = rest.strip_prefix("@ZERO@") {
+            out.push('0');
+            rest = r;
+        } else if c == '0' {
+            rest = &rest[1..];
+        } else {
+            out.push(c);
+            rest = &rest[c.len_utf8()..];
+        }
+    }
+    out
 }
 
 // [spec:foma:def:lexcread.lexc-find-mc-fn]
 // [spec:foma:sem:lexcread.lexc-find-mc-fn]
 // [spec:foma:def:lexc.lexc-find-mc-fn]
 // [spec:foma:sem:lexc.lexc-find-mc-fn]
-fn lexc_find_mc(lx: &LexcCompiler, symbol: &[u8]) -> i32 {
+fn lexc_find_mc(lx: &LexcCompiler, symbol: &str) -> i32 {
     let mut mcs = lx.mc;
     while let Some(m) = mcs {
-        if sym_eq(&lx.mc_arena[m].symbol, symbol) {
+        if lx.mc_arena[m].symbol.as_deref() == Some(symbol) {
             return 1;
         }
         mcs = lx.mc_arena[m].next;
@@ -1145,10 +1038,10 @@ fn lexc_find_mc(lx: &LexcCompiler, symbol: &[u8]) -> i32 {
 // Returns the lexicon's state (a private `struct states` — exposed here as its
 // arena index, since this is dead API with no callers in the C tree).
 #[allow(dead_code)] // dead API (no C callers); kept + test-pinned per the port
-fn lexc_find_lex_state(lx: &LexcCompiler, name: &[u8]) -> Option<usize> {
+fn lexc_find_lex_state(lx: &LexcCompiler, name: &str) -> Option<usize> {
     let mut l = lx.lexstates;
     while let Some(lidx) = l {
-        if sym_eq(&lx.lexstates_arena[lidx].name, name) {
+        if lx.lexstates_arena[lidx].name.as_deref() == Some(name) {
             return Some(lx.lexstates_arena[lidx].state);
         }
         l = lx.lexstates_arena[lidx].next;
@@ -1700,8 +1593,6 @@ fn lexc_to_fsm(lx: &mut LexcCompiler) -> Box<Fsm> {
 // [spec:foma:def:lexcread.lexc-cleanup-fn]
 // [spec:foma:sem:lexcread.lexc-cleanup-fn]
 fn lexc_cleanup(lx: &mut LexcCompiler) {
-    /* free(mchash) */
-    lx.mchash = Vec::new();
     /* free every hashtable chain node + symbol, then the bucket array */
     lx.hashtable = Vec::new();
     /* free the mc list (symbols + nodes) */
@@ -1725,31 +1616,11 @@ fn lexc_cleanup(lx: &mut LexcCompiler) {
 // [spec:foma:def:lexc.lexc-trim-fn]
 // [spec:foma:sem:lexc.lexc-trim-fn]
 // Implemented in foma/lexc.l (not lexcread.c); ported here per the concern.
-pub fn lexc_trim(s: &mut [u8]) {
-    /* Remove trailing ; and = and space and initial space */
-    /* Phase 1 is bounded at index 0 (the C loop had no lower bound and
-    underran the buffer on an empty / all-trimmable string). */
-    let mut i: isize = cstrlen(s) as isize - 1;
-    while i >= 0
-        && (s[i as usize] == b';'
-            || s[i as usize] == b'='
-            || s[i as usize] == b' '
-            || s[i as usize] == b'\t')
-    {
-        s[i as usize] = 0;
-        i -= 1;
-    }
-    let mut i = 0usize;
-    while s[i] == b' ' || s[i] == b'\t' || s[i] == b'\n' {
-        i += 1;
-    }
-    let mut j = 0usize;
-    while s[i] != 0 {
-        s[j] = s[i];
-        i += 1;
-        j += 1;
-    }
-    s[j] = s[i];
+pub fn lexc_trim(s: &str) -> &str {
+    /* Remove trailing ; = space tab, then leading space tab newline. The C's
+    asymmetric character sets are preserved (this is not str::trim). */
+    s.trim_end_matches([';', '=', ' ', '\t'])
+        .trim_start_matches([' ', '\t', '\n'])
 }
 
 /* ------------------------------------------------------------------ */
@@ -1759,51 +1630,6 @@ pub fn lexc_trim(s: &mut [u8]) {
 /* lexc.l: #define SOURCE_LEXICON 0 / #define TARGET_LEXICON 1 */
 const SOURCE_LEXICON: i32 = 0;
 const TARGET_LEXICON: i32 = 1;
-
-/// Build a NUL-terminated byte buffer from a symbol string, exactly as the C
-/// lexer's `lexctext` reaches the lexcread API (used for lexicon names and
-/// continuations, which the C passes through `lexc_trim` — already trimmed by
-/// nfst-lexc — and NOT through `%` de-escaping).
-fn to_cbuf(s: &str) -> Vec<u8> {
-    let mut v = s.as_bytes().to_vec();
-    v.push(0);
-    v
-}
-
-/// Re-escape a de-escaped nfst-lexc identifier back into the `%`-escaped form
-/// the C lexer's `lexctext` would have carried into `lexc_set_current_word` /
-/// `lexc_add_mc` (both of which run `lexc_deescape_string` themselves).
-///
-/// nfst-lexc already stripped `%X`→`X`, and encoded `%0` (foma's escaped
-/// literal zero) as the marker `@ZERO@`. Its NAME_CH set excludes `< % ! ; : "`
-/// and whitespace, so any of those in the stored string can only have come from
-/// an escape — but of those only `%` and `:` are meaningful to the two API
-/// functions (`:` is the pair delimiter, `%` the escape char), so only they
-/// need re-escaping. `@ZERO@` is mapped back to `%0`. Trailing NUL slack is
-/// appended so the in-place `lexc_deescape_string` never reads past the end.
-fn foma_reescape(s: &str) -> Vec<u8> {
-    let mut out = Vec::with_capacity(s.len() + 4);
-    let mut rest = s;
-    while !rest.is_empty() {
-        if let Some(r) = rest.strip_prefix("@ZERO@") {
-            out.extend_from_slice(b"%0");
-            rest = r;
-            continue;
-        }
-        let c = rest.chars().next().unwrap();
-        match c {
-            '%' => out.extend_from_slice(b"%%"),
-            ':' => out.extend_from_slice(b"%:"),
-            _ => {
-                let mut buf = [0u8; 4];
-                out.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
-            }
-        }
-        rest = &rest[c.len_utf8()..];
-    }
-    out.extend_from_slice(&[0u8; 4]);
-    out
-}
 
 // [spec:foma:def:fomalib.fsm-lexc-parse-string-fn]
 // [spec:foma:sem:fomalib.fsm-lexc-parse-string-fn]
@@ -1845,8 +1671,7 @@ pub fn fsm_lexc_parse_string(string: &str, verbose: i32) -> Option<Box<Fsm>> {
 
             /* <MCS>{NONRESERVED}+ { lexc_add_mc(lexctext); } */
             for m in &f.multichars {
-                let mut sym = foma_reescape(&m.value.0);
-                lexc_add_mc(&mut lx, &mut sym);
+                lexc_add_mc(&mut lx, &m.value.0);
             }
 
             /* <DEFREGEX>[\073] { if (my_yyparse(...,g_defines,...)==0)
@@ -1870,8 +1695,7 @@ pub fn fsm_lexc_parse_string(string: &str, verbose: i32) -> Option<Box<Fsm>> {
                 print!("{}...", lex.value.name);
                 let _ = std::io::stdout().flush();
                 lexentries = 0;
-                let name = to_cbuf(&lex.value.name);
-                lexc_set_current_lexicon(&mut lx, &name, SOURCE_LEXICON);
+                lexc_set_current_lexicon(&mut lx, &lex.value.name, SOURCE_LEXICON);
 
                 for entry in &lex.value.entries {
                     /* The gloss ("info" string) is discarded by the C lexer
@@ -1882,19 +1706,12 @@ pub fn fsm_lexc_parse_string(string: &str, verbose: i32) -> Option<Box<Fsm>> {
                             by the preceding lexc_clear_current_word. */
                         }
                         nfst_lexc::EntrySpec::String(s) => {
-                            let mut w = foma_reescape(s);
-                            lexc_set_current_word(&mut lx, &mut w);
+                            lexc_set_current_word(&mut lx, s, None);
                         }
                         nfst_lexc::EntrySpec::Pair { upper, lower } => {
-                            /* Rebuild the raw `upper:lower` token the C matched:
-                            re-escape each side, join with a bare `:` so
-                            lexc_set_current_word splits it back. */
-                            let mut w = foma_reescape(upper);
-                            let padlen = w.len() - 4;
-                            w.truncate(padlen);
-                            w.push(b':');
-                            w.extend_from_slice(&foma_reescape(lower));
-                            lexc_set_current_word(&mut lx, &mut w);
+                            /* nfst-lexc already split the unescaped `:`; feed the
+                            two de-escaped sides straight in. */
+                            lexc_set_current_word(&mut lx, upper, Some(lower));
                         }
                         nfst_lexc::EntrySpec::Regex(xre) => {
                             /* <REGEX>[\076] { if (my_yyparse(...)==0)
@@ -1910,8 +1727,7 @@ pub fn fsm_lexc_parse_string(string: &str, verbose: i32) -> Option<Box<Fsm>> {
                     /* The continuation token drives the target lexicon + word:
                     lexc_trim; lexc_set_current_lexicon(TARGET); lexc_add_word();
                     lexc_clear_current_word(); lexentries++. */
-                    let cont = to_cbuf(&entry.value.continuation);
-                    lexc_set_current_lexicon(&mut lx, &cont, TARGET_LEXICON);
+                    lexc_set_current_lexicon(&mut lx, &entry.value.continuation, TARGET_LEXICON);
                     lexc_add_word(&mut lx);
                     lexc_clear_current_word(&mut lx);
                     lexentries += 1;
@@ -1981,22 +1797,6 @@ mod tests {
 
     /* ---- helpers -------------------------------------------------------- */
 
-    /// NUL-terminated buffer for a lexicon/continuation name (no de-escape).
-    fn cbuf(s: &str) -> Vec<u8> {
-        let mut v = s.as_bytes().to_vec();
-        v.push(0);
-        v
-    }
-
-    /// NUL-terminated word buffer with trailing slack so the in-place
-    /// de-escapers (which may read name[i+1] past a trailing escape) stay in
-    /// bounds.
-    fn wbuf(s: &str) -> Vec<u8> {
-        let mut v = s.as_bytes().to_vec();
-        v.extend_from_slice(&[0u8; 8]);
-        v
-    }
-
     /// Compile a lexc source string (verbose off is irrelevant — g_verbose is a
     /// separate global; the parse string ignores its own `verbose` arg).
     fn compile(src: &str) -> Box<Fsm> {
@@ -2054,9 +1854,8 @@ mod tests {
 
     /* Drive one word entry Root -> "#" through the public trie API. */
     fn add_word_entry(lx: &mut LexcCompiler, word: &str) {
-        let mut buf = wbuf(word);
-        lexc_set_current_word(lx, &mut buf);
-        lexc_set_current_lexicon(lx, &cbuf("#"), TARGET_LEXICON);
+        lexc_set_current_word(lx, word, None);
+        lexc_set_current_lexicon(lx, "#", TARGET_LEXICON);
         lexc_add_word(lx);
         lexc_clear_current_word(lx);
     }
@@ -2220,13 +2019,13 @@ mod tests {
     // [spec:foma:sem:lexcread.lexc-symbol-hash-fn/test]
     #[test]
     fn symbol_hash_signed_char() {
-        assert_eq!(lexc_symbol_hash(b"a\0"), 2167);
-        assert_eq!(lexc_symbol_hash(b"cat\0"), 686);
-        assert_eq!(lexc_symbol_hash(b"+Noun\0"), 211);
-        assert_eq!(lexc_symbol_hash(b"\0"), 2302);
+        assert_eq!(lexc_symbol_hash("a"), 2167);
+        assert_eq!(lexc_symbol_hash("cat"), 686);
+        assert_eq!(lexc_symbol_hash("+Noun"), 211);
+        assert_eq!(lexc_symbol_hash(""), 2302);
         // High byte (0xC3 0xA9 = "é"): signed-char extension gives 1551, not
         // the unsigned-byte value 1018 — pins the sign-extension quirk.
-        assert_eq!(lexc_symbol_hash(&[0xC3, 0xA9, 0]), 1551);
+        assert_eq!(lexc_symbol_hash("é"), 1551);
     }
 
     // PJW-style suffix fold over cwordin|cwordout<<8, no table modulus.
@@ -2251,95 +2050,32 @@ mod tests {
     fn sigma_hash_add_find_shadow() {
         let mut lx = LexcCompiler::new_empty();
         lexc_init(&mut lx);
-        assert_eq!(lexc_find_sigma_hash(&lx, b"a\0"), -1);
-        lexc_add_sigma_hash(&mut lx, b"a\0", 7);
-        lexc_add_sigma_hash(&mut lx, b"a\0", 99); // shadow appended to tail
-        let bucket = lexc_symbol_hash(b"a\0") as usize;
+        assert_eq!(lexc_find_sigma_hash(&lx, "a"), -1);
+        lexc_add_sigma_hash(&mut lx, "a", 7);
+        lexc_add_sigma_hash(&mut lx, "a", 99); // shadow appended to tail
+        let bucket = lexc_symbol_hash("a") as usize;
         assert_eq!(lx.hashtable[bucket].symbol.as_deref(), Some("a"));
         assert_eq!(lx.hashtable[bucket].sigma_number, 7);
         assert!(lx.hashtable[bucket].next.is_some());
-        assert_eq!(lexc_find_sigma_hash(&lx, b"a\0"), 7); // head wins
-        assert_eq!(lexc_find_sigma_hash(&lx, b"zzz\0"), -1);
+        assert_eq!(lexc_find_sigma_hash(&lx, "a"), 7); // head wins
+        assert_eq!(lexc_find_sigma_hash(&lx, "zzz"), -1);
     }
 
     /* ---- direct API: string helpers ------------------------------------- */
 
-    // First unescaped delimiter; escape protects the next byte; a lone
-    // trailing escape does not skip.
-    // [spec:foma:sem:lexcread.lexc-find-delim-fn/test]
-    #[test]
-    fn find_delim_cases() {
-        assert_eq!(lexc_find_delim(b"a:b\0", b':', b'%'), Some(1));
-        assert_eq!(lexc_find_delim(b"a%:b\0\0", b':', b'%'), None);
-        assert_eq!(lexc_find_delim(b"ab\0", b':', b'%'), None);
-        assert_eq!(lexc_find_delim(b"a%\0", b':', b'%'), None);
-    }
-
-    // De-escape quirks: escaped char kept literally; mode-1 '0' -> 0xff marker;
-    // mode-0 unescaped '0' silently deleted; trailing escape truncates.
-    // [spec:foma:sem:lexcread.lexc-deescape-string-fn/test]
-    #[test]
-    fn deescape_string_quirks() {
-        let mut a = wbuf("a%:b");
-        lexc_deescape_string(&mut a, b'%', 1);
-        assert_eq!(cstr(&a), b"a:b");
-
-        let mut b = wbuf("a0b");
-        lexc_deescape_string(&mut b, b'%', 1); // mode 1: 0 -> 0xff
-        assert_eq!(cstr(&b), &[b'a', 0xff, b'b']);
-
-        let mut c = wbuf("a0b");
-        lexc_deescape_string(&mut c, b'%', 0); // mode 0: 0 deleted
-        assert_eq!(cstr(&c), b"ab");
-
-        let mut d = wbuf("ab%"); // trailing escape swallows the NUL
-        lexc_deescape_string(&mut d, b'%', 1);
-        assert_eq!(cstr(&d), b"ab");
-    }
-
-    // Always NUL-terminates; stops early on a copied NUL; writes len+1 bytes.
-    // A len longer than src (a truncated multi-byte UTF-8 tail) or reaching the
-    // end of dest must clamp to the buffer instead of reading/writing past it.
-    // [spec:foma:sem:lexcread.mystrncpy-fn+1/test]
-    #[test]
-    fn mystrncpy_terminates() {
-        let mut dst = [0xAAu8; 8];
-        mystrncpy(&mut dst, b"cat", 3);
-        assert_eq!(&dst[..4], b"cat\0");
-        let mut dst2 = [0xAAu8; 8];
-        mystrncpy(&mut dst2, b"hi\0zz", 5);
-        assert_eq!(&dst2[..3], b"hi\0");
-        // len exceeds src (truncated 2-byte sequence, only 1 byte available):
-        // copy what exists and NUL-terminate, no out-of-bounds read.
-        let mut dst3 = [0xAAu8; 8];
-        mystrncpy(&mut dst3, &[0xC3], 2);
-        assert_eq!(&dst3[..2], &[0xC3, 0]);
-        // len reaches the end of dest: terminate only where there is room, no
-        // out-of-bounds write.
-        let mut dst4 = [0xAAu8; 2];
-        mystrncpy(&mut dst4, b"xy", 2);
-        assert_eq!(&dst4[..2], b"xy");
-    }
-
     // lexc_trim: strip trailing ;/=/space/tab, then leading space/tab/nl;
-    // empty / all-trimmable input must not underrun (bounded at 0).
+    // empty / all-trimmable input must not underrun.
     // [spec:foma:sem:lexc.lexc-trim-fn/test]
     #[test]
     fn trim_cases() {
-        let mut a = wbuf("  cat ;;  ");
-        lexc_trim(&mut a);
-        assert_eq!(cstr(&a), b"cat");
-        let mut e = wbuf("");
-        lexc_trim(&mut e); // no underrun
-        assert_eq!(cstr(&e), b"");
-        let mut f = wbuf("===");
-        lexc_trim(&mut f);
-        assert_eq!(cstr(&f), b"");
+        assert_eq!(lexc_trim("  cat ;;  "), "cat");
+        assert_eq!(lexc_trim(""), "");
+        assert_eq!(lexc_trim("==="), "");
     }
 
     /* ---- direct API: tokenization --------------------------------------- */
 
-    // Multichar longest-first, %-marked epsilon (0xff), and fresh-sigma
+    // Multichar longest-first, a bare '0' -> alignment EPSILON, and fresh-sigma
     // numbering (first regular symbol = 3).
     // [spec:foma:sem:lexcread.lexc-string-to-tokens-fn+1/test]
     // [spec:foma:sem:lexcread.lexc-find-mc-fn/test]
@@ -2349,41 +2085,26 @@ mod tests {
         let mut lx = LexcCompiler::new_empty();
         lexc_init(&mut lx);
         // register +Pl (len 3) then +PlPoss (len 7): mc list -> longest first
-        lexc_add_mc(&mut lx, &mut wbuf("+Pl")); // sigma 3
-        lexc_add_mc(&mut lx, &mut wbuf("+PlPoss")); // sigma 4
-        assert_eq!(lexc_find_mc(&lx, b"+Pl\0"), 1);
-        assert_eq!(lexc_find_mc(&lx, b"+Nope\0"), 0);
+        lexc_add_mc(&mut lx, "+Pl"); // sigma 3
+        lexc_add_mc(&mut lx, "+PlPoss"); // sigma 4
+        assert_eq!(lexc_find_mc(&lx, "+Pl"), 1);
+        assert_eq!(lexc_find_mc(&lx, "+Nope"), 0);
         // mc list head is the longest symbol
         let head = lx.mc.unwrap();
         assert_eq!(lx.mc_arena[head].symbol.as_deref(), Some("+PlPoss"));
 
         let mut arr: Vec<i32> = Vec::new();
-        lexc_string_to_tokens(&mut lx, b"+PlPoss", &mut arr);
+        lexc_string_to_tokens(&mut lx, "+PlPoss", &mut arr);
         assert_eq!(&arr[..2], &[4, -1]); // longest match wins
 
         let mut arr2: Vec<i32> = Vec::new();
-        lexc_string_to_tokens(&mut lx, b"+Plx", &mut arr2); // +Pl then new 'x'=5
+        lexc_string_to_tokens(&mut lx, "+Plx", &mut arr2); // +Pl then new 'x'=5
         assert_eq!(&arr2[..3], &[3, 5, -1]);
 
-        // 0xff marker -> EPSILON(0)
+        // a bare '0' between two symbols -> EPSILON(0)
         let mut arr3: Vec<i32> = Vec::new();
-        lexc_string_to_tokens(&mut lx, &[b'a', 0xff, b'a'], &mut arr3);
+        lexc_string_to_tokens(&mut lx, "a0a", &mut arr3);
         assert_eq!(arr3[1], EPSILON);
-    }
-
-    // Malformed UTF-8 (leading 0x80): utf8skip == -1 made skip+1 == 0 so i never
-    // advanced in C (infinite loop, then fixed-buffer overflow). Wave 4 forces
-    // one byte of progress, so the lone byte becomes a single-byte symbol and
-    // tokenization terminates cleanly.
-    // [spec:foma:sem:lexcread.lexc-string-to-tokens-fn+1/test]
-    #[test]
-    fn string_to_tokens_malformed_utf8_advances() {
-        let mut lx = LexcCompiler::new_empty();
-        lexc_init(&mut lx);
-        let mut arr: Vec<i32> = Vec::new();
-        lexc_string_to_tokens(&mut lx, &[0x80u8, 0], &mut arr);
-        // one fresh symbol (sigma 3) then the -1 terminator; no panic/hang
-        assert_eq!(arr, vec![3, -1]);
     }
 
     /* ---- direct API: alignment ------------------------------------------ */
@@ -2436,14 +2157,14 @@ mod tests {
     fn set_current_word_pair_and_identity() {
         let mut lx = LexcCompiler::new_empty();
         lexc_init(&mut lx);
-        lexc_set_current_word(&mut lx, &mut wbuf("cat:dog"));
+        lexc_set_current_word(&mut lx, "cat", Some("dog"));
         assert_eq!(lx.carity, 2);
         assert_eq!(&lx.cwordin[..4], &[3, 4, 5, -1]); // c a t
         assert_eq!(&lx.cwordout[..4], &[6, 7, 8, -1]); // d o g
         lexc_clear_current_word(&mut lx);
         assert_eq!(&lx.cwordin[..2], &[EPSILON, -1]);
         assert_eq!(lx.current_entry, WORD_ENTRY);
-        lexc_set_current_word(&mut lx, &mut wbuf("cat"));
+        lexc_set_current_word(&mut lx, "cat", None);
         assert_eq!(lx.carity, 1);
         assert_eq!(&lx.cwordin[..4], &[3, 4, 5, -1]);
         assert_eq!(&lx.cwordout[..4], &[3, 4, 5, -1]); // identity copy
@@ -2465,25 +2186,24 @@ mod tests {
         let mut lx = LexcCompiler::new_empty();
         lexc_init(&mut lx);
         assert_eq!(lx.hashtable.len(), SIGMA_HASH_TABLESIZE);
-        assert_eq!(lx.mchash.len(), 256 * 256);
         assert!(lx.lexsigma.is_some());
         assert_eq!(lx.lexc_statecount, 0);
         assert_eq!(lx.hashtable[0].sigma_number, -1);
-        assert!(lexc_find_lex_state(&lx, b"Root\0").is_none());
-        lexc_set_current_lexicon(&mut lx, &cbuf("Root"), SOURCE_LEXICON);
+        assert!(lexc_find_lex_state(&lx, "Root").is_none());
+        lexc_set_current_lexicon(&mut lx, "Root", SOURCE_LEXICON);
         // one lexstate + one state registered; clexicon set, has_outgoing=1
         assert_eq!(lx.lexstates_arena.len(), 1);
         assert_eq!(lx.lexc_statecount, 1);
         let l = lx.clexicon.unwrap();
         assert_eq!(lx.lexstates_arena[l].has_outgoing, 1);
         assert_eq!(lx.lexstates_arena[l].name.as_deref(), Some("Root"));
-        assert!(lexc_find_lex_state(&lx, b"Root\0").is_some());
+        assert!(lexc_find_lex_state(&lx, "Root").is_some());
         // target reuse of a fresh name creates a second lexicon
-        lexc_set_current_lexicon(&mut lx, &cbuf("N"), TARGET_LEXICON);
+        lexc_set_current_lexicon(&mut lx, "N", TARGET_LEXICON);
         assert_eq!(lx.lexstates_arena.len(), 2);
         assert_eq!(lx.lexstates_arena[lx.ctarget.unwrap()].has_outgoing, 0);
         // re-selecting Root as source reuses the same lexstate (no growth)
-        lexc_set_current_lexicon(&mut lx, &cbuf("Root"), SOURCE_LEXICON);
+        lexc_set_current_lexicon(&mut lx, "Root", SOURCE_LEXICON);
         assert_eq!(lx.lexstates_arena.len(), 2);
     }
 
@@ -2495,7 +2215,7 @@ mod tests {
     fn add_word_prefix_sharing() {
         let mut lx = LexcCompiler::new_empty();
         lexc_init(&mut lx);
-        lexc_set_current_lexicon(&mut lx, &cbuf("Root"), SOURCE_LEXICON);
+        lexc_set_current_lexicon(&mut lx, "Root", SOURCE_LEXICON);
         add_word_entry(&mut lx, "cat");
         let after_cat = lx.state_arena.len();
         add_word_entry(&mut lx, "car"); // shares "ca" prefix -> no new state
@@ -2553,7 +2273,7 @@ mod tests {
     fn merge_states_shared_suffix() {
         let mut lx = LexcCompiler::new_empty();
         lexc_init(&mut lx);
-        lexc_set_current_lexicon(&mut lx, &cbuf("Root"), SOURCE_LEXICON);
+        lexc_set_current_lexicon(&mut lx, "Root", SOURCE_LEXICON);
         add_word_entry(&mut lx, "cat");
         add_word_entry(&mut lx, "bat");
         lexc_merge_states(&mut lx);
@@ -2667,7 +2387,7 @@ mod tests {
     fn cleanup_empties_arenas() {
         let mut lx = LexcCompiler::new_empty();
         lexc_init(&mut lx);
-        lexc_set_current_lexicon(&mut lx, &cbuf("Root"), SOURCE_LEXICON);
+        lexc_set_current_lexicon(&mut lx, "Root", SOURCE_LEXICON);
         add_word_entry(&mut lx, "cat");
         assert!(!lx.state_arena.is_empty());
         lexc_cleanup(&mut lx);
@@ -2677,7 +2397,6 @@ mod tests {
         assert!(lx.lexstates_arena.is_empty());
         assert!(lx.mc_arena.is_empty());
         assert!(lx.hashtable.is_empty());
-        assert!(lx.mchash.is_empty());
         assert_eq!(lx.statelist, None);
     }
 

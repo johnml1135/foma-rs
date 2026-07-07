@@ -4,7 +4,7 @@
 > void lexc_add_mc(char *symbol)
 
 > [spec:foma:sem:lexcread.lexc-add-mc-fn]
-> Registers one Multichar_Symbols entry. First de-escapes `symbol` in place via `[spec:foma:sem:lexcread.lexc-deescape-string-fn]` with escape '%' and mode 0 (resolves '%'-escapes; note mode 0 silently deletes unescaped '0' bytes). If `[spec:foma:sem:lexcread.lexc-find-mc-fn]` says the symbol is already registered, does nothing else. Otherwise mallocs a `multichar_symbols` node with symbol=strdup(symbol) and inserts it into the file-static `mc` list, which is kept sorted in strictly decreasing utf8strlen order: walk with a prev pointer while existing symbols are longer, insert before the first node whose length is <= the new length (head is replaced when the list is empty or insertion lands at the front). Longest-first order makes the tokenizer's first linear-scan hit the longest match.
+> Registers one Multichar_Symbols entry. First normalizes the already-de-escaped nfst-lexc symbol via `normalize_mc_symbol` (@ZERO@ → the literal "0"; a bare '0' dropped, matching the old mode-0 de-escape quirk). If `[spec:foma:sem:lexcread.lexc-find-mc-fn]` says the symbol is already registered, does nothing else. Otherwise pushes a `multichar_symbols` node with symbol = the normalized String and inserts it into the file-static `mc` list, kept sorted in strictly decreasing char-length order: walk with a prev pointer while existing symbols are longer, insert before the first node whose length is <= the new length (head is replaced when the list is empty or insertion lands at the front). Longest-first order makes the tokenizer's first prefix scan hit the longest match.
 > Then s = sigma_add(symbol, lexsigma) (`[spec:foma:sem:sigma.sigma-add-fn]`), the symbol->s mapping is added to the sigma hashtable via `[spec:foma:sem:lexcread.lexc-add-sigma-hash-fn]`, the 65536-entry `mchash` boolean filter is set at index (unsigned byte0)*256 + (unsigned byte1) of the symbol (for a 1-byte symbol byte1 is the NUL terminator; such symbols are still found via the ordinary per-character sigma lookup), and s is stored in the node's `short int sigma_number`.
 
 > [spec:foma:def:lexcread.lexc-add-network-fn]
@@ -60,6 +60,7 @@
 > void lexc_deescape_string(char *name, char escape, int mode)
 
 > [spec:foma:sem:lexcread.lexc-deescape-string-fn]
+> Not ported to Rust (folded into `[spec:foma:sem:lexcread.lexc-string-to-tokens-fn]` and `normalize_mc_symbol`). nfst-lexc already resolves '%'-escapes and encodes an escaped literal zero (%0) as the marker `@ZERO@`, so the Rust port has no separate de-escape pass; it decodes the two residual conventions inline while tokenizing (`@ZERO@` → the literal "0" symbol; a bare '0' → alignment EPSILON; for multichar symbols a bare '0' is dropped, per the old mode-0 quirk). The C behaviour was:
 > In-place unescaping of `name` with read cursor i and write cursor j. Each iteration first copies name[i] to name[j], then: if name[i]==escape, overwrite name[j] with name[i+1] (the escaped character kept literally, whatever it is — including escape itself or '0'), j++, and skip the escaped character; else if mode==1 and the character is '0', write byte 0xff at name[j] (the internal marker for an alignment EPSILON) and j++; else if the character is neither escape nor '0', j++ (plain copy). Finally writes name[j]='\0'.
 > Literal consequences: with mode==0 an unescaped '0' matches no branch, so j does not advance and the '0' is silently deleted (used for multichar symbols, where 0 means epsilon); a trailing escape at end of string copies the terminating NUL as the "escaped" character, truncating the result there.
 
@@ -74,6 +75,7 @@
 > char *lexc_find_delim(char *name, char delimiter, char escape)
 
 > [spec:foma:sem:lexcread.lexc-find-delim-fn]
+> Not ported to Rust: nfst-lexc already splits an entry's `upper:lower` at the unescaped ':' (an escaped `%:` stays a literal ':' inside a single string), so there is nothing to find — `[spec:foma:sem:lexcread.lexc-set-current-word-fn]` receives the two sides pre-split. The C behaviour was:
 > Returns a pointer to the first unescaped occurrence of `delimiter` in NUL-terminated `name`, or NULL if none. Byte scan: when the current byte equals `escape` and the following byte is not NUL, skip both (an escape protects any following byte, including another escape or the delimiter); a lone escape as the final byte does not skip. Used to split entry words at ':' with '%' escaping.
 
 > [spec:foma:def:lexcread.lexc-find-lex-state-fn]
@@ -157,8 +159,7 @@
 > void lexc_set_current_word(char *name)
 
 > [spec:foma:sem:lexcread.lexc-set-current-word-fn]
-> Parses one entry's word part `name` (mutated in place) into the token buffers cwordin/cwordout. Set carity=1. Locate an unescaped ':' via `[spec:foma:sem:lexcread.lexc-find-delim-fn]`(name, ':', '%'); if found, split in place (the ':' byte becomes NUL): the prefix is the upper/input string, the suffix the lower/output string; de-escape the lower string with `[spec:foma:sem:lexcread.lexc-deescape-string-fn]`('%', mode 1) and set carity=2. De-escape the upper string the same way (mode 1: '%'-escapes resolved; unescaped '0' becomes the 0xff epsilon marker).
-> Tokenize the upper string into cwordin via `[spec:foma:sem:lexcread.lexc-string-to-tokens-fn]`. If carity==2: tokenize the lower string into cwordout, then align — `[spec:foma:sem:lexcread.lexc-medpad-fn]` when the g_lexc_align global is set, else `[spec:foma:sem:lexcread.lexc-pad-fn]`. If carity==1: copy cwordin into cwordout up to and including the -1 terminator (identity mapping). Finally set current_entry = WORD_ENTRY.
+> Parses one entry's word into the token buffers cwordin/cwordout. nfst-lexc already split an unescaped `upper:lower` pair and resolved '%'-escapes, so this receives `upper: &str` and `lower: Option<&str>` directly — there is no in-place ':' split or de-escape pass. carity = 2 when a lower side is present, else 1. Tokenize `upper` into cwordin via `[spec:foma:sem:lexcread.lexc-string-to-tokens-fn]` (which decodes the residual conventions: @ZERO@ → the literal "0", a bare '0' → EPSILON). If carity==2: tokenize `lower` into cwordout, then align — `[spec:foma:sem:lexcread.lexc-medpad-fn]` when the g_lexc_align global is set, else `[spec:foma:sem:lexcread.lexc-pad-fn]`. If carity==1: copy cwordin into cwordout up to and including the -1 terminator (identity mapping). Finally set current_entry = WORD_ENTRY.
 
 > [spec:foma:def:lexcread.lexc-set-network-fn]
 > void lexc_set_network(struct fsm *net)
@@ -170,11 +171,12 @@
 > void lexc_string_to_tokens(char *string, int *intarr)
 
 > [spec:foma:sem:lexcread.lexc-string-to-tokens-fn+1]
-> Tokenizes UTF-8 `string` into a -1-terminated array of sigma numbers written to intarr, extending lexsigma with unseen symbols. len = strlen(string); scan byte offset i from 0 while i < len:
-> - Byte 0xff (the alignment-epsilon marker produced by `[spec:foma:sem:lexcread.lexc-deescape-string-fn]` mode 1 for unescaped '0') emits EPSILON (0) and advances 1 byte.
-> - Multichar attempt: if at least two bytes remain (i < len-1) and the mchash filter bit at (unsigned byte i)*256 + (unsigned byte i+1) is set, linearly scan the mc list (sorted decreasing by UTF-8 length, so the longest symbol wins) for the first whose symbol is a byte prefix of string+i (strncmp over the symbol's strlen); on a hit, emit its sigma_number and advance by the symbol's byte length.
-> - Otherwise consume one UTF-8 character: skip = utf8skip(string+i) continuation bytes (`[spec:foma:sem:utf8.utf8skip-fn]`); copy skip+1 bytes into a 5-byte local buffer via `[spec:foma:sem:lexcread.mystrncpy-fn]`; look it up with `[spec:foma:sem:lexcread.lexc-find-sigma-hash-fn]`; on a miss, sigma_add it to lexsigma and register the number via `[spec:foma:sem:lexcread.lexc-add-sigma-hash-fn]`. Emit the number and advance skip+1 bytes.
-> Intarr is a growable Vec (cwordin/cwordout/medcwordin/medcwordout are Vecs, grown on write). The C wrote into fixed 1000/2000-int arrays, so an entry side of 1000+ tokens overflowed and corrupted adjacent memory (latent bug). Malformed UTF-8 (utf8skip == -1) made skip+1 == 0 so the copy yielded an empty string and i never advanced — an infinite loop that then overflowed the buffer (latent bug); the port clamps skip to 0 when utf8skip returns -1, consuming the offending byte as a single-byte symbol so tokenization makes progress and terminates.
+> Tokenizes a `&str` into a -1-terminated array of sigma numbers written to intarr, extending lexsigma with unseen symbols. Walk the string by Unicode scalar with a `rest` cursor:
+> - A leading `@ZERO@` marker (nfst-lexc's encoding of an escaped literal zero, %0) emits the sigma number of the literal "0" symbol and advances past the marker.
+> - A bare '0' emits the alignment EPSILON (0) and advances one byte.
+> - Multichar attempt: the first symbol in the mc list (kept sorted decreasing by length, so the longest wins) that is a str prefix of `rest` emits its sigma_number and advances by the symbol's byte length.
+> - Otherwise the single leading character `rest[..c.len_utf8()]` is interned: looked up with `[spec:foma:sem:lexcread.lexc-find-sigma-hash-fn]`; on a miss, sigma_add'd to lexsigma and registered via `[spec:foma:sem:lexcread.lexc-add-sigma-hash-fn]`. Emit the number and advance one character.
+> Emit -1 at the end. intarr is a growable Vec (the C wrote fixed 1000/2000-int arrays that overflowed on an entry side of 1000+ tokens — a latent bug). Tokenizing over `&str` removes the C's byte-buffer machinery — the two-byte mchash prefilter, the fixed 5-byte copy buffer, its strncpy clone (`[spec:foma:sem:lexcread.mystrncpy-fn]`), and the manual utf8skip advance — and with it the C's malformed-UTF-8 infinite loop, since a `&str` is always valid UTF-8 and `chars()` cannot stall.
 
 > [spec:foma:def:lexcread.lexc-suffix-hash-fn]
 > static unsigned int lexc_suffix_hash(int offset)
@@ -224,8 +226,9 @@
 > [spec:foma:def:lexcread.mystrncpy-fn]
 > char *mystrncpy(char *dest, char *src, int len)
 
-> [spec:foma:sem:lexcread.mystrncpy-fn+1]
-> Copies up to `len` bytes from src to dest; if a NUL byte is copied it returns immediately (dest terminated there). Otherwise writes dest[len] = '\0' — i.e. writes len+1 bytes in total. Unlike strncpy it always NUL-terminates and never pads; returns dest. The copy never reads past src or writes past dest: a truncated multi-byte UTF-8 tail at end-of-input can make len (skip+1) exceed the bytes actually available, and C read past the source buffer; here the loop stops at the shorter of len, src.len(), dest.len() and NUL-terminates in place when there is room.
+> [spec:foma:sem:lexcread.mystrncpy-fn]
+> Not ported to Rust: this strncpy clone existed only to copy one UTF-8 character into a fixed 5-byte buffer inside the byte-oriented tokenizer. The `&str` tokenizer (`[spec:foma:sem:lexcread.lexc-string-to-tokens-fn]`) slices the character directly with `rest[..c.len_utf8()]`, so no copy — and no fixed buffer — is needed. The C behaviour was:
+> Copies up to `len` bytes from src to dest; if a NUL byte is copied it returns immediately (dest terminated there). Otherwise writes dest[len] = '\0' — i.e. writes len+1 bytes in total. Unlike strncpy it always NUL-terminates and never pads; returns dest.
 
 > [spec:foma:def:lexcread.statelist]
 > struct statelist {

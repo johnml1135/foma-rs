@@ -47,4 +47,5 @@ assertions (
     {id w5-degenerate, kind @complete, author "brendan@necessary.nu", at 2026-07-07T01:35:21.321192Z}
     {id w5-cleanup, kind @complete, author "brendan@necessary.nu", at 2026-07-07T01:39:07.616293Z}
     {id wave-6-harden, kind @complete, author "brendan@necessary.nu", at 2026-07-07T14:36:45.091671Z}
+    {id w7-lexcread, kind @complete, author "brendan@necessary.nu", at 2026-07-07T15:16:06.706708Z}
 )
