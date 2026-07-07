@@ -3,7 +3,7 @@
 > [spec:foma:def:flookup.app-print-fn]
 > void app_print(char *result)
 
-> [spec:foma:sem:flookup.app-print-fn]
+> [spec:foma:sem:flookup.app-print-fn+1]
 > Emits one lookup result — or the no-result marker when result == NULL — for the current
 > global input `line`.
 > stdin mode (mode_server == 0): if echo is on (default; disabled by -x), print the input
@@ -11,8 +11,8 @@
 > result is NULL. Output goes to stdout (fully buffered; flushing is the caller's job).
 > Server mode: instead of printing, append the same content to the UDP reply buffer
 > serverstring (calloc'd UDP_MAX+1 = 65536 bytes): line + separator when echoing, then
-> result + "\n", or "?+\n" for a NULL result — note the server-mode failure marker is
-> "?+", the reverse of stdin mode's "+?" (latent inconsistency; reproduce literally).
+> result + "\n", or "+?\n" for a NULL result — the same failure marker as stdin mode. The C
+> source emitted "?+" in server mode (the reverse), an inconsistency between the two paths.
 > Each append is strncat(serverstring + udpsize, src, UDP_MAX - udpsize), after which
 > udpsize is advanced by the full strlen(src) even when strncat truncated; once the
 > buffer fills, udpsize can exceed UDP_MAX so later length arguments go negative and are
@@ -73,7 +73,7 @@
 > [spec:foma:def:flookup.main-fn]
 > int main(int argc, char *argv[])
 
-> [spec:foma:sem:flookup.main-fn]
+> [spec:foma:sem:flookup.main-fn+1]
 > flookup applies words from stdin (or from UDP datagrams in server mode) to one or more
 > nets read from a foma binary file and writes results to stdout. On Windows, Winsock is
 > initialized first (WSAStartup 2.2; failure → "WSAStartup failed" to stderr, return 1),
@@ -89,9 +89,10 @@
 > echo the input string. -I <arg> arc indexing: arg "f" → index only flag-containing
 > states; arg containing both 'k' and 'K' → memory limit 1024*atoi(arg); both 'm' and 'M'
 > → 1024*1024*atoi(arg); else if arg starts with a digit → index states with >=
-> atoi(arg) arcs. Latent bug: the advertised "-I 4k" / "-I 4M" spellings never match
-> because the code requires both letter cases present in the same arg ("4kK" would
-> match); "4k" falls through to the digit branch and sets an arc-count cutoff of 4.
+> atoi(arg) arcs. The k/m branches match when the arg contains 'k'/'K' (resp. 'm'/'M'), so
+> "-I 4k"/"-I 4M" set a memory limit as advertised. The C source required BOTH letter cases
+> present in the same arg, so "-I 4k" fell through to the digit branch and set an arc-count
+> cutoff of 4 (the k/m suffix was silently ignored).
 > 'H' is in the optstring but has no case, so it falls to default — usage to stderr,
 > exit(EXIT_FAILURE) — like any unknown option; a missing file operand (optind == argc)
 > does the same.

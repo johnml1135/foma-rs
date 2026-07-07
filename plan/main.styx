@@ -689,6 +689,20 @@ children (
                         kind @note
                         text "Tier B — CLI/UX papercuts on valid input.\nB1 iface/stack_ops.rs:129 [iface.iface-turn-fn] — \"turn stack\" calls stack_rotate (swap top/bottom only), NOT stack_turn (reverse whole stack); contradicts help \"turns stack upside down\". Fix: call stack_turn(). (Verify this wasn't already covered by the stack_turn +1 — that bump fixed the reversal impl; this is the wiring.)\nB2 iface/variables.rs:163 [iface.iface-set-variable-fn / iface.iface-show-variable-fn] — variable name match is strncmp over 8 bytes → any name sharing the first 8 chars collides (e.g. \"hopcroft-XYZ\" hits \"hopcroft-min\"). Fix: full strcmp.\nB3 flookup.rs:340 + cgflookup.rs:287 [flookup.main-fn / cgflookup.main-fn] — \"-I 4k\"/\"-I 4M\" never reach the k/M branches; atoi parses 4 and the suffix is dropped. Fix: parse k/K/m/M suffix (one root fix, both binaries).\nB4 cgflookup.rs:318 [cgflookup.main-fn] — \"-x\" appears in the usage/getopt string but has no case handler → prints usage and exits FAILURE. Fix: implement -x (match flookup) or drop from usage.\nB5 flookup.rs:248 [flookup.app-print-fn] — server-mode no-match prints \"?+\" vs stdin-mode \"+?\". Fix: emit \"+?\" consistently."
                     }
+
+                    {
+                        at 2026-07-07T01:04:17.852994Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Todo → Doing (nplan_start)"
+                    }
+
+                    {
+                        at 2026-07-07T01:19:24.858324Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan_complete)"
+                    }
                 )
             }
 

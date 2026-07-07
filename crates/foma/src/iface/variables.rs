@@ -156,24 +156,12 @@ pub fn iface_stack_check(size: i32) -> i32 {
     1
 }
 
-// C strncmp(a, b, 8): compares at most 8 bytes as unsigned char, stopping early
-// when a shared NUL is reached; == 0 iff the first 8 bytes (or up to a common
-// NUL) match. Unannotated plumbing for the variable-name lookup (the 8-char
-// prefix match is the documented latent bug in iface_{set,show}_variable).
-fn strncmp8(a: &str, b: &str) -> i32 {
-    let ab = a.as_bytes();
-    let bb = b.as_bytes();
-    for i in 0..8 {
-        let ca = ab.get(i).copied().unwrap_or(0);
-        let cb = bb.get(i).copied().unwrap_or(0);
-        if ca != cb {
-            return ca as i32 - cb as i32;
-        }
-        if ca == 0 {
-            return 0;
-        }
-    }
-    0
+// Full variable-name comparison: returns 0 iff the names are equal. Plumbing for
+// the variable-name lookup in iface_{set,show}_variable. C used strncmp(a, b, 8),
+// comparing only the first 8 bytes, so any name sharing an 8-char prefix with a
+// real variable collided (e.g. "hopcroft-XYZ" matched "hopcroft-min").
+fn namecmp(a: &str, b: &str) -> i32 {
+    if a == b { 0 } else { 1 }
 }
 
 // C strtol(value, &endptr, 10) semantics used by iface_set_variable's FVAR_INT
@@ -250,12 +238,12 @@ pub fn iface_show_variables() {
 }
 
 // [spec:foma:def:iface.iface-show-variable-fn]
-// [spec:foma:sem:iface.iface-show-variable-fn+1]
+// [spec:foma:sem:iface.iface-show-variable-fn+2]
 // [spec:foma:def:foma.iface-show-variable-fn]
-// [spec:foma:sem:foma.iface-show-variable-fn+1]
+// [spec:foma:sem:foma.iface-show-variable-fn+2]
 pub fn iface_show_variable(name: &str) {
     for gv in global_vars() {
-        if strncmp8(name, gv.name) == 0 {
+        if namecmp(name, gv.name) == 0 {
             // Wave 4 fix: the C printed ON/OFF from `*(int*)ptr == 1` for EVERY
             // type (INT variables only showed ON at value 1; STRING reinterpreted
             // the char* bytes as int). Print by declared type instead: BOOL as
@@ -286,12 +274,12 @@ pub fn iface_show_variable(name: &str) {
 }
 
 // [spec:foma:def:iface.iface-set-variable-fn]
-// [spec:foma:sem:iface.iface-set-variable-fn]
+// [spec:foma:sem:iface.iface-set-variable-fn+1]
 // [spec:foma:def:foma.iface-set-variable-fn]
-// [spec:foma:sem:foma.iface-set-variable-fn]
+// [spec:foma:sem:foma.iface-set-variable-fn+1]
 pub fn iface_set_variable(name: &str, value: &str) {
     for gv in global_vars() {
-        if strncmp8(name, gv.name) == 0 {
+        if namecmp(name, gv.name) == 0 {
             if gv.r#type == FVAR_BOOL {
                 let j: i32;
                 if value == "ON" || value == "1" {

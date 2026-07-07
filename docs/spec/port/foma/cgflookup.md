@@ -61,23 +61,24 @@
 > [spec:foma:def:cgflookup.main-fn]
 > int main(int argc, char *argv[])
 
-> [spec:foma:sem:cgflookup.main-fn]
+> [spec:foma:sem:cgflookup.main-fn+1]
 > Like `[spec:foma:sem:flookup.main-fn]` but stdin-only (no UDP server mode, no Windows
 > socket setup) and with CG cohort output. stdout is set to full buffering over a static
 > 2048-byte buffer (setvbuf _IOFBF).
 > Options (getopt string "abhHiI:qs:uw:vx"): -a alternates mode; -b unbuffered output
 > (flush after every word); -h print usage + help, exit 0; -i apply down (applyer =
 > apply_down, direction = DIR_DOWN); -q don't sort arcs; -I <arg> arc indexing parsed
-> exactly as in flookup, including the latent bug that "4k"/"4M" fall through to the
-> digit branch because both letter cases ('k' and 'K', or 'm' and 'M') must be present;
-> -s <sep> sets separator (default "\t"; note it is never used — there is no echo mode);
-> -u sets mark_uppercase and calls setlocale(LC_CTYPE, "") (on failure prints "Check
+> exactly as in flookup, so "4k"/"4M" set a memory limit (the C source required both letter
+> cases, 'k' and 'K' or 'm' and 'M', in the same arg, so those fell through to the digit
+> branch); -s <sep> sets separator (default "\t"; note it is never used — there is no echo
+> mode); -u sets mark_uppercase and calls setlocale(LC_CTYPE, "") (on failure prints "Check
 > uppercase flag is on, but can't set locale!" to stderr and continues); -w <sep> word
 > separator (default "" — empty, unlike flookup's "\n"); -v print "cgflookup 1.03 (foma
-> library version <v>)" and exit 0. 'H' and 'x' are in the optstring but have no switch
-> case, so they print the usage string to stderr and exit(EXIT_FAILURE) even though -x
-> appears in the usage text (latent bug); unknown options and a missing file operand
-> (optind == argc) behave the same.
+> library version <v>)" and exit 0; -x (advertised in the usage text; disables echo, a no-op
+> since cgflookup does not echo) is accepted and ignored. The C source had no case for -x, so
+> it printed the usage string to stderr and exit(EXIT_FAILURE). 'H' is in the optstring but
+> has no switch case, so it (like any unknown option, or a missing file operand optind == argc)
+> prints usage to stderr and exits with failure.
 > Net loading, per-net arc sorting (fsm_sort_arcs 1/2 by direction unless -q or already
 > sorted), apply_init, optional apply_index (APPLY_INDEX_INPUT for down /
 > APPLY_INDEX_OUTPUT for up with cutoff, mem limit, flag-only), and chain construction

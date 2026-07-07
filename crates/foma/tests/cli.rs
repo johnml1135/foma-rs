@@ -418,11 +418,27 @@ fn cgflookup_version_and_usage_error() {
     );
 }
 
+// -x (advertised in the usage text; disables echo, a no-op here since cgflookup
+// never echoes) is accepted rather than erroring out to usage as C did.
+// [spec:foma:sem:cgflookup.main-fn+1/test]
+#[test]
+fn cgflookup_dash_x_is_accepted() {
+    let net = build_stack("cg_x", &["a:b"]);
+    let (out, _err, st) = run(cgflookup().args(["-x"]).arg(&net), b"b\n");
+    let _ = std::fs::remove_file(&net);
+    assert!(
+        st.success(),
+        "cgflookup -x should be accepted, not an error"
+    );
+    assert_eq!(out, b"\"<b>\"\n\ta\n", "got {:?}", s(&out));
+}
+
 /* ------------------------------------------------------------------ */
 /* flookup UDP server mode                                             */
 /* ------------------------------------------------------------------ */
 
 // [spec:foma:sem:flookup.server-init-fn/test]
+// [spec:foma:sem:flookup.app-print-fn+1/test]
 #[test]
 fn flookup_server_mode_binds_and_answers_over_udp() {
     use std::net::UdpSocket;
@@ -471,15 +487,15 @@ fn flookup_server_mode_binds_and_answers_over_udp() {
         text
     );
 
-    // A miss uses the server-mode "?+" marker (the documented inversion of
-    // stdin mode's "+?").
+    // A miss uses the "+?" marker, the same as stdin mode. (C emitted the
+    // reverse "?+" in server mode.)
     sock.send_to(b"zzz\n", &server).expect("send miss");
     let mut buf = [0u8; 65536];
     let (n, _) = sock.recv_from(&mut buf).expect("miss reply");
     let miss = String::from_utf8_lossy(&buf[..n]).into_owned();
     assert!(
-        miss.contains("?+"),
-        "miss reply should carry ?+: {:?}",
+        miss.contains("+?") && !miss.contains("?+"),
+        "miss reply should carry +?: {:?}",
         miss
     );
 

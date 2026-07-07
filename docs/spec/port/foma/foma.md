@@ -808,8 +808,10 @@
 > [spec:foma:def:foma.iface-set-variable-fn]
 > void iface_set_variable(char *name, char *value)
 
-> [spec:foma:sem:foma.iface-set-variable-fn]
-> Implemented in foma/iface.c. Scans the static global_vars table in declaration order —
+> [spec:foma:sem:foma.iface-set-variable-fn+1]
+> Implemented in foma/iface.c. Matches variables by full name (the C source compared only the
+> first 8 characters via strncmp, so an 8-char-prefix-equal name matched). Scans the static
+> global_vars table in declaration order —
 > flag-is-epsilon, minimal, name-nets, obey-flags, print-pairs, print-sigma, print-space,
 > quit-on-fail, recursive-define, quote-special, show-flags, sort-arcs, verbose, hopcroft-min,
 > compose-tristate (all FVAR_BOOL), med-limit, med-cutoff (FVAR_INT), lexc-align (FVAR_BOOL),
@@ -828,9 +830,9 @@
 > [spec:foma:def:foma.iface-show-variable-fn]
 > void iface_show_variable(char *name)
 
-> [spec:foma:sem:foma.iface-show-variable-fn+1]
-> Implemented in foma/iface.c. Finds the variable using the same 8-character strncmp prefix
-> match against global_vars as iface_set_variable (first match wins) and prints "%s = %s\n" with
+> [spec:foma:sem:foma.iface-show-variable-fn+2]
+> Implemented in foma/iface.c. Finds the variable using the same full-name comparison against
+> global_vars as iface_set_variable (the C source compared only the first 8 characters) and prints "%s = %s\n" with
 > the value formatted by the variable's declared type: FVAR_BOOL as "ON"/"OFF" (value == 1 ? ON :
 > OFF), FVAR_INT as the integer value, FVAR_STRING as the string. If nothing matches, prints
 > "*There is no global variable '%s'.\n". The C printed ON/OFF from *(int *)ptr == 1
@@ -1030,13 +1032,11 @@
 > [spec:foma:def:foma.iface-turn-fn]
 > void iface_turn(void)
 
-> [spec:foma:sem:foma.iface-turn-fn]
-> Implemented in foma/iface.c. Requires >= 1 network on the stack, then calls stack_rotate()
-> — NOT stack_turn(). Identical to iface_rotate: it swaps only the fsm pointers of the top and
-> bottom stack entries (no-op returning 1 with a single entry); intermediate entries are
-> untouched and cached apply handles stay with their entries, so a handle created before the
-> swap can afterwards reference the wrong net (latent bug). It does not reverse the stack as
-> the "turn stack" command name suggests.
+> [spec:foma:sem:foma.iface-turn-fn+1]
+> Implemented in foma/iface.c. Requires >= 1 network on the stack, then calls stack_turn(),
+> reversing the whole stack, as the "turn stack" command name suggests. The C source called
+> stack_rotate() instead — identical to iface_rotate — swapping only the fsm pointers of the top
+> and bottom stack entries rather than reversing the stack.
 
 > [spec:foma:def:foma.iface-twosided-flags-fn]
 > void iface_twosided_flags(void)

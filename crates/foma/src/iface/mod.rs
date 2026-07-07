@@ -53,7 +53,7 @@ pub(crate) use crate::spelling::{
 pub(crate) use crate::stack::{
     stack_add, stack_entry_ah, stack_entry_amedh, stack_entry_fsm, stack_entry_next,
     stack_find_bottom, stack_find_second, stack_find_top, stack_get_ah, stack_get_med_ah,
-    stack_isempty, stack_pop, stack_rotate, stack_size,
+    stack_isempty, stack_pop, stack_rotate, stack_size, stack_turn,
 };
 pub(crate) use crate::structures::{
     fsm_copy, fsm_destroy, fsm_extract_ambiguous, fsm_extract_ambiguous_domain,

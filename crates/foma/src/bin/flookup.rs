@@ -217,7 +217,7 @@ impl GetOpt {
 // defaulting to apply_up; -i repoints it to apply_down)
 
 // [spec:foma:def:flookup.app-print-fn]
-// [spec:foma:sem:flookup.app-print-fn]
+// [spec:foma:sem:flookup.app-print-fn+1]
 fn app_print(result: Option<&str>) {
     if MODE_SERVER.get() == 0 {
         if ECHO.get() == 1 {
@@ -244,9 +244,9 @@ fn app_print(result: Option<&str>) {
         }
         match result {
             None => {
-                // Server-mode failure marker is "?+" — reverse of stdin mode's
-                // "+?" (latent inconsistency; reproduced literally).
-                server_append("?+\n");
+                // Failure marker "+?", matching stdin mode. C emitted "?+" in
+                // server mode (the reverse), an inconsistency between the two paths.
+                server_append("+?\n");
                 UDPSIZE.set(UDPSIZE.get() + 3);
             }
             Some(r) => {
@@ -276,7 +276,7 @@ fn server_append(src: &str) {
 }
 
 // [spec:foma:def:flookup.main-fn]
-// [spec:foma:sem:flookup.main-fn]
+// [spec:foma:sem:flookup.main-fn+1]
 fn main() {
     let mut sortarcs = 1i32;
     let mut direction = DIR_UP;
@@ -328,18 +328,18 @@ fn main() {
                 if optarg == "f" {
                     index_flag_states = 1;
                     index_arcs = 1;
-                } else if optarg.contains('k') && optarg.contains('K') {
-                    /* k limit */
+                } else if optarg.contains('k') || optarg.contains('K') {
+                    /* k limit: "-I 4k" / "-I 4K" → 4 * 1024 bytes */
                     index_mem_limit = 1024 * atoi(&optarg);
                     index_arcs = 1;
-                } else if optarg.contains('m') && optarg.contains('M') {
-                    /* m limit */
+                } else if optarg.contains('m') || optarg.contains('M') {
+                    /* m limit: "-I 4m" / "-I 4M" → 4 * 1024 * 1024 bytes */
                     index_mem_limit = 1024 * 1024 * atoi(&optarg);
                     index_arcs = 1;
                 } else if first_is_digit(&optarg) {
-                    // Latent bug: "-I 4k" / "-I 4M" never reach the k/m branches
-                    // (both letter cases must appear in the same arg), so they
-                    // fall through here and set an arc-count cutoff of 4.
+                    // Plain "-I 4" is an arc-count cutoff. (C required BOTH letter
+                    // cases in the arg for the k/m branches, so "-I 4k"/"-I 4M"
+                    // fell through here — the k/m suffix was silently ignored.)
                     index_arcs = 1;
                     index_cutoff = atoi(&optarg);
                 }

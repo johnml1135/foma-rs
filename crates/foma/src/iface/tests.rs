@@ -1028,10 +1028,10 @@ fn prune_reverse_zero_plus_upper_side() {
 // only; single-net and empty are no-ops.
 // [spec:foma:sem:iface.iface-rotate-fn/test]
 // [spec:foma:sem:foma.iface-rotate-fn/test]
-// [spec:foma:sem:iface.iface-turn-fn/test]
-// [spec:foma:sem:foma.iface-turn-fn/test]
+// [spec:foma:sem:iface.iface-turn-fn+1/test]
+// [spec:foma:sem:foma.iface-turn-fn+1/test]
 #[test]
-fn rotate_and_turn_swap_top_and_bottom() {
+fn rotate_swaps_ends_turn_reverses() {
     stack_init();
     iface_rotate(); // empty: refusal (guard), no-op
     iface_turn();
@@ -1046,14 +1046,18 @@ fn rotate_and_turn_swap_top_and_bottom() {
     assert!(top_is("b"));
     assert!(top_is("c"));
 
-    // turn behaves identically (byte-for-byte the same stack_rotate call).
+    // turn REVERSES the whole stack (not a top/bottom swap). Use 4 nets so the
+    // two differ: reverse of a,b,c,d is d,c,b,a (pop order a,b,c,d), whereas a
+    // swap-ends would give d,b,c,a (pop order a,c,b,d).
     push("a");
     push("b");
     push("c");
+    push("d");
     iface_turn();
     assert!(top_is("a"));
     assert!(top_is("b"));
     assert!(top_is("c"));
+    assert!(top_is("d"));
 
     push("x"); // single net: unchanged
     iface_rotate();
@@ -1120,10 +1124,10 @@ fn save_defined_and_save_stack_roundtrip() {
 // variable(s) print without touching the stack or the values. Wave 4 fix:
 // iface_show_variable now formats by declared type (INT as value, STRING as
 // string, BOOL as ON/OFF) instead of ON/OFF for every type.
-// [spec:foma:sem:iface.iface-set-variable-fn/test]
-// [spec:foma:sem:foma.iface-set-variable-fn/test]
-// [spec:foma:sem:iface.iface-show-variable-fn+1/test]
-// [spec:foma:sem:foma.iface-show-variable-fn+1/test]
+// [spec:foma:sem:iface.iface-set-variable-fn+1/test]
+// [spec:foma:sem:foma.iface-set-variable-fn+1/test]
+// [spec:foma:sem:iface.iface-show-variable-fn+2/test]
+// [spec:foma:sem:foma.iface-show-variable-fn+2/test]
 // [spec:foma:sem:iface.iface-show-variables-fn/test]
 // [spec:foma:sem:foma.iface-show-variables-fn/test]
 #[test]
@@ -1141,9 +1145,12 @@ fn set_and_show_variables() {
     iface_set_variable("minimal", "bogus"); // invalid → unchanged
     assert_eq!(G_MINIMAL.with(|v| v.get()), 1);
 
-    // strncmp-8 latent bug: "hopcroft-XYZ" shares 8 bytes with "hopcroft-min".
-    iface_set_variable("hopcroft-XYZ", "OFF");
-    assert_eq!(G_MINIMIZE_HOPCROFT.with(|v| v.get()), 0);
+    // Full-name match: "hopcroft-XYZ" shares an 8-char prefix with "hopcroft-min"
+    // but is not it, so it must NOT touch the variable (C's strncmp-8 collided).
+    iface_set_variable("hopcroft-min", "ON");
+    assert_eq!(G_MINIMIZE_HOPCROFT.with(|v| v.get()), 1);
+    iface_set_variable("hopcroft-XYZ", "OFF"); // prefix-equal but different: no match
+    assert_eq!(G_MINIMIZE_HOPCROFT.with(|v| v.get()), 1); // unchanged
 
     // INT: strtol truncation; no-digit / negative are rejected.
     iface_set_variable("med-limit", "7");

@@ -230,7 +230,7 @@ fn app_print(result: Option<&str>) {
 }
 
 // [spec:foma:def:cgflookup.main-fn]
-// [spec:foma:sem:cgflookup.main-fn]
+// [spec:foma:sem:cgflookup.main-fn+1]
 fn main() {
     let mut sortarcs = 1i32;
     let mut direction = DIR_UP;
@@ -275,17 +275,18 @@ fn main() {
                 if optarg == "f" {
                     index_flag_states = 1;
                     index_arcs = 1;
-                } else if optarg.contains('k') && optarg.contains('K') {
-                    /* k limit */
+                } else if optarg.contains('k') || optarg.contains('K') {
+                    /* k limit: "-I 4k" / "-I 4K" → 4 * 1024 bytes */
                     index_mem_limit = 1024 * atoi(&optarg);
                     index_arcs = 1;
-                } else if optarg.contains('m') && optarg.contains('M') {
-                    /* m limit */
+                } else if optarg.contains('m') || optarg.contains('M') {
+                    /* m limit: "-I 4m" / "-I 4M" → 4 * 1024 * 1024 bytes */
                     index_mem_limit = 1024 * 1024 * atoi(&optarg);
                     index_arcs = 1;
                 } else if first_is_digit(&optarg) {
-                    // Same latent bug as flookup: "4k"/"4M" fall through here
-                    // (both letter cases must be present in the arg to match).
+                    // Plain "-I 4" is an arc-count cutoff. (C required BOTH letter
+                    // cases in the arg for the k/m branches, so "-I 4k"/"-I 4M"
+                    // fell through here — the k/m suffix was silently ignored.)
                     index_arcs = 1;
                     index_cutoff = atoi(&optarg);
                 }
@@ -313,9 +314,12 @@ fn main() {
                 ));
                 finish(0);
             }
-            // 'H' and 'x' are in the optstring but have no case, so — like any
-            // unknown option — they print usage to stderr and exit(EXIT_FAILURE),
-            // even though -x appears in the usage text (latent bug).
+            // -x (advertised in the usage text) disables echoing of the input
+            // word. cgflookup never echoes, so it is accepted as a no-op rather
+            // than erroring out as C did (it was in the optstring but had no case).
+            b'x' => {}
+            // 'H' is in the optstring but has no case, so — like any unknown
+            // option — it prints usage to stderr and exit(EXIT_FAILURE).
             _ => {
                 eprint!("{}", USAGESTRING);
                 finish(EXIT_FAILURE);

@@ -637,10 +637,11 @@
 > [spec:foma:def:iface.iface-set-variable-fn]
 > void iface_set_variable(char *name, char *value)
 
-> [spec:foma:sem:iface.iface-set-variable-fn]
-> "set <name> <value>": scans the global_vars table in order; a variable matches when
-> strncmp(name, var.name, 8) == 0 — only the FIRST 8 characters are compared (latent bug: any
-> 8-char-prefix-equal name matches; first table match wins). Table order: flag-is-epsilon, minimal,
+> [spec:foma:sem:iface.iface-set-variable-fn+1]
+> "set <name> <value>": scans the global_vars table in order; a variable matches on a full-name
+> comparison (name == var.name). The C source used strncmp(name, var.name, 8), comparing only the
+> first 8 characters, so any 8-char-prefix-equal name matched (first table match won). Table order:
+> flag-is-epsilon, minimal,
 > name-nets, obey-flags, print-pairs, print-sigma, print-space, quit-on-fail, recursive-define,
 > quote-special, show-flags, sort-arcs, verbose, hopcroft-min, compose-tristate (all BOOL),
 > med-limit, med-cutoff (INT), lexc-align (BOOL), att-epsilon (STRING). For BOOL: value "ON" or "1"
@@ -654,9 +655,10 @@
 > [spec:foma:def:iface.iface-show-variable-fn]
 > void iface_show_variable(char *name)
 
-> [spec:foma:sem:iface.iface-show-variable-fn+1]
-> "show variable <name>": scans global_vars with the same 8-character-prefix strncmp match as
-> iface_set_variable; on the first match prints "%s = %s\n" with the full variable name and a value
+> [spec:foma:sem:iface.iface-show-variable-fn+2]
+> "show variable <name>": scans global_vars with the same full-name comparison as
+> iface_set_variable (the C source compared only the first 8 characters); on the first match prints
+> "%s = %s\n" with the full variable name and a value
 > formatted BY the variable's declared type: FVAR_BOOL as "ON"/"OFF" (value == 1 ? ON : OFF), FVAR_INT
 > as the integer value, FVAR_STRING as the string. If nothing matches prints
 > "*There is no global variable '%s'.\n". The C printed ON/OFF from *(int*)ptr == 1 for
@@ -849,11 +851,11 @@
 > [spec:foma:def:iface.iface-turn-fn]
 > void iface_turn()
 
-> [spec:foma:sem:iface.iface-turn-fn]
-> "turn stack": requires ≥1 net (iface_stack_check(1)) then calls stack_rotate() — byte-for-byte the
-> same behavior as iface_rotate. Latent bug: despite the help text "turns stack upside down", it does
-> NOT call stack_turn(); it only swaps the top and bottom entries' fsm pointers (see
-> `[spec:foma:sem:iface.iface-rotate-fn]`).
+> [spec:foma:sem:iface.iface-turn-fn+1]
+> "turn stack": requires ≥1 net (iface_stack_check(1)) then calls stack_turn(), reversing the whole
+> stack ("turns stack upside down", per the help text). The C source called stack_rotate() instead —
+> byte-for-byte the same as iface_rotate — so it only swapped the top and bottom entries' fsm
+> pointers rather than reversing the stack.
 
 > [spec:foma:def:iface.iface-twosided-flags-fn]
 > void iface_twosided_flags()

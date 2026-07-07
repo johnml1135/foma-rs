@@ -119,13 +119,14 @@ pub fn iface_save_stack(filename: &str) {
 }
 
 // [spec:foma:def:iface.iface-turn-fn]
-// [spec:foma:sem:iface.iface-turn-fn]
+// [spec:foma:sem:iface.iface-turn-fn+1]
 // [spec:foma:def:foma.iface-turn-fn]
-// [spec:foma:sem:foma.iface-turn-fn]
+// [spec:foma:sem:foma.iface-turn-fn+1]
 pub fn iface_turn() {
-    // Latent bug reproduced: "turn stack" calls stack_rotate() (byte-for-byte the
-    // same as iface_rotate), NOT stack_turn(); it only swaps top/bottom fsms.
+    // [spec:foma:sem:iface.iface-turn-fn+1] "turn stack" reverses the whole stack
+    // via stack_turn(). C wired it to stack_rotate() (a top/bottom swap), which
+    // contradicted the "turns stack upside down" help text.
     if iface_stack_check(1) != 0 {
-        stack_rotate();
+        stack_turn();
     }
 }
