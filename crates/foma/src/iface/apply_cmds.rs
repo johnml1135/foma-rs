@@ -399,12 +399,11 @@ pub fn iface_print_shortest_string() {
     }
 }
 
-/// [spec:foma:sem:iface.iface-print-shortest-string-size-fn+1] length (in
-/// symbols) of the SHORTEST accepted string of a minimized unary acceptor —
-/// a BFS over the state graph counting arcs from the start state to the nearest
-/// final. C reported `statecount - 1`, i.e. the *longest* acyclic path (the
-/// minimal unary DFA of {a^k} is a chain of max_len+1 states). Returns 0 for the
-/// empty language (no final reachable).
+/// Length (in symbols) of the SHORTEST accepted string of a minimized unary
+/// acceptor — a BFS over the state graph counting arcs from the start state to
+/// the nearest final. The C source reported `statecount - 1`, i.e. the *longest*
+/// acyclic path (the minimal unary DFA of {a^k} is a chain of max_len+1 states).
+/// Returns 0 for the empty language (no final reachable).
 fn shortest_acyclic_length(net: &crate::types::Fsm) -> i32 {
     use std::collections::VecDeque;
     let n = net.statecount as usize;

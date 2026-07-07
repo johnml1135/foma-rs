@@ -78,21 +78,20 @@ pub fn sigma_remove_num(num: i32, sigma: Option<Box<Sigma>>) -> Option<Box<Sigma
 }
 
 // [spec:foma:def:sigma.sigma-add-special-fn]
-// [spec:foma:sem:sigma.sigma-add-special-fn]
+// [spec:foma:sem:sigma.sigma-add-special-fn+1]
 // [spec:foma:def:fomalibconf.sigma-add-special-fn]
-// [spec:foma:sem:fomalibconf.sigma-add-special-fn]
+// [spec:foma:sem:fomalibconf.sigma-add-special-fn+1]
 pub fn sigma_add_special(symbol: i32, sigma: &mut Sigma) -> i32 {
-    let mut str: Option<String> = None;
-    if symbol == EPSILON {
-        str = Some("@_EPSILON_SYMBOL_@".to_string());
-    }
-    if symbol == IDENTITY {
-        str = Some("@_IDENTITY_SYMBOL_@".to_string());
-    }
-    if symbol == UNKNOWN {
-        str = Some("@_UNKNOWN_SYMBOL_@".to_string());
-    }
-    /* any other code leaves str NULL (latent bug in C, kept: node gets NULL symbol) */
+    // [spec:foma:sem:sigma.sigma-add-special-fn+1] map the reserved code to its
+    // symbol string. A non-reserved code is a caller error; insert a well-formed
+    // placeholder rather than the symbol-less (NULL) node C created, which later
+    // panicked when the sigma was read back.
+    let str: Option<String> = Some(match symbol {
+        EPSILON => "@_EPSILON_SYMBOL_@".to_string(),
+        UNKNOWN => "@_UNKNOWN_SYMBOL_@".to_string(),
+        IDENTITY => "@_IDENTITY_SYMBOL_@".to_string(),
+        other => format!("@_SPECIAL_{other}_@"),
+    });
 
     /* Insert special symbols pre-sorted */
     if sigma.number == -1 {
@@ -885,20 +884,21 @@ mod tests {
         assert_eq!(syms(Some(&s)), vec![pair(2, "@_IDENTITY_SYMBOL_@")]);
     }
 
-    // [spec:foma:sem:sigma.sigma-add-special-fn/test]
-    // [spec:foma:sem:fomalibconf.sigma-add-special-fn/test]
+    // [spec:foma:sem:sigma.sigma-add-special-fn+1/test]
+    // [spec:foma:sem:fomalibconf.sigma-add-special-fn+1/test]
     #[test]
-    fn sigma_add_special_nonreserved_code_inserts_null_symbol_node() {
-        /* latent C bug kept: any code other than 0/1/2 gets a NULL symbol */
+    fn sigma_add_special_nonreserved_code_inserts_placeholder() {
+        /* a non-reserved code gets a well-formed placeholder, not the symbol-less
+        (NULL) node C created (which later crashed when the sigma was read) */
         let mut s = sigma_create();
         sigma_add("a", &mut s); /* number 3 */
         assert_eq!(sigma_add_special(5, &mut s), 5);
-        assert_eq!(syms(Some(&s)), vec![pair(3, "a"), (5, None)]);
+        assert_eq!(syms(Some(&s)), vec![pair(3, "a"), pair(5, "@_SPECIAL_5_@")]);
 
-        /* empty-sentinel head fill also leaves the symbol NULL */
+        /* empty-sentinel head fill also gets a placeholder */
         let mut s = sigma_create();
         assert_eq!(sigma_add_special(9, &mut s), 9);
-        assert_eq!(syms(Some(&s)), vec![(9, None)]);
+        assert_eq!(syms(Some(&s)), vec![pair(9, "@_SPECIAL_9_@")]);
     }
 
     // [spec:foma:sem:sigma.sigma-add-special-fn/test]

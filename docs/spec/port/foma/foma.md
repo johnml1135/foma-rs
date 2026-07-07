@@ -219,7 +219,7 @@
 > Implemented in foma/iface.c. Requires >= 2 networks (stack-check diagnostic otherwise).
 > Folds the entire stack: while stack_size() > 1, pops one = former top and two = next, and pushes
 > fsm_topsort(fsm_minimize(fsm_concat(one, two))) with the popped top as the LEFT/first concatenand.
-> Ends with one concatenated network on the stack. Wave 4 fix: the C emitted a stray debug string "dd"
+> Ends with one concatenated network on the stack. The C emitted a stray debug string "dd"
 > (no newline) to stdout once per iteration — a leftover latent bug, now deleted.
 
 > [spec:foma:def:foma.iface-crossproduct-fn]
@@ -271,9 +271,9 @@
 > NUL terminator or a byte in '0'..'9' (each byte compared as unsigned char), then returns
 > atoi() of the suffix starting at that position — or at an immediately preceding '-' (see fix).
 > Returns 0 when the string contains no digit (atoi of the empty suffix); conversion stops at the
-> first non-digit after the digits per atoi; overflow behavior is atoi's (undefined). Wave 4 fix:
-> the C scan skipped a leading '-' (a non-digit), so "abc-5" yielded 5; a '-' immediately before the
-> first digit is now included, so "abc-5" yields -5.
+> first non-digit after the digits per atoi; overflow behavior is atoi's (undefined). A '-'
+> immediately before the first digit is included, so "abc-5" yields -5. The C scan skipped a
+> leading '-' (a non-digit), so "abc-5" yielded 5.
 
 > [spec:foma:def:foma.iface-extract-unambiguous-fn]
 > void iface_extract_unambiguous(void)
@@ -531,7 +531,7 @@
 > "<memsize> N states, N arcs, N paths.\n" line as `print stats` (see
 > foma.iface-print-stats-fn). Then walks the defined-functions list g_defines_f: every entry
 > with a non-NULL name prints "<fname>@<numargs>\t" (format "%s@%i\t") followed by the stored
-> regex string and "\n". Read-only; nothing is popped or modified. Wave 4 fix: the C format was
+> regex string and "\n". Read-only; nothing is popped or modified. The C format was
 > "%s@%i)\t" with a stray unmatched closing paren before the TAB — the ')' is now dropped.
 
 > [spec:foma:def:foma.iface-print-dot-fn]
@@ -618,7 +618,7 @@
 > computed as a breadth-first arc distance from the start state to the nearest final of Result
 > (0 for the empty language). For a transducer, does the same independently for the upper and
 > lower projections and prints "Shortest acyclic upper path length: %i\n" then
-> "Shortest acyclic lower path length: %i\n". Wave 5 fix: C printed Result->statecount - 1, but
+> "Shortest acyclic lower path length: %i\n". The C source printed Result->statecount - 1, but
 > the minimal unary DFA of an acyclic net is a chain of (max length)+1 states, so statecount-1 is
 > the LONGEST string length whenever the language has strings of several lengths; the BFS returns
 > the true shortest. All intermediate Result nets leak (never fsm_destroy'd); the stack is
@@ -689,7 +689,7 @@
 > (one random path per call) instead of sequential enumeration. Each result is split into
 > upper/lower and printed as "<upper>\t<lower>\n"; duplicates are possible and are not
 > deduplicated or counted (unlike iface_apply_random). Markers are then restored and the
-> enumerator reset. Wave 4 fix: the C passed limit straight through, so limit == -1 became
+> enumerator reset. The C passed limit straight through, so limit == -1 became
 > g_list_limit (default 100) inside iface_pairs_call — it now uses g_list_random_limit like the
 > other random commands.
 
@@ -833,7 +833,7 @@
 > match against global_vars as iface_set_variable (first match wins) and prints "%s = %s\n" with
 > the value formatted by the variable's declared type: FVAR_BOOL as "ON"/"OFF" (value == 1 ? ON :
 > OFF), FVAR_INT as the integer value, FVAR_STRING as the string. If nothing matches, prints
-> "*There is no global variable '%s'.\n". Wave 4 fix: the C printed ON/OFF from *(int *)ptr == 1
+> "*There is no global variable '%s'.\n". The C printed ON/OFF from *(int *)ptr == 1
 > regardless of type — med-limit/med-cutoff showed ON only at value 1, and att-epsilon reinterpreted
 > the leading bytes of its char* pointer as an int. Now formatted per declared type.
 
@@ -1106,7 +1106,7 @@
 
 > [spec:foma:sem:foma.iface-words-file-fn+1]
 > Implemented in foma/iface.c. type selects the enumerator fresh on every call: 0 = apply_words
-> (whole words / pairs), 1 = apply_upper_words, 2 = apply_lower_words. Wave 4 fix: the C held the
+> (whole words / pairs), 1 = apply_upper_words, 2 = apply_lower_words. The C held the
 > function pointer in a STATIC local initialized once to apply_words and only overwritten for type 1
 > or 2, so a later type-0 call silently reused whatever a previous call installed — it is now a
 > per-call local. Requires >= 1
@@ -1257,7 +1257,7 @@
 > [spec:foma:sem:foma.purge-quantifier-fn+1]
 > Implemented in foma/structures.c. Walks the global singly-linked `quantifiers` list and unlinks
 > EVERY node whose name strcmp-equals string; removed nodes and their names are dropped (the C
-> leaked them). Wave 4 fix: the C trailing pointer advanced onto a node it had just unlinked, so
+> leaked them). The C trailing pointer advanced onto a node it had just unlinked, so
 > with two ADJACENT same-name nodes the second was spliced out of the dead node rather than the
 > live list and survived; this removes all matching nodes, adjacent or not. No output; safe on an
 > empty list.
@@ -1403,8 +1403,8 @@
 > with exactly one entry returns 1 doing nothing. Otherwise swaps the fsm pointers of the bottom
 > entry (main_stack) and the top entry — together with their cached ah/amedh apply/med handles —
 > and returns 1; intermediate entries keep their nets and both affected entries keep their numbers.
-> Wave 5 fix: C swapped only the fsm pointers, so cached handles afterwards belonged to the other
-> entry's original net (latent bug); the handles now move with their fsm. Despite the name it
+> The C source swapped only the fsm pointers, so cached handles afterwards belonged to the other
+> entry's original net (latent bug). Despite the name it
 > performs a top/bottom swap, not a rotation.
 
 > [spec:foma:def:foma.stack-size-fn]
@@ -1424,7 +1424,7 @@
 > reverses the order of the real entries so the former top becomes the new bottom
 > (main_stack) and the former bottom becomes the new top, relinking every ->next/->previous
 > pointer and leaving the sentinel at the tail; entries keep their own fsm/ah/amedh/number
-> (numbers are not renumbered). Returns 1. Wave 4 fix: the C code's final previous-pointer
+> (numbers are not renumbered). Returns 1. The C code's final previous-pointer
 > fixup loop `for (stack_ptr = main_stack; stack_ptr->number != -1;) {
 > (stack_ptr->next)->previous = stack_ptr; }` never advanced stack_ptr, so with >= 2 entries
 > the function looped forever (dead code: the "turn stack" command goes through iface_turn,
@@ -1445,7 +1445,7 @@
 > machine where every quantifier symbol labels a SELF-LOOP (so it actually accepts any
 > sequence of quantifier symbols including the empty string, despite the comment claiming a
 > plain union of single symbols); then the -1 sentinel line. Sets arccount = syms and
-> statecount = finalcount = 1. Wave 4 fix: linecount = syms+1, INCLUDING the sentinel line per
+> statecount = finalcount = 1. Linecount = syms+1, INCLUDING the sentinel line per
 > fsm_count's convention (was: syms, excluding it); every caller recounts via fsm_count before
 > reading linecount, so no downstream value changed. With no quantifiers defined the state array
 > holds only the sentinel line (a machine with no states, linecount 1) while statecount/finalcount

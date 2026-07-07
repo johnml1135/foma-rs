@@ -25,7 +25,7 @@
 > exactly against the buffer; returns a reference to the first matching table entry (whose
 > `name` field is the encoding name above), or None if none match. A buffer shorter than an
 > entry's `len` cannot match it.
-> Wave 4 fix: the C tested each entry with strncmp(code, buffer, len), which stops at a
+> The C tested each entry with strncmp(code, buffer, len), which stops at a
 > mutual NUL, so any buffer whose first byte was 0x00 false-matched the UTF-32BE entry
 > (00 00 FE FF) and "FF FE 00 <any>" false-matched UTF-32LE (its 4th byte was never
 > checked, and UTF-32LE precedes UTF16-LE in the table). Comparing the actual bytes exactly
@@ -67,7 +67,7 @@
 > "<encoding> BOM mark is detected in file '<name>'.\n" and fail — BOM-prefixed files are
 > rejected outright, not skipped past. Otherwise store '\0' at buffer[size] and return the
 > buffer.
-> Wave 4: returns `Result<Vec<u8>, FomaError>` instead of the C `char *`/NULL sentinel —
+> Returns `Result<Vec<u8>, FomaError>` instead of the C `char *`/NULL sentinel —
 > `Err(FomaError::Io(..))` for an open/read failure, `Err(FomaError::Format(..))` for a
 > rejected BOM, `Ok(bytes)` otherwise; the printed diagnostics are retained for CLI-output
 > compatibility. With the exact-match BOM check (`[spec:foma:sem:io.check-bom-fn+1]`) an
@@ -121,7 +121,7 @@
 > The in/out strings are "0" for symbol 0 (EPSILON), "?" for 1 (UNKNOWN) or 2 (IDENTITY),
 > else the sigma string; then literal-symbol escapes are applied: a sigma string "0"
 > (in > 0 / out > 0) becomes "%0"; a sigma string "?" with symbol number > 2 becomes "%?".
-> Wave 4 fix: the C out-side "?" escape tested stateptr->in > 2 (a copy typo, so a literal
+> The C out-side "?" escape tested stateptr->in > 2 (a copy typo, so a literal
 > "?" out-symbol was only escaped when the in-symbol number was > 2); it now tests
 > stateptr->out > 2, symmetrically with the in side, so a literal "?" out-symbol is escaped
 > by its own symbol number.
@@ -140,7 +140,7 @@
 > `[spec:foma:sem:io.io-gz-file-to-mem-fn]`, parse one net with
 > `[spec:foma:sem:io.io-net-read-fn]`, free the handle, and return the net. The net-name
 > string that C strdup'd and leaked is dropped here.
-> Wave 4: returns `Result<Box<Fsm>, FomaError>` instead of the C NULL sentinel — an
+> Returns `Result<Box<Fsm>, FomaError>` instead of the C NULL sentinel — an
 > unreadable or empty file (io_gz_file_to_mem == 0) is `Err(FomaError::Io(..))`, a
 > structurally malformed image (io_net_read returns None) is `Err(FomaError::Format(..))`,
 > and a parsed net is `Ok`.
@@ -342,7 +342,7 @@
 > [spec:foma:def:io.io-net-read-fn]
 > struct fsm *io_net_read(struct io_buf_handle *iobh, char **net_name)
 
-> [spec:foma:sem:io.io-net-read-fn]
+> [spec:foma:sem:io.io-net-read-fn+1]
 > Parses one network in the foma text format from the handle's in-memory buffer (format
 > as written by `[spec:foma:sem:io.foma-net-print-fn]`). All lines are read with
 > `[spec:foma:sem:io.io-gets-fn]` into a stack buffer of READ_BUF_SIZE (4096) bytes.
@@ -366,9 +366,11 @@
 > 4. Sigma lines are read until a line starting with '#': each is "<number> <string>",
 > split at the first space; an empty remainder means the symbol is a literal newline
 > "\n" (how a newline symbol survives the line-oriented format); each calls
-> sigma_add_number(net->sigma, string, number). Truly empty lines are skipped with
-> `continue` — but at end-of-buffer io_gets keeps returning empty lines, so a file
-> truncated inside the sigma section loops forever (latent bug).
+> sigma_add_number(net->sigma, string, number). Truly empty lines are skipped, but the read
+> cursor is checked for progress first: at end-of-buffer io_gets yields empty lines without
+> advancing, so a file truncated inside the sigma section is detected ("File format error in
+> sigma section!"), the net destroyed and NULL returned. The C source had no such check and
+> looped forever on a truncated sigma section.
 > 5. The '#' line must be "##states##" (else message + NULL). malloc linecount *
 > sizeof(struct fsm_state) entries. Read lines until one starts with '#', parsing each
 > with `[spec:foma:sem:io.explode-line-fn]` into 2–5 ints, maintaining laststate (init

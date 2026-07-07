@@ -29,7 +29,7 @@
 > int int_stack_isfull()
 
 > [spec:foma:sem:int-stack.int-stack-isfull-fn+1]
-> Wave 4: the int stack grows unbounded (a `Vec`), so it is never at capacity —
+> The int stack grows unbounded (a `Vec`), so it is never at capacity —
 > always returns 0. The C fixed cap MAX_STACK (2097152, 2^21) and the
 > `top == MAX_STACK - 1` boundary are gone. No state is modified.
 
@@ -47,7 +47,7 @@
 
 > [spec:foma:sem:int-stack.int-stack-push-fn+1]
 > Pushes `c` onto the global int stack, growing its backing `Vec` on demand.
-> Wave 4: the push is infallible and unbounded — the C `MAX_STACK` cap and the
+> The push is infallible and unbounded — the C `MAX_STACK` cap and the
 > "Stack full!\n" + exit(1) overflow path are gone. `int_stack_size` reports the
 > element count; the stack is empty only before the first push or after a clear.
 
@@ -78,7 +78,7 @@
 > int ptr_stack_isfull()
 
 > [spec:foma:sem:int-stack.ptr-stack-isfull-fn+1]
-> Wave 4: the pointer stack grows unbounded (a `Vec`), so it is never at capacity —
+> The pointer stack grows unbounded (a `Vec`), so it is never at capacity —
 > always returns 0. The C fixed cap MAX_PTR_STACK (2097152, 2^21) and the
 > `ptr_stack_top == MAX_PTR_STACK - 1` boundary are gone. No state is modified.
 
@@ -97,6 +97,6 @@
 
 > [spec:foma:sem:int-stack.ptr-stack-push-fn+1]
 > Pushes `ptr` (an index/handle token) onto the global pointer stack, growing its
-> backing `Vec` on demand. Wave 4: the push is infallible and unbounded — the C
+> backing `Vec` on demand. The push is infallible and unbounded — the C
 > `MAX_PTR_STACK` cap and the "Pointer stack full!\n" + exit(1) overflow path are
 > gone. The stack stores the token only; it takes no ownership.

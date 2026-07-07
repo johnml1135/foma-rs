@@ -51,7 +51,7 @@
 
 > [spec:foma:sem:structures.fsm-copy-fn+1]
 > A `&mut` borrow is never NULL; NULL-able callers keep the check at the call site.
-> Wave 4 fix: calls `fsm_count(net)` on the SOURCE FIRST (refreshing net->statecount/linecount/arccount/finalcount), THEN captures those now-fresh scalar counts and flags into a new `struct fsm`. The C memcpy'd the whole struct BEFORE fsm_count ran, so the copy's counts were left stale; here source and copy carry the same fresh counts.
+> Calls `fsm_count(net)` on the SOURCE FIRST (refreshing net->statecount/linecount/arccount/finalcount), THEN captures those now-fresh scalar counts and flags into a new `struct fsm`. The C memcpy'd the whole struct BEFORE fsm_count ran, so the copy's counts were left stale; here source and copy carry the same fresh counts.
 > Gives the copy its own `sigma` (sigma_copy(net->sigma)) and its own `states` (fsm_state_copy(net->states, net->linecount)); linecount includes the -1 sentinel line, so the full table is duplicated. The `medlookup` pointer is deep-cloned rather than shared (the C aliased it — a double-free hazard). Caller owns the returned net.
 
 > [spec:foma:def:structures.fsm-create-fn]
@@ -203,7 +203,7 @@
 
 > [spec:foma:sem:structures.fsm-isuniversal-fn+1]
 > Tests whether net is the universal language ?*. Destructive: net = fsm_minimize(net) (consumes/replaces the argument), then fsm_compact(net); the compacted net is dropped (neither returned nor destroyed).
-> Wave 4 fix: the C condition ANDed `line1.state_no == 0` with `line1.state_no == -1` (mutually exclusive → returned 0 for every input). Implement the evident universality test instead: return 1 iff the compacted state table is the lone state 0 with an IDENTITY:IDENTITY self-loop — line 0 has target == 0, final_state == 1, in == IDENTITY(2), out == IDENTITY(2) — followed immediately by the -1 sentinel (line 1's state_no == -1), over an alphabet of only reserved symbols (sigma_max(net->sigma) < 3). Otherwise returns 0.
+> The C condition ANDed `line1.state_no == 0` with `line1.state_no == -1` (mutually exclusive → returned 0 for every input). Implement the evident universality test instead: return 1 iff the compacted state table is the lone state 0 with an IDENTITY:IDENTITY self-loop — line 0 has target == 0, final_state == 1, in == IDENTITY(2), out == IDENTITY(2) — followed immediately by the -1 sentinel (line 1's state_no == -1), over an alphabet of only reserved symbols (sigma_max(net->sigma) < 3). Otherwise returns 0.
 
 > [spec:foma:def:structures.fsm-logical-eq-fn]
 > struct fsm *fsm_logical_eq(char *string1, char *string2)
@@ -330,7 +330,7 @@
 
 > [spec:foma:sem:structures.purge-quantifier-fn+1]
 > Walks the global static `quantifiers` list and unlinks EVERY node whose name strcmp-equals string. Removed nodes and their names are dropped (the C leaked them).
-> Wave 4 fix: the C walked with a trailing prev pointer that advanced onto the node it had just unlinked, so of two CONSECUTIVE matching nodes only the first left the live list (the second unlink wrote into the already-removed node). This removes all matching nodes, consecutive or not — the evident intent.
+> The C walked with a trailing prev pointer that advanced onto the node it had just unlinked, so of two CONSECUTIVE matching nodes only the first left the live list (the second unlink wrote into the already-removed node). This removes all matching nodes, consecutive or not — the evident intent.
 
 > [spec:foma:def:structures.union-quantifiers-fn]
 > struct fsm *union_quantifiers()
@@ -340,6 +340,6 @@
 > net = fsm_create(""); fsm_update_flags(net, YES,YES,YES,YES,NO,NO) — deterministic/pruned/minimized/epsilon-free YES, loop-free NO, completed NO.
 > For each quantifier name in list order: s = sigma_add(name, net->sigma); the first assigned number is captured as symlo (taken while the tracker is still 0); syms counts the names. Arc i (i = 0..syms-1) is labeled symlo+i, relying on sigma_add assigning consecutive numbers.
 > states = malloc((syms+1) lines): line i = {state_no=0, in=out=symlo+i, target=0, final_state=1, start_state=1} for i < syms; line syms = all-(-1) sentinel. Sets arccount=syms, statecount=finalcount=1; pathcount left unset.
-> Wave 4 fix: linecount = syms+1, INCLUDING the sentinel line to match fsm_count's convention (was: syms, excluding it). Every caller recounts via fsm_count before reading linecount, so no downstream value changed.
+> Linecount = syms+1, INCLUDING the sentinel line to match fsm_count's convention (was: syms, excluding it). Every caller recounts via fsm_count before reading linecount, so no downstream value changed.
 > With an empty quantifier list the table is just the sentinel (no state 0 despite statecount=1) and linecount = 1. Returns a caller-owned net.
 

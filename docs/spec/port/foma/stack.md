@@ -143,9 +143,9 @@
 > prints "Stack is empty.\n" to stdout and returns -1. If stack_size() == 1: returns 1
 > with no change. Otherwise: exchange the `fsm` pointers of main_stack (bottom) and
 > stack_find_top() (top), together with their cached `ah` and `amedh` apply/med handles,
-> so each handle stays bound to its own net. Wave 5 fix: C swapped only the `fsm` pointers,
+> so each handle stays bound to its own net. The C source swapped only the `fsm` pointers,
 > leaving cached handles pointing at the other entry's former fsm (stale-handle quirk), so a
-> subsequent apply/med ran against the wrong transducer; the handles now travel with their fsm.
+> subsequent apply/med ran against the wrong transducer.
 > The `number` field is still not swapped. Returns 1.
 
 > [spec:foma:def:stack.stack-size-fn]
@@ -171,7 +171,7 @@
 > `previous` becomes the new top). Each entry travels with its own fsm, ah, amedh and
 > number — numbers are NOT renumbered, so from the head they now descend (new bottom
 > carries the former top's number, new top carries the former bottom's 0). Returns 1.
-> Wave 4 fix: the C code's final previous-link fix-up loop
+> The C code's final previous-link fix-up loop
 > `for (p = main_stack; p->number != -1;) { p->next->previous = p; }` never advanced p,
 > so for stacks of 2+ entries the function looped forever (dead code: the "turn stack"
 > command reaches iface_turn → stack_rotate, never this function). This implements the

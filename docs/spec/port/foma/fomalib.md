@@ -446,7 +446,7 @@
 > skipped). Each row starts with the row label right-aligned in lsymbol+1 columns ("0" for row 0)
 > followed by the deletion cost cm[i*maxsigma] right-aligned in 2 columns ("*" for row 0), then
 > skips columns 1 and 2. Remaining cells for column j: on the diagonal (i == j) "*" right-aligned
-> to width strlen(symbol j)+1 (Wave 5 fix: C used that count as a "%.*s" precision, which truncated
+> to width strlen(symbol j)+1 (the C source used that count as a "%.*s" precision, which truncated
 > "*" to one char and misaligned the row); off-diagonal the cost cm[i*maxsigma+j] printed with
 > "%.*d" using precision strlen(symbol j)+1 — i.e. zero-padded to the width of the header symbol
 > plus one, so e.g. cost 1 under symbol "a" prints "01". Rendering is factored into a
@@ -566,7 +566,7 @@
 > symbols in sigma as (type, attribute, value) triples. (3) If name != NULL and no extracted flag
 > has that attribute, return net unchanged (verbose note). (4) For each extracted flag f whose
 > attribute matches (or all if name == NULL) — the type restriction is written `f->type &
-> (FLAG_UNIFY|FLAG_REQUIRE|FLAG_DISALLOW|FLAG_EQUAL)` — Wave 4 fix: the C used bitwise OR, which is
+> (FLAG_UNIFY|FLAG_REQUIRE|FLAG_DISALLOW|FLAG_EQUAL)` — the C used bitwise OR, which is
 > always true, so filters were also attempted for C/P/N flags; `&` restricts the body to U/R/D/E as
 > intended and changes nothing observable (flag_build classifies pairs only for U/R/D f):
 > build succeed_flags and
@@ -757,7 +757,7 @@
 > L = ∅: replace the state array with fsm_empty() (one non-final start state), destroy sigma and
 > replace it with a fresh empty sigma, zero linecount/arccount/statecount, set is_pruned, and
 > return. This subsumes the markcount == 0 (no finals) case, whose start is also not coaccessible.
-> Wave 5 fix: C instead set mapping[0] = 0 unconditionally and renumbered the surviving (orphaned)
+> The C source instead set mapping[0] = 0 unconditionally and renumbered the surviving (orphaned)
 > coaccessible component from 1, producing a net with states but no start state; a disconnected
 > component can never make L non-empty when the start is pruned, so the empty machine is correct.
 > 4. Otherwise (state 0 coaccessible) renumber and rewrite in place. mapping[0] = 0; every other
@@ -941,14 +941,15 @@
 > [spec:foma:def:fomalib.fsm-construct-copy-sigma-fn]
 > FEXPORT void fsm_construct_copy_sigma(struct fsm_construct_handle *handle, struct sigma *sigma)
 
-> [spec:foma:sem:fomalib.fsm-construct-copy-sigma-fn]
+> [spec:foma:sem:fomalib.fsm-construct-copy-sigma-fn+1]
 > Copies an existing sigma into a construction handle. For each sigma node (stopping at NULL or a
 > node with number -1): raises handle->maxsigma to the node's number; if the number >=
-> fsm_sigma_list_size, reallocs the list to the next power of two above the current size (only one
-> doubling per symbol — a number more than twice the size would overflow the array, a latent bug
-> unreachable while sizes start at 1024; the grown region is not zeroed). Strdups the symbol string
-> into slot [number] and inserts (symbol,number) into the chained hash table. Symbol numbers are
-> preserved exactly, including the reserved 0/1/2.
+> fsm_sigma_list_size, reallocs the list, growing (next_power_of_two) repeatedly until the number
+> fits. The C source grew only one doubling per symbol, so a number more than twice the size
+> overflowed the array (latent, unreachable while sizes start at 1024); the loop guarantees the
+> slot fits. The grown region is not zeroed. Strdups the symbol string into slot [number] and
+> inserts (symbol,number) into the chained hash table. Symbol numbers are preserved exactly,
+> including the reserved 0/1/2.
 
 > [spec:foma:def:fomalib.fsm-construct-done-fn]
 > fsm *fsm_construct_done(struct fsm_construct_handle *handle)
@@ -1051,7 +1052,7 @@
 
 > [spec:foma:sem:fomalib.fsm-copy-fn+1]
 > Copies a network. A &mut borrow is never NULL; NULL-able callers check at the call site.
-> Wave 4 fix: calls fsm_count(net) on the SOURCE FIRST to refresh its counts, THEN captures the
+> Calls fsm_count(net) on the SOURCE FIRST to refresh its counts, THEN captures the
 > now-fresh name/counts/flags into a new struct fsm — the C memcpy'd the whole struct before
 > fsm_count ran, leaving the copy's counts stale. The copy gets its own sigma (sigma_copy) and its
 > own state array (malloc + memcpy of linecount lines, sentinel included); medlookup is deep-cloned
@@ -1614,7 +1615,7 @@
 > against the canonical universal machine: line 0 a final state with an IDENTITY:IDENTITY (2:2)
 > self-loop to state 0, line 1 the -1 sentinel, and sigma_max < 3 (no real symbols); returns 1 on a
 > match, else 0.
-> Wave 4 fix: the C condition conjoined (fsm+1)->state_no == 0 with (fsm+1)->state_no == -1
+> The C condition conjoined (fsm+1)->state_no == 0 with (fsm+1)->state_no == -1
 > (unsatisfiable → always returned 0); the erroneous == 0 conjunct is dropped, implementing the
 > evident universality test.
 
@@ -1689,7 +1690,7 @@
 > pointer (potential use-after-free); (2) the minimized input net is never destroyed (the
 > read handle does not own it) — it leaks; (3) letters are staged through fixed 128-byte
 > buffers.
-> Wave 4 fix: the C sized the output-side copy by utf8skip(in) instead of utf8skip(out),
+> The C sized the output-side copy by utf8skip(in) instead of utf8skip(out),
 > corrupting the copied letter when the two sides' current letters had different UTF-8
 > widths; the port sizes the output copy by utf8skip(out)+1, so each step copies exactly one
 > UTF-8 output character.
@@ -2367,7 +2368,7 @@
 > Topologically sorts an acyclic net's states (renumbering them in topological order) and
 > counts its paths; detects cycles. NULL → NULL. After fsm_count: one pass computes each
 > state's in-degree (invcount) and each state's first line index; a self-loop found here
-> immediately marks the net cyclic. Wave 4 fix: invcount is a plain `i32` (was an UNSIGNED
+> immediately marks the net cyclic. Invcount is a plain `i32` (was an UNSIGNED
 > SHORT that silently overflowed past 65535 incoming arcs) — a latent overflow widened per
 > the conventions; unchanged for ≤65535 in-arcs into any single state.
 > Kahn's algorithm on the shared int stack (cleared first), seeded with state 0 only and

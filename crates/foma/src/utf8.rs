@@ -164,37 +164,30 @@ pub fn decode_quoted(s: &mut Vec<u8>) {
 
 /* Replace equal length substrings in s */
 // [spec:foma:def:utf8.streqrep-fn]
-// [spec:foma:sem:utf8.streqrep-fn]
+// [spec:foma:sem:utf8.streqrep-fn+1]
 // [spec:foma:def:fomalibconf.streqrep-fn]
-// [spec:foma:sem:fomalibconf.streqrep-fn]
+// [spec:foma:sem:fomalibconf.streqrep-fn+1]
 // C returns `s`; here the buffer is mutated in place.
-// Latent bug reproduced literally (see the utf8.streqrep-fn sem rule):
-// the search restarts from the beginning after every replacement, so if
-// newstring still matches oldstring at the same position (e.g. old == new,
-// or oldstring is empty — strstr matches at offset 0) the loop never
-// terminates.
-// DEVIATION from C (if newstring is shorter than oldstring the C memcpy
-// reads past newstring's end; here the slice index panics instead).
+// [spec:foma:sem:utf8.streqrep-fn+1] the scan advances past each replacement, so
+// it always terminates and replaces non-overlapping occurrences left to right. C
+// restarted from the beginning after every replacement, so old == new (or an
+// oldstring that still matches after substitution) looped forever. An empty
+// oldstring (matches everywhere) and a newstring shorter than oldstring (the C
+// memcpy read past its end) are both treated as no-ops rather than hanging/panicking.
 pub fn streqrep(s: &mut Vec<u8>, oldstring: &[u8], newstring: &[u8]) {
     let len: usize = oldstring.len();
+    if len == 0 || newstring.len() < len {
+        return;
+    }
 
-    loop {
-        /* C: ptr = strstr(s, oldstring) */
-        let mut ptr: Option<usize> = None;
-        let mut start: usize = 0;
-        while start + len <= s.len() {
-            if &s[start..start + len] == oldstring {
-                ptr = Some(start);
-                break;
-            }
+    let mut start: usize = 0;
+    while start + len <= s.len() {
+        if &s[start..start + len] == oldstring {
+            /* C: memcpy(ptr, newstring, len) */
+            s[start..start + len].copy_from_slice(&newstring[..len]);
+            start += len; /* advance past the replacement — no re-match, no hang */
+        } else {
             start += 1;
-        }
-        match ptr {
-            Some(p) => {
-                /* C: memcpy(ptr, newstring, len) */
-                s[p..p + len].copy_from_slice(&newstring[..len]);
-            }
-            None => break,
         }
     }
 }
@@ -575,10 +568,8 @@ mod tests {
     }
 
     // streqrep: equal-length replacement of every match; no-match identity.
-    // The non-terminating case (replacement still matches oldstring, e.g.
-    // old == new) is pinned by inspection at the restart-from-0 loop; not run.
-    // [spec:foma:sem:utf8.streqrep-fn/test]
-    // [spec:foma:sem:fomalibconf.streqrep-fn/test]
+    // [spec:foma:sem:utf8.streqrep-fn+1/test]
+    // [spec:foma:sem:fomalibconf.streqrep-fn+1/test]
     #[test]
     fn test_streqrep() {
         // no match → identity
@@ -595,15 +586,24 @@ mod tests {
         assert_eq!(s, b"aXYaXY".to_vec());
     }
 
-    // streqrep DEVIATION: a newstring shorter than oldstring makes the C memcpy
-    // read past newstring's end; the Rust slice index panics instead.
-    // [spec:foma:sem:utf8.streqrep-fn/test]
-    // [spec:foma:sem:fomalibconf.streqrep-fn/test]
+    // The scan advances past each replacement, so cases that made the C loop
+    // never terminate (or read past newstring) all halt safely.
+    // [spec:foma:sem:utf8.streqrep-fn+1/test]
+    // [spec:foma:sem:fomalibconf.streqrep-fn+1/test]
     #[test]
-    #[should_panic]
-    fn test_streqrep_short_newstring_panics() {
-        let mut s = b"abc".to_vec();
-        streqrep(&mut s, b"ab", b"x"); // len(new)=1 < len(old)=2 → slice panic
+    fn streqrep_always_terminates() {
+        // old == new: every 'a' rewritten to 'a' — must terminate, not hang.
+        let mut s = b"banana".to_vec();
+        streqrep(&mut s, b"a", b"a");
+        assert_eq!(s, b"banana".to_vec());
+        // empty oldstring matches everywhere: treated as a no-op.
+        let mut s = b"xyz".to_vec();
+        streqrep(&mut s, b"", b"q");
+        assert_eq!(s, b"xyz".to_vec());
+        // newstring shorter than oldstring: no-op (C read past newstring's end).
+        let mut s = b"abcabc".to_vec();
+        streqrep(&mut s, b"ab", b"x");
+        assert_eq!(s, b"abcabc".to_vec());
     }
 
     // ishexstr: 1 iff four bytes are ASCII hex digits; short input fails at the

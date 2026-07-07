@@ -1062,9 +1062,8 @@ pub fn cmatrix_print(net: &Fsm) {
     cmatrix_print_to(net, &mut std::io::stdout());
 }
 
-/// Writer-generic core of [cmatrix_print].
-/// [spec:foma:sem:spelling.cmatrix-print-fn+1] the diagonal cell (i == j) is
-/// filled to the full column width (strlen(sym_j)+1); C used that count as a
+/// Writer-generic core of [cmatrix_print]. The diagonal cell (i == j) is filled
+/// to the full column width (strlen(sym_j)+1); the C source used that count as a
 /// `%.*s` *precision*, truncating "*" to one char and under-filling the column,
 /// which misaligned every row past the diagonal.
 fn cmatrix_print_to<W: std::io::Write + ?Sized>(net: &Fsm, out: &mut W) {

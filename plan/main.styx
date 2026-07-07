@@ -661,6 +661,20 @@ children (
                         kind @note
                         text "Tier C — crash/hang on malformed/degenerate input. Rust already turned C's UB into panics/loops; goal is graceful FomaError instead.\nC1 sigma.rs:95,892 [sigma.sigma-add-special-fn] — code ∉{0,1,2} inserts a Sigma node with symbol:None → later deref panics. Fix: return FomaError (or reject) for non-reserved codes.\nC2 dynarray.rs:581 [dynarray.fsm-construct-copy-sigma-fn] — symbol number > 2× current size → single doubling insufficient → index panic. Fix: grow in a loop / reserve to max symbol number.\nC3 io.rs:1101 [io.io-net-read-fn] — binary sigma section truncated (never sees ##states##) → io_gets yields empty lines forever → INFINITE LOOP. Fix: bail on repeated empty lines / EOF sentinel.\nC4 utf8.rs:171 [utf8.streqrep-fn] — equal or overlapping old/new (e.g. streqrep(s,\"a\",\"a\")) → strstr always matches at 0 → INFINITE LOOP; also newstring shorter than oldstring reads past. Fix: advance search past each replacement; document len(new) <= len(old) contract."
                     }
+
+                    {
+                        at 2026-07-07T00:32:21.346364Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Todo → Doing (nplan_start)"
+                    }
+
+                    {
+                        at 2026-07-07T01:02:33.161891Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan_complete)"
+                    }
                 )
             }
 

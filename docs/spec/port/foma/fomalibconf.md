@@ -174,7 +174,7 @@
 > [spec:foma:sem:fomalibconf.decode-quoted-fn+1]
 > In-place decoder of `\uXXXX` escapes in string `s`. Let `len = strlen(s)`. Scan with read index `i` and write index `j`, both from 0, while `i < len`:
 > - If `s[i]` is backslash (0x5C), `len-i > 5`, `s[i+1]` is lowercase 'u' (0x75), and the following 4 bytes are hex digits (per `ishexstr`): parse those 4 hex digits as a 16-bit code point (first two digits = high byte) and UTF-8-encode it via `utf8code16tostr`; copy the resulting 1–3 UTF-8 bytes to `s[j..]` (advancing `j` per byte); advance `i` by 6.
-> - Otherwise copy one whole UTF-8 character verbatim: `utf8skip(s+i)+1` bytes, advancing `i` and `j` together. Wave 4 fix: a malformed lead byte gives `utf8skip == -1`, so this width would be 0 and the C looped forever; the port forces at least one byte to be copied (lossy), so decoding terminates.
+> - Otherwise copy one whole UTF-8 character verbatim: `utf8skip(s+i)+1` bytes, advancing `i` and `j` together. A malformed lead byte gives `utf8skip == -1`, so this width would be 0 and the C looped forever; the port forces at least one byte to be copied (lossy), so decoding terminates.
 > After the loop the string is truncated at `j`. A 6-byte escape always shrinks to at most 3 bytes, so `j <= i` throughout and in-place compaction is safe. Only lowercase `u` introduces an escape; the hex digits may be upper- or lowercase. Implementation: crates/foma/src/utf8.rs.
 
 > [spec:foma:def:fomalibconf.dequote-string-fn]
@@ -360,7 +360,7 @@
 > int int_stack_isfull()
 
 > [spec:foma:sem:fomalibconf.int-stack-isfull-fn+1]
-> Wave 4: the integer stack grows unbounded (a `Vec`), so it is never full — always returns 0. The C `MAX_STACK` cap (2097152 fixed slots) and the `top == MAX_STACK - 1` boundary are gone. Implementation: crates/foma/src/int_stack.rs.
+> The integer stack grows unbounded (a `Vec`), so it is never full — always returns 0. The C `MAX_STACK` cap (2097152 fixed slots) and the `top == MAX_STACK - 1` boundary are gone. Implementation: crates/foma/src/int_stack.rs.
 
 > [spec:foma:def:fomalibconf.int-stack-pop-fn]
 > int int_stack_pop()
@@ -372,7 +372,7 @@
 > void int_stack_push(int c)
 
 > [spec:foma:sem:fomalibconf.int-stack-push-fn+1]
-> Wave 4: pushes `c` onto the global integer stack, growing its backing `Vec` on demand — infallible and unbounded. The C `MAX_STACK` cap and the "Stack full!\n" + exit(1) overflow path are gone. Implementation: crates/foma/src/int_stack.rs.
+> Pushes `c` onto the global integer stack, growing its backing `Vec` on demand — infallible and unbounded. The C `MAX_STACK` cap and the "Stack full!\n" + exit(1) overflow path are gone. Implementation: crates/foma/src/int_stack.rs.
 
 > [spec:foma:def:fomalibconf.int-stack-size-fn]
 > int int_stack_size()
@@ -421,7 +421,7 @@
 > int ptr_stack_isfull()
 
 > [spec:foma:sem:fomalibconf.ptr-stack-isfull-fn+1]
-> Wave 4: the pointer stack grows unbounded (a `Vec`), so it is never full — always returns 0. The C `MAX_PTR_STACK` cap (2097152 fixed slots) and the `ptr_stack_top == MAX_PTR_STACK - 1` boundary are gone. Implementation: crates/foma/src/int_stack.rs.
+> The pointer stack grows unbounded (a `Vec`), so it is never full — always returns 0. The C `MAX_PTR_STACK` cap (2097152 fixed slots) and the `ptr_stack_top == MAX_PTR_STACK - 1` boundary are gone. Implementation: crates/foma/src/int_stack.rs.
 
 > [spec:foma:def:fomalibconf.ptr-stack-pop-fn]
 > void *ptr_stack_pop()
@@ -433,7 +433,7 @@
 > void ptr_stack_push(void *ptr)
 
 > [spec:foma:sem:fomalibconf.ptr-stack-push-fn+1]
-> Wave 4: pushes `ptr` (an index/handle token) onto the global pointer stack, growing its backing `Vec` on demand — infallible and unbounded. The C `MAX_PTR_STACK` cap and the "Pointer stack full!\n" + exit(1) overflow path are gone. The stack stores the token only; no ownership is taken. Implementation: crates/foma/src/int_stack.rs.
+> Pushes `ptr` (an index/handle token) onto the global pointer stack, growing its backing `Vec` on demand — infallible and unbounded. The C `MAX_PTR_STACK` cap and the "Pointer stack full!\n" + exit(1) overflow path are gone. The stack stores the token only; no ownership is taken. Implementation: crates/foma/src/int_stack.rs.
 
 > [spec:foma:def:fomalibconf.remove-trailing-fn]
 > char *remove_trailing(char *s, char c)
@@ -464,8 +464,8 @@
 > [spec:foma:def:fomalibconf.sigma-add-special-fn]
 > FEXPORT int sigma_add_special (int symbol, struct sigma *sigma)
 
-> [spec:foma:sem:fomalibconf.sigma-add-special-fn]
-> Inserts the reserved symbol with code `symbol` into the sigma list in sorted (ascending number) position and returns `symbol`. The stored string is a fresh strdup of the canonical name: EPSILON=0 → "@_EPSILON_SYMBOL_@", IDENTITY=2 → "@_IDENTITY_SYMBOL_@", UNKNOWN=1 → "@_UNKNOWN_SYMBOL_@"; for any other code the string is NULL (latent hazard: later strcmp/free on that node dereferences NULL).
+> [spec:foma:sem:fomalibconf.sigma-add-special-fn+1]
+> Inserts the reserved symbol with code `symbol` into the sigma list in sorted (ascending number) position and returns `symbol`. The stored string is the canonical name: EPSILON=0 → "@_EPSILON_SYMBOL_@", IDENTITY=2 → "@_IDENTITY_SYMBOL_@", UNKNOWN=1 → "@_UNKNOWN_SYMBOL_@". C left the string NULL for any other code (later strcmp/free on that node dereferenced NULL); a non-reserved code now yields a well-formed placeholder "@_SPECIAL_<code>_@" so the node is never symbol-less.
 > Insertion is identical to the special branch of `sigma_add`: if the head is the empty sentinel (number == -1), reuse it ({number: symbol, symbol: str, next: NULL}). Otherwise walk with a `previous` pointer while node->number < symbol and node->number != -1; malloc a splice node; if `previous` is non-NULL splice the new {symbol code, str} node between previous and the stop node; if inserting before the head, move the head's fields into the splice node and overwrite the head with the new values, next = splice. No duplicate check: adding an already-present code inserts a duplicate node. Implementation: foma/sigma.c.
 
 > [spec:foma:def:fomalibconf.sigma-cleanup-fn]
@@ -530,7 +530,7 @@
 > Sorts the non-reserved symbols of `net->sigma` by symbol string (strcmp order via qsort), renumbers them consecutively from 3, and rewrites all transition in/out numbers to match. Always returns 1 (also returns 1 early, doing nothing, when `sigma_max(net->sigma)` < 0). Steps:
 > 1. `size = sigma_max(net->sigma)`; allocate a temp array of `size` {symbol, number} pairs.
 > 2. Walk sigma collecting every node with number > IDENTITY (2) into the array; let `max` = count; qsort the array by strcmp on symbol.
-> 3. Build an int `replacearray` of size+3 entries. Wave 4 fix: the C left it uninitialized (garbage; the Wave-2 port zeroed it), so an arc numbered with a symbol absent from sigma got corrupted. Seed it with the identity map (replacearray[k]=k), then set replacearray[pair.number] = sorted-index + 3 for each collected pair — old number → new number; absent numbers keep their own value.
+> 3. Build an int `replacearray` of size+3 entries. The C left it uninitialized (garbage; the Wave-2 port zeroed it), so an arc numbered with a symbol absent from sigma got corrupted. Seed it with the identity map (replacearray[k]=k), then set replacearray[pair.number] = sorted-index + 3 for each collected pair — old number → new number; absent numbers keep their own value.
 > 4. Walk `net->states` lines to the state_no == -1 sentinel, replacing any `in` > 2 with replacearray[in] and any `out` > 2 with replacearray[out]. An arc carrying a number absent from sigma is now left unchanged rather than corrupted.
 > 5. Walk the sigma list again in list order with counter i: each node with number > 2 gets number = i+3 and symbol = sorted array entry i's symbol (shuffled between nodes), i++. Since reserved nodes 0–2 sort before the rest in a sorted list, the list ends up sorted by number with symbols in strcmp order. Implementation: crates/foma/src/sigma.rs.
 
@@ -566,8 +566,8 @@
 > [spec:foma:def:fomalibconf.streqrep-fn]
 > char *streqrep(char *s, char *oldstring, char *newstring)
 
-> [spec:foma:sem:fomalibconf.streqrep-fn]
-> Replaces every occurrence of `oldstring` in `s` with the same-length prefix of `newstring`, in place, and returns `s`. Algorithm: let len = strlen(oldstring); loop: strstr(s, oldstring) from the start of `s`; while a match is found, memcpy exactly `len` bytes from `newstring` over the match; repeat until strstr returns NULL. Intended for equal-length replacement only (per the source comment). Latent bugs to preserve/flag: if strlen(newstring) < len the memcpy reads past `newstring`'s terminator (undefined behavior); if the written bytes still contain `oldstring` (e.g. newstring == oldstring, or overlapping self-reproduction) the loop never terminates; each iteration rescans from the beginning of `s`, so complexity is O(hits × |s|). Implementation: foma/utf8.c.
+> [spec:foma:sem:fomalibconf.streqrep-fn+1]
+> Replaces every non-overlapping occurrence of `oldstring` in `s` with the same-length prefix of `newstring`, in place, and returns `s`. Algorithm: let len = strlen(oldstring); a single left-to-right scan advances past each replacement (by len) so it always terminates and is O(|s|). Intended for equal-length replacement only (per the source comment). C rescanned from the start of `s` after every replacement, so if the written bytes still contained `oldstring` (newstring == oldstring, or overlapping self-reproduction, or an empty oldstring that matches everywhere) the loop never terminated; an empty `oldstring` and a `newstring` shorter than `oldstring` (which C's memcpy read past) are now no-ops rather than a hang/overread. Implementation: foma/utf8.c.
 
 > [spec:foma:def:fomalibconf.strip-newline-fn]
 > void strip_newline(char *s)
@@ -609,7 +609,7 @@
 > int utf8strlen(char *str)
 
 > [spec:foma:sem:fomalibconf.utf8strlen-fn+1]
-> Counts UTF-8 characters in NUL-terminated `str`: let len = strlen(str); with byte index i = 0 and count j = 0, loop while str[i] != '\0' and i < len, each iteration advancing i by utf8skip(str+i) + 1 and incrementing j; return j. A truncated final multibyte character makes i jump past len and still counts as one character. Wave 4 fix: if a stray continuation byte appears in lead position utf8skip returns -1, so i would advance by 0 (the C hung); the port forces the step to at least 1, counting the malformed byte as one character (lossy) so counting terminates. Implementation: crates/foma/src/utf8.rs.
+> Counts UTF-8 characters in NUL-terminated `str`: let len = strlen(str); with byte index i = 0 and count j = 0, loop while str[i] != '\0' and i < len, each iteration advancing i by utf8skip(str+i) + 1 and incrementing j; return j. A truncated final multibyte character makes i jump past len and still counts as one character. If a stray continuation byte appears in lead position utf8skip returns -1, so i would advance by 0 (the C hung); the port forces the step to at least 1, counting the malformed byte as one character (lossy) so counting terminates. Implementation: crates/foma/src/utf8.rs.
 
 > [spec:foma:def:fomalibconf.xprintf-fn]
 > void xprintf(char *string)

@@ -57,10 +57,10 @@
 > return 0 immediately (nothing emitted). (4) else memcpy the display string of the output side
 > (bstring in DOWN mode, astring in UP mode).
 > Finally, if print_space is on and len > 0, strcpy h->space_symbol after the emitted bytes and
-> increment len by the space symbol's full byte length. Wave 5 fix: C incremented len by exactly 1
-> regardless of the symbol's length, so a multi-byte space symbol had all but its first byte
-> overwritten by the next append; len now advances by strlen(space_symbol) so the separator
-> survives intact (single-byte separators are unaffected).
+> increment len by the space symbol's full byte length (strlen(space_symbol)), so a multi-byte
+> separator survives intact. The C source incremented len by exactly 1 regardless of the symbol's
+> length, overwriting all but the separator's first byte on the next append; single-byte separators
+> are unaffected either way.
 
 > [spec:foma:def:apply.apply-at-last-arc-fn]
 > int apply_at_last_arc(struct apply_handle *h)
@@ -553,7 +553,7 @@
 > [spec:foma:sem:apply.apply-set-space-symbol-fn]
 > Sets h->space_symbol = strdup(space) (leaking any previous value) and turns h->print_space on.
 > Note `[spec:foma:sem:apply.apply-append-fn+1]` advances the output position by the space symbol's
-> full byte length, so a multi-byte space symbol is emitted intact (Wave 5 fix; C corrupted it).
+> full byte length, so a multi-byte space symbol is emitted intact (the C source corrupted it).
 
 > [spec:foma:def:apply.apply-skip-this-arc-fn]
 > void apply_skip_this_arc(struct apply_handle *h)

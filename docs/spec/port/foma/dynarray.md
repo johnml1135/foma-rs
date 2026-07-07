@@ -85,15 +85,16 @@
 > [spec:foma:def:dynarray.fsm-construct-copy-sigma-fn]
 > void fsm_construct_copy_sigma(struct fsm_construct_handle *handle, struct sigma *sigma)
 
-> [spec:foma:sem:dynarray.fsm-construct-copy-sigma-fn]
+> [spec:foma:sem:dynarray.fsm-construct-copy-sigma-fn+1]
 > Bulk-loads an existing sigma linked list into the handle's sigma list and hash (no duplicate or
 > reserved-symbol checks). Iterates while sigma != NULL and sigma->number != -1 (a node numbered -1
 > terminates the walk). Per node:
 > 1. If sigma->number > handle->maxsigma, set maxsigma = sigma->number.
-> 2. If sigma->number >= fsm_sigma_list_size, grow once: size = next_power_of_two(size) (doubles a
->    power-of-two size) and realloc. Note this is a single growth step keyed on the current size,
->    not on the symbol number: a number >= twice the current size would still be out of range.
->    New slots are not zero-initialized.
+> 2. If sigma->number >= fsm_sigma_list_size, grow until the number fits: repeatedly
+>    size = next_power_of_two(size) until size > sigma->number, then realloc. The C source grew
+>    once (a single doubling keyed on the current size), so a number >= twice the size still
+>    overflowed the array (OOB write in C, index panic in the port); the loop guarantees the slot
+>    fits. New slots are not zero-initialized.
 > 3. symdup = strdup(sigma->symbol); store symdup at fsm_sigma_list[sigma->number].symbol.
 > 4. Insert into fsm_sigma_hash exactly as in fsm_construct_add_symbol: hash the symbol; if the
 >    bucket head's symbol is NULL fill the head (symbol = symdup, sym = number), otherwise calloc a

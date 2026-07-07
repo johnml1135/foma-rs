@@ -252,7 +252,7 @@
 > in width strlen(sym_j)+1, so it fills the column and stays aligned with the header;
 > off-diagonal print the cost via printf("%.*d", strlen(sym_j)+1, cm[i*maxsigma+j]) — %d
 > precision zero-pads, so the cost occupies exactly strlen(sym_j)+1 characters, matching the
-> header column width. Wave 5 fix: C emitted the diagonal "*" via printf("%.*s", strlen(sym_j)+1,
+> header column width. The C source emitted the diagonal "*" via printf("%.*s", strlen(sym_j)+1,
 > "*"), where the count is a %s *precision* that truncates rather than pads, so a single "*"
 > under-filled the column and misaligned the rest of the row for every symbol (column width
 > strlen+1 >= 2); the port pads the "*" to the full column width instead. The rendering core is
@@ -389,8 +389,8 @@
 > (dictionary-side string) and medh->instring (input-word-side string), and sets
 > medh->cost = node->g. Uses the global int_stack (cleared first) to reverse the parent
 > chain. Chain walk (both passes): n = node, then n = medh->agenda + n->parent; stop
-> before pushing only when n->parent == -1 (the search root, seeded with parent = -1). Wave 5
-> fix: C additionally stopped when n->in == 0 && n->out == 0 (intended to detect the root,
+> before pushing only when n->parent == -1 (the search root, seeded with parent = -1). The C
+> source additionally stopped when n->in == 0 && n->out == 0 (intended to detect the root,
 > whose in/out are 0/0), which also truncated the walk at any interior epsilon:epsilon step;
 > since the root is uniquely identified by parent == -1 and the parent chain is acyclic
 > (parents are strictly-earlier agenda indices), the label test is dropped.

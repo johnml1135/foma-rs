@@ -160,7 +160,7 @@
 > "concatenate": requires ≥2 nets (iface_stack_check(2)). Folds the entire stack: while stack_size() > 1,
 > pops `one` (top), pops `two` (next), pushes fsm_topsort(fsm_minimize(fsm_concat(one, two))) — the top
 > net is the left/first operand of the concatenation. Both operands consumed each iteration.
-> Wave 4 fix: the C emitted a stray debug printf("dd") (no newline) once per iteration — a leftover
+> The C emitted a stray debug printf("dd") (no newline) once per iteration — a leftover
 > latent bug; it is now deleted, so no "dd" is written.
 
 > [spec:foma:def:iface.iface-crossproduct-fn]
@@ -208,7 +208,7 @@
 > Utility: scans string s forward to the first ASCII digit ('0'–'9', compared as unsigned char) and
 > returns atoi() of the string starting at that digit (or at an immediately preceding '-' — see fix).
 > If s contains no digit, the scan stops at the terminating NUL and atoi("") returns 0. s is not modified.
-> Wave 4 fix: the C scan stopped AT the first digit, dropping any leading '-', so negatives read as
+> The C scan stopped AT the first digit, dropping any leading '-', so negatives read as
 > positive ("abc-5" → 5). A '-' immediately before the first digit is now included, so "abc-5" → -5.
 
 > [spec:foma:def:iface.iface-extract-unambiguous-fn]
@@ -428,7 +428,7 @@
 > non-NULL: prints "%s\t" (name, TAB) followed by print_stats(net) (the one-line size summary; see
 > `[spec:foma:sem:iface.print-stats-fn]`). Then for every node in g_defines_f (defined regex functions)
 > with non-NULL name: prints "%s@%i\t" — name, '@', numargs, then TAB — followed by the function's regex
-> source and "\n". Wave 4 fix: the C format was "%s@%i)\t" with a stray unmatched ')' before the TAB —
+> source and "\n". The C format was "%s@%i)\t" with a stray unmatched ')' before the TAB —
 > the ')' is now dropped.
 
 > [spec:foma:def:iface.iface-print-dot-fn]
@@ -483,7 +483,7 @@
 > result (0 for the empty language), via the helper `shortest_acyclic_length`. If top arity == 1
 > prints "Shortest acyclic path length: %i\n"; if arity == 2 does this separately for the upper and
 > lower projections and prints "Shortest acyclic upper path length: %i\n" then "Shortest acyclic
-> lower path length: %i\n". Wave 5 fix: C reported statecount - 1 of the minimized result, but the
+> lower path length: %i\n". The C source reported statecount - 1 of the minimized result, but the
 > minimal unary DFA is a chain of (max length)+1 states, so statecount-1 is the LONGEST length for a
 > language with several string lengths; the BFS returns the true shortest. The Result nets are never
 > fsm_destroy'd (leak).
@@ -533,7 +533,7 @@
 > "print random-pairs": resolves limit == -1 to g_list_random_limit (default 15), then calls
 > iface_pairs_call(limit, 1) (see `[spec:foma:sem:iface.iface-pairs-call-fn]`); random == 1 makes the
 > driver draw results with apply_random_words and print each as "upper\tlower\n" after splitting.
-> Wave 4 fix: the C passed limit straight through, so limit == -1 became g_list_limit (default 100)
+> The C passed limit straight through, so limit == -1 became g_list_limit (default 100)
 > inside iface_pairs_call — the list limit, unlike the other random commands. It now uses
 > g_list_random_limit like random-lower/upper/words.
 
@@ -659,7 +659,7 @@
 > iface_set_variable; on the first match prints "%s = %s\n" with the full variable name and a value
 > formatted BY the variable's declared type: FVAR_BOOL as "ON"/"OFF" (value == 1 ? ON : OFF), FVAR_INT
 > as the integer value, FVAR_STRING as the string. If nothing matches prints
-> "*There is no global variable '%s'.\n". Wave 4 fix: the C printed ON/OFF from *(int*)ptr == 1 for
+> "*There is no global variable '%s'.\n". The C printed ON/OFF from *(int*)ptr == 1 for
 > EVERY type — INT variables only showed ON at value 1, and FVAR_STRING (att-epsilon) reinterpreted the
 > char* pointer bytes as an int (garbage). Now formatted per declared type.
 
@@ -913,7 +913,7 @@
 
 > [spec:foma:sem:iface.iface-words-file-fn+1]
 > "print words/upper-words/lower-words > filename": type selects the enumerator fresh on every call —
-> 1 → apply_upper_words, 2 → apply_lower_words, otherwise (type 0) → apply_words. Wave 4 fix: the C held
+> 1 → apply_upper_words, 2 → apply_lower_words, otherwise (type 0) → apply_words. The C held
 > the pointer in a function-local STATIC that type 0 never reset, so after any type-1/2 call a later
 > type-0 call reused the stale upper/lower enumerator; the enumerator is now a per-call local.
 > Requires ≥1 net. If top->fsm->pathcount == PATHCOUNT_CYCLIC (-1) prints

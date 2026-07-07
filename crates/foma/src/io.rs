@@ -989,7 +989,7 @@ pub(crate) fn explode_line(buf: &str, values: &mut Vec<i32>) -> i32 {
 /* / ##states## / ...TRANSITIONS... / ##end## (see foma/io.c for the full note) */
 
 // [spec:foma:def:io.io-net-read-fn]
-// [spec:foma:sem:io.io-net-read-fn]
+// [spec:foma:sem:io.io-net-read-fn+1]
 // C signature: struct fsm *io_net_read(io_buf_handle *iobh, char **net_name).
 // Here the net and its name are returned together; None ↔ NULL return.
 pub fn io_net_read(iobh: &mut IoBufHandle) -> Option<(Box<Fsm>, String)> {
@@ -1093,14 +1093,21 @@ pub fn io_net_read(iobh: &mut IoBufHandle) -> Option<(Box<Fsm>, String)> {
 
     /* Sigma lines */
     loop {
+        let before = iobh.io_buf_ptr;
         io_gets(iobh, &mut buf);
         if buf.as_bytes().first() == Some(&b'#') {
             break;
         }
         if buf.is_empty() {
-            /* truly empty line: skipped. At end-of-buffer io_gets keeps yielding
-            empty lines, so a file truncated inside the sigma section loops
-            forever, exactly as in C (memory-safe, ported literally). */
+            // [spec:foma:sem:io.io-net-read-fn+1] a truly empty line is skipped,
+            // but at end-of-buffer io_gets yields empty lines without advancing
+            // the cursor; if no progress was made the file is truncated inside the
+            // sigma section, so fail instead of looping forever (C hung here).
+            if iobh.io_buf_ptr == before {
+                print!("File format error in sigma section!\n");
+                fsm_destroy(net);
+                return None;
+            }
             continue;
         }
         /* new_symbol = strstr(buf, " ") — a spaceless line NULL-derefs in C */
@@ -2396,5 +2403,23 @@ mod tests {
     #[should_panic(expected = "dead prototype")]
     fn save_stack_att_is_dead_prototype() {
         save_stack_att();
+    }
+
+    // [spec:foma:sem:io.io-net-read-fn+1/test]
+    #[test]
+    fn io_net_read_bails_on_truncated_sigma_section() {
+        // Serialize a real net to text, then drop everything from "##states##"
+        // onward so the buffer ends inside the sigma section. io_net_read must
+        // return None instead of looping forever on the empty lines io_gets
+        // yields at end-of-buffer.
+        let net = fsm_parse_regex("a b", None, None).unwrap();
+        let mut text: Vec<u8> = Vec::new();
+        foma_net_print(&net, &mut text);
+        let s = String::from_utf8(text).unwrap();
+        let cut = s.find("##states##").expect("net text has a states section");
+        let mut iobh = io_init();
+        iobh.io_buf = Some(s[..cut].as_bytes().to_vec());
+        iobh.io_buf_ptr = 0;
+        assert!(io_net_read(&mut iobh).is_none());
     }
 }

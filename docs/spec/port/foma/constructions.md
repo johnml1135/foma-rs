@@ -812,7 +812,7 @@
 >   exhausted (inlen reaches 0) "@_EPSILON_SYMBOL_@" is used. Same for the
 >   output side: the next single UTF-8 character of `out` is consumed (copy
 >   sized by utf8skip(out)+1) and once exhausted "@_EPSILON_SYMBOL_@" is used.
-> Wave 4 fix: the C sized the output-side copy by the byte length of the
+> The C sized the output-side copy by the byte length of the
 > current INPUT character (strncpy(tmpout, out, utf8skip(in)+1), with `in`
 > possibly already advanced) while NUL-terminating at utf8skip(out)+1, so a
 > multibyte output character following a shorter input character was garbled.

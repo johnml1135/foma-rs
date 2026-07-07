@@ -560,9 +560,9 @@ pub fn fsm_construct_add_arc_nums(
 /* Copies entire alphabet from existing network */
 
 // [spec:foma:def:dynarray.fsm-construct-copy-sigma-fn]
-// [spec:foma:sem:dynarray.fsm-construct-copy-sigma-fn]
+// [spec:foma:sem:dynarray.fsm-construct-copy-sigma-fn+1]
 // [spec:foma:def:fomalib.fsm-construct-copy-sigma-fn]
-// [spec:foma:sem:fomalib.fsm-construct-copy-sigma-fn]
+// [spec:foma:sem:fomalib.fsm-construct-copy-sigma-fn+1]
 pub fn fsm_construct_copy_sigma(handle: &mut FsmConstructHandle, sigma: Option<&Sigma>) {
     let mut sigma = sigma;
     while let Some(s) = sigma {
@@ -577,11 +577,13 @@ pub fn fsm_construct_copy_sigma(handle: &mut FsmConstructHandle, sigma: Option<&
         /* C derefs sigma->symbol unconditionally (strdup(NULL) crashes) */
         let symbol = s.symbol.as_deref().unwrap();
         if symnum >= handle.fsm_sigma_list_size {
-            /* single growth step keyed on the current size, not on symnum:
-            a number >= twice the current size is still out of range.
-            New slots are not zero-initialized in C (None here). */
-            handle.fsm_sigma_list_size = next_power_of_two(handle.fsm_sigma_list_size);
-            // DEVIATION from C (OOB write when symnum >= the doubled size; Rust panics on the index below)
+            // [spec:foma:sem:dynarray.fsm-construct-copy-sigma-fn+1] grow until the
+            // slot fits. C did a single doubling keyed on the current size, so a
+            // number >= twice the size still overflowed the array (OOB write in C,
+            // index panic here). New slots are not zero-initialized in C (None here).
+            while symnum >= handle.fsm_sigma_list_size {
+                handle.fsm_sigma_list_size = next_power_of_two(handle.fsm_sigma_list_size);
+            }
             handle.fsm_sigma_list.resize(
                 handle.fsm_sigma_list_size as usize,
                 FsmSigmaList { symbol: None },
@@ -1871,5 +1873,24 @@ mod tests {
             assert_eq!(b.slookup[0].target, 0);
             assert_eq!(b.slookup[0].mainloop, 0);
         });
+    }
+
+    // [spec:foma:sem:dynarray.fsm-construct-copy-sigma-fn+1/test]
+    // [spec:foma:sem:fomalib.fsm-construct-copy-sigma-fn+1/test]
+    #[test]
+    fn fsm_construct_copy_sigma_grows_past_double_initial_size() {
+        // Symbol number 3000 exceeds twice the initial fsm_sigma_list_size (1024),
+        // so C's single-doubling growth left the slot out of range (OOB write in C,
+        // index panic here). The growth loop must resize until the slot fits.
+        let sigma = Sigma {
+            number: 3000,
+            symbol: Some("z".to_string()),
+            next: None,
+        };
+        let mut h = fsm_construct_init("c");
+        fsm_construct_copy_sigma(&mut h, Some(&sigma));
+        assert!(h.fsm_sigma_list_size > 3000);
+        assert_eq!(h.fsm_sigma_list[3000].symbol.as_deref(), Some("z"));
+        assert!(h.maxsigma >= 3000);
     }
 }

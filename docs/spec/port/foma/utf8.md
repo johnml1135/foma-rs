@@ -6,7 +6,7 @@
 > [spec:foma:sem:utf8.decode-quoted-fn+1]
 > In-place decoding of \uXXXX escapes in `s`. Let len=strlen(s). Two cursors i (read) and j (write) start at 0; loop while i < len:
 > If s[i]=='\\' (0x5c) AND len-i > 5 AND s[i+1]=='u' (0x75) AND the four bytes at s+i+2 pass `[spec:foma:sem:utf8.ishexstr-fn]`: call `[spec:foma:sem:utf8.utf8code16tostr-fn]` on s+i+2 to get a UTF-8 byte string, copy its bytes to s[j..] advancing j per byte, then i += 6. Edge: the escape \\u0000 converts to an empty string (the leading NUL terminates the conversion buffer), so the escape is deleted from the output.
-> Otherwise copy one whole UTF-8 character: skip = utf8skip(s+i)+1 bytes, copying s[i]→s[j] and advancing both per byte. Wave 4 fix: if `[spec:foma:sem:utf8.utf8skip-fn]` returns -1 (invalid lead byte) skip would be 0 (the C looped forever); the port forces skip to at least 1, so the malformed byte is copied through (lossy) and decoding terminates.
+> Otherwise copy one whole UTF-8 character: skip = utf8skip(s+i)+1 bytes, copying s[i]→s[j] and advancing both per byte. If `[spec:foma:sem:utf8.utf8skip-fn]` returns -1 (invalid lead byte) skip would be 0 (the C looped forever); the port forces skip to at least 1, so the malformed byte is copied through (lossy) and decoding terminates.
 > After the loop the string is truncated at j. It can only shrink or stay the same length (a \uXXXX escape is 6 bytes; its UTF-8 form ≤ 3), so no overflow.
 
 > [spec:foma:def:utf8.dequote-string-fn]
@@ -49,8 +49,8 @@
 > [spec:foma:def:utf8.streqrep-fn]
 > char *streqrep(char *s, char *oldstring, char *newstring)
 
-> [spec:foma:sem:utf8.streqrep-fn]
-> Replaces every occurrence of `oldstring` in `s` with `newstring`, which MUST be the same length: loops strstr(s, oldstring) and memcpy's strlen(oldstring) bytes of newstring over each match, in place. Returns `s`. Latent bugs: if newstring is shorter than strlen(oldstring), memcpy reads past it; if the replacement text still matches oldstring at the same position (e.g. old==new or overlapping content), the loop never terminates because the search restarts from the beginning of `s` each iteration.
+> [spec:foma:sem:utf8.streqrep-fn+1]
+> Replaces every non-overlapping occurrence of `oldstring` in `s` with `newstring` (same length), in place. Returns `s`. A single left-to-right scan advances past each replacement, so it always terminates and is O(|s|). An empty `oldstring` and a `newstring` shorter than `oldstring` are treated as no-ops. The C source looped strstr from the start of `s` after every replacement, so old==new (or a replacement that still matched oldstring, or an empty oldstring) never terminated, and a shorter newstring made the memcpy read past its end.
 
 > [spec:foma:def:utf8.strip-newline-fn]
 > void strip_newline(char *s)
@@ -89,7 +89,7 @@
 > int utf8strlen(char *str)
 
 > [spec:foma:sem:utf8.utf8strlen-fn+1]
-> Counts UTF-8 characters: with len=strlen(str), walk i from 0 while str[i] != '\0' and i < len, advancing i by utf8skip(str+i)+1 each step and incrementing the count. Returns the count. Wave 4 fix: on an invalid lead byte utf8skip returns -1, so the advance would be 0 (the C looped forever); the port forces the step to at least 1, counting the malformed byte as one character (lossy) so counting terminates. Truncated multibyte sequences are still over-counted as one character, bounded by the i<len guard.
+> Counts UTF-8 characters: with len=strlen(str), walk i from 0 while str[i] != '\0' and i < len, advancing i by utf8skip(str+i)+1 each step and incrementing the count. Returns the count. On an invalid lead byte utf8skip returns -1, so the advance would be 0 (the C looped forever); the port forces the step to at least 1, counting the malformed byte as one character (lossy) so counting terminates. Truncated multibyte sequences are still over-counted as one character, bounded by the i<len guard.
 
 > [spec:foma:def:utf8.xstrrev-fn]
 > char *xstrrev(char *str)

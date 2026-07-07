@@ -60,7 +60,7 @@
 > has that exact attribute name: when g_verbose print "Flag attribute '%s' does not occur in the
 > network.\n" and return net unchanged (flags list leaked).
 > 3. For each extracted flag f: if (name==NULL || f->name equals name) &&
-> (f->type & (FLAG_UNIFY | FLAG_REQUIRE | FLAG_DISALLOW | FLAG_EQUAL)) — Wave 4 fix: the C wrote
+> (f->type & (FLAG_UNIFY | FLAG_REQUIRE | FLAG_DISALLOW | FLAG_EQUAL)) — the C wrote
 > this with `|`, which is always nonzero, so the intended restriction to U/R/D/E types was a no-op
 > and the body ran for every type; `&` restricts it as intended. The observable language is
 > unchanged (see below). Build fail_flags and succeed_flags as minimized unions (starting from
