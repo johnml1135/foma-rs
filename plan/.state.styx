@@ -1,5 +1,51 @@
 schema_version 7
 
+last_sync_at 2026-07-07T19:37:15.797696Z
+
+derived_priorities (
+    {id foma-mono-io, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w1-algorithms, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w1-apply-spelling, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w1-constructions, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w1-core-headers, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w1-fomalib-api, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w1-iface, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w1-io-lexc, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w1-rewrite-flags-define, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w1-structures, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w2-apply-spelling, priority 3, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w2-base-utils, priority 1, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w2-cli, priority 3, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w2-constructions, priority 3, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w2-flags-define-rewrite, priority 3, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w2-graph-algorithms, priority 3, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w2-io, priority 3, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w2-lexcread, priority 3, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w2-scaffold, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w2-structures-dynarray, priority 2, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w3-apply-spelling, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w3-base-utils, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w3-cli, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w3-constructions, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w3-flags-define-rewrite, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w3-graph-algorithms, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w3-io, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w3-lexcread, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w3-structures-dynarray, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w4-apply-spelling, priority 3, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w4-base-utils, priority 1, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w4-cli, priority 3, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w4-constructions, priority 3, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w4-conventions, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w4-flags-define-rewrite, priority 3, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w4-graph-algorithms, priority 3, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w4-io, priority 3, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w4-lexcread, priority 3, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w4-publish, priority 3, derived_at 2026-07-07T19:37:15.797696Z}
+    {id w4-structures-dynarray, priority 2, derived_at 2026-07-07T19:37:15.797696Z}
+    {id wave-6-harden, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
+)
+
 assertions (
     {id w1-structures, kind @complete, author "brendan@necessary.nu", at 2026-07-03T15:10:24.105478Z}
     {id w1-fomalib-api, kind @complete, author "brendan@necessary.nu", at 2026-07-03T15:10:24.140525Z}
