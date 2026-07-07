@@ -1380,7 +1380,7 @@ pub fn apply_net(h: &mut ApplyHandle) -> Option<String> {
 }
 
 // [spec:foma:def:apply.apply-append-fn]
-// [spec:foma:sem:apply.apply-append-fn]
+// [spec:foma:sem:apply.apply-append-fn+1]
 pub fn apply_append(h: &mut ApplyHandle, cptr: i32, sym: i32) -> i32 {
     let symin = l_in(h, cptr);
     let symout = l_out(h, cptr);
@@ -1533,9 +1533,10 @@ pub fn apply_append(h: &mut ApplyHandle, cptr: i32, sym: i32) -> i32 {
     if h.print_space != 0 && len > 0 {
         let space: Vec<u8> = h.space_symbol.as_deref().unwrap_or("").as_bytes().to_vec();
         buf_strcpy(&mut h.outstring, (h.opos + len) as usize, &space);
-        // C: len++ regardless of the space symbol's byte length (latent bug —
-        // a multi-byte space symbol has all but its first byte overwritten).
-        len += 1;
+        // [spec:foma:sem:apply.apply-append-fn+1] advance by the separator's full
+        // byte length (C did `len++`, so a multi-byte space symbol had all but its
+        // first byte overwritten by the next append).
+        len += space.len() as i32;
     }
     len
 }
@@ -2491,6 +2492,19 @@ mod tests {
             r = apply_down(&mut h2, None);
         }
         assert_eq!(got, vec!["a_b_".to_string()]);
+    }
+
+    // [spec:foma:sem:apply.apply-append-fn+1/test]
+    #[test]
+    fn apply_append_multibyte_space_symbol_survives() {
+        // A multi-byte separator ("»" = 0xC2 0xBB) must be emitted whole between
+        // symbols. C advanced the output cursor by 1 regardless of the symbol's
+        // byte length, so the next append overwrote all but its first byte.
+        let net = parse("{ab}");
+        let mut h = apply_init(&net);
+        apply_set_space_symbol(&mut h, "»");
+        let r = apply_down(&mut h, Some("ab")).unwrap();
+        assert_eq!(r, "a»b»");
     }
 
     // [spec:foma:sem:apply.apply-set-epsilon-fn/test]

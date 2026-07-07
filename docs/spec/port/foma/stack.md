@@ -136,15 +136,17 @@
 > [spec:foma:def:stack.stack-rotate-fn]
 > int stack_rotate ()
 
-> [spec:foma:sem:stack.stack-rotate-fn]
+> [spec:foma:sem:stack.stack-rotate-fn+1]
 > Despite the source comment "Top element of stack to bottom", this swaps the fsms of
 > the bottom and top stack entries (for size 2 that equals a rotation; for larger
 > stacks it is a bottom<->top swap, not a cyclic rotate). If the stack is empty:
 > prints "Stack is empty.\n" to stdout and returns -1. If stack_size() == 1: returns 1
-> with no change. Otherwise: exchange only the `fsm` pointers of main_stack (bottom)
-> and stack_find_top() (top); the entries' number, ah, and amedh fields are NOT
-> swapped, so any cached apply handles on those two entries now refer to the other
-> entry's former fsm (stale-handle quirk). Returns 1.
+> with no change. Otherwise: exchange the `fsm` pointers of main_stack (bottom) and
+> stack_find_top() (top), together with their cached `ah` and `amedh` apply/med handles,
+> so each handle stays bound to its own net. Wave 5 fix: C swapped only the `fsm` pointers,
+> leaving cached handles pointing at the other entry's former fsm (stale-handle quirk), so a
+> subsequent apply/med ran against the wrong transducer; the handles now travel with their fsm.
+> The `number` field is still not swapped. Returns 1.
 
 > [spec:foma:def:stack.stack-size-fn]
 > int stack_size()

@@ -633,6 +633,20 @@ children (
                         kind @note
                         text "Tier A — wrong output on VALID input. Each fix = a +1 sem-rule bump (established Wave-4 pattern).\nA1 apply.rs:1533 [apply.apply-append-fn] — multi-byte space symbol corrupted in printed output; `len += 1` ignores symbol byte length so subsequent appends overwrite all but its first byte. Fix: `len += space.len()`.\nA2 spelling.rs:197 [spelling.print-match-fn] — parent-chain walk truncates at an epsilon arc (in==0&&out==0) → incomplete MED alignment. Fix: gate on parent==-1 only, not the epsilon test.\nA3 spelling.rs:1120 [spelling.cmatrix-print-fn] — confusion-matrix diagonal cell emits single \"*\", under-filling column width → misaligned table. Fix: pad \"*\" to the symbol column width.\nA4 stack.rs:443 [stack.stack-rotate-fn / iface.iface-rotate-fn] — rotate/turn swaps only the ->fsm field; cached apply/med handles (ah/amedh) stay put and then operate on the swapped-away net. Fix: swap the handles alongside fsm, or invalidate them on rotate.\nA5 iface/apply_cmds.rs:412 [iface.iface-print-shortest-string-size-fn] (+ foma.md:620) — \"print shortest-string-size\" returns statecount-1 = LONGEST length for a minimal unary DFA. Fix: BFS/true shortest-path distance.\nA6 coaccessible.rs:10 [coaccessible.fsm-coaccessible-fn] — mapping[0]=0 set unconditionally → wrong renumber when state 0 is not coaccessible. Fix: only map state 0 when it is coaccessible."
                     }
+
+                    {
+                        at 2026-07-06T23:57:23.756897Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Todo → Doing (nplan_start)"
+                    }
+
+                    {
+                        at 2026-07-07T00:30:19.668109Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan_complete)"
+                    }
                 )
             }
 

@@ -438,18 +438,20 @@
 > [spec:foma:def:fomalib.cmatrix-print-fn]
 > FEXPORT void cmatrix_print(struct fsm *net)
 
-> [spec:foma:sem:fomalib.cmatrix-print-fn]
+> [spec:foma:sem:fomalib.cmatrix-print-fn+1]
 > Pretty-prints the net's confusion matrix to stdout as a table. lsymbol = length of the longest
 > sigma symbol with number >= 3. Header row: lsymbol+2 spaces, then "0 ", then each symbol from
 > number 3 upward (stopping when sigma_string returns NULL), each followed by a space. Data rows:
 > i = 0, then 3..maxsigma-1 (after printing row 0, i is incremented twice so rows 1 and 2 are
 > skipped). Each row starts with the row label right-aligned in lsymbol+1 columns ("0" for row 0)
 > followed by the deletion cost cm[i*maxsigma] right-aligned in 2 columns ("*" for row 0), then
-> skips columns 1 and 2. Remaining cells for column j: "*" when i == j, else the cost
-> cm[i*maxsigma+j] printed with "%.*d" using precision strlen(symbol j)+1 — i.e. zero-padded to
-> the width of the header symbol plus one, so e.g. cost 1 under symbol "a" prints "01" (a
-> deliberate column-alignment quirk). Requires the confusion matrix and sigma to exist
-> (dereferenced unchecked).
+> skips columns 1 and 2. Remaining cells for column j: on the diagonal (i == j) "*" right-aligned
+> to width strlen(symbol j)+1 (Wave 5 fix: C used that count as a "%.*s" precision, which truncated
+> "*" to one char and misaligned the row); off-diagonal the cost cm[i*maxsigma+j] printed with
+> "%.*d" using precision strlen(symbol j)+1 — i.e. zero-padded to the width of the header symbol
+> plus one, so e.g. cost 1 under symbol "a" prints "01". Rendering is factored into a
+> writer-generic `cmatrix_print_to` (cmatrix_print writes to stdout). Requires the confusion
+> matrix and sigma to exist (dereferenced unchecked).
 
 > [spec:foma:def:fomalib.cmatrix-set-cost-fn]
 > FEXPORT void cmatrix_set_cost(struct fsm *net, char *in, char *out, int cost)
@@ -742,7 +744,7 @@
 > [spec:foma:def:fomalib.fsm-coaccessible-fn]
 > fsm *fsm_coaccessible(struct fsm *net)
 
-> [spec:foma:sem:fomalib.fsm-coaccessible-fn]
+> [spec:foma:sem:fomalib.fsm-coaccessible-fn+1]
 > Prunes every state from which no final state is reachable; works in place on net->states and
 > returns the same net. Steps:
 > 1. Build an inverse-transition table: for each line with source s, target t, t != -1 and t != s,
@@ -751,7 +753,14 @@
 > 2. Mark coaccessible states: push each final state once onto the int stack, marking it (markcount
 > counts marks); then repeatedly pop a state and mark/push every unmarked state in its inverse list.
 > If markcount reaches statecount, the net is already pruned: clear the stack and skip step 3.
-> 3. Otherwise renumber and rewrite in place. mapping[0] = 0 unconditionally; every other
+> 3. Otherwise, if the start state (0) is itself not coaccessible then no path reaches a final, so
+> L = ∅: replace the state array with fsm_empty() (one non-final start state), destroy sigma and
+> replace it with a fresh empty sigma, zero linecount/arccount/statecount, set is_pruned, and
+> return. This subsumes the markcount == 0 (no finals) case, whose start is also not coaccessible.
+> Wave 5 fix: C instead set mapping[0] = 0 unconditionally and renumbered the surviving (orphaned)
+> coaccessible component from 1, producing a net with states but no start state; a disconnected
+> component can never make L non-empty when the start is pruned, so the empty machine is correct.
+> 4. Otherwise (state 0 coaccessible) renumber and rewrite in place. mapping[0] = 0; every other
 > coaccessible state gets the next number 1,2,... in ascending old order. Iterate the old lines: a
 > line is kept iff its state is marked and its target is -1 or marked, with state/target renumbered
 > and in/out/final/start preserved; whenever a state's lines end with none kept and the state was
@@ -759,8 +768,6 @@
 > emitted instead (tracked with an `added` array; the same fixup runs once after the loop for the
 > last state). If nothing at all was kept, write a line (0,-1,-1,-1,-1,-1). Append the -1 sentinel;
 > the array is not shrunk. Update linecount, arccount, and statecount (= markcount).
-> 4. If markcount == 0 (empty language) the state array is replaced by fsm_empty() (one non-final
-> start state) and sigma is destroyed and replaced with a fresh empty sigma.
 > Frees all temporaries, sets is_pruned = YES, returns net.
 
 > [spec:foma:def:fomalib.fsm-compact-fn]

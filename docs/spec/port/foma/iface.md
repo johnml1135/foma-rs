@@ -475,16 +475,18 @@
 > [spec:foma:def:iface.iface-print-shortest-string-size-fn]
 > void iface_print_shortest_string_size()
 
-> [spec:foma:sem:iface.iface-print-shortest-string-size-fn]
+> [spec:foma:sem:iface.iface-print-shortest-string-size-fn+1]
 > "print shortest-string-size": requires ≥1 net; works on a copy, top net not consumed. Computes the
 > unary-image automaton [L .o. [?:a]*].l, literally fsm_minimize(fsm_lower(fsm_compose(L,
-> fsm_kleene_star(fsm_cross_product(fsm_identity(), fsm_symbol("a")))))), and reports statecount - 1 of
-> the minimized result. If top arity == 1 prints "Shortest acyclic path length: %i\n"; if arity == 2 does
-> this separately for the upper and lower projections and prints "Shortest acyclic upper path length:
-> %i\n" then "Shortest acyclic lower path length: %i\n". Caveat (document literal behavior): for a
-> minimal unary DFA, statecount-1 equals the shortest length only when the language is acyclic and
-> length-uniform in the right way; for languages with several string lengths the minimal chain's
-> statecount-1 is the LONGEST length — latent bug. The Result nets are never fsm_destroy'd (leak).
+> fsm_kleene_star(fsm_cross_product(fsm_identity(), fsm_symbol("a")))))), and reports the SHORTEST
+> accepted length as a breadth-first arc distance from the start state to the nearest final of that
+> result (0 for the empty language), via the helper `shortest_acyclic_length`. If top arity == 1
+> prints "Shortest acyclic path length: %i\n"; if arity == 2 does this separately for the upper and
+> lower projections and prints "Shortest acyclic upper path length: %i\n" then "Shortest acyclic
+> lower path length: %i\n". Wave 5 fix: C reported statecount - 1 of the minimized result, but the
+> minimal unary DFA is a chain of (max length)+1 states, so statecount-1 is the LONGEST length for a
+> language with several string lengths; the BFS returns the true shortest. The Result nets are never
+> fsm_destroy'd (leak).
 
 > [spec:foma:def:iface.iface-print-sigma-fn]
 > void iface_print_sigma()

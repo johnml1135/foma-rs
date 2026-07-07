@@ -186,20 +186,18 @@ fn wtail(word: &[u8], i: i32) -> &[u8] {
 }
 
 // [spec:foma:def:spelling.print-match-fn]
-// [spec:foma:sem:spelling.print-match-fn]
+// [spec:foma:sem:spelling.print-match-fn+1]
 fn print_match(medh: &mut ApplyMedHandle, node: usize, sigma: Option<&Sigma>, word: &[u8]) {
     let mut sym: i32;
     let mut printptr: i32;
     int_stack_clear();
     let wordlen = medh.wordlen;
-    /* Pass 1: walk the parent chain pushing each n->in. Stops at the root
-    (in == 0 && out == 0) or parent == -1 — a non-root epsilon-labeled node
-    with in==0 && out==0 also truncates the walk (latent bug, reproduced). */
+    /* Pass 1: walk the parent chain pushing each n->in, terminating at the root.
+    [spec:foma:sem:spelling.print-match-fn+1] the root is the sole node with
+    parent == -1, so that alone marks it; C additionally broke on in==0 && out==0,
+    which also truncated the walk at any interior epsilon:epsilon step. */
     let mut n = node;
     loop {
-        if medh.agenda[n].r#in == 0 && medh.agenda[n].out == 0 {
-            break;
-        }
         if medh.agenda[n].parent == -1 {
             break;
         }
@@ -226,17 +224,13 @@ fn print_match(medh: &mut ApplyMedHandle, node: usize, sigma: Option<&Sigma>, wo
             printptr += buf_sprintf(&mut medh.outstring, printptr as usize, b"@");
         }
     }
-    /* Pass 2: same walk, pushing each n->out. */
+    /* Pass 2: same walk, pushing each n->out. [spec:foma:sem:spelling.print-match-fn+1] */
     let mut n = node;
     loop {
-        if medh.agenda[n].r#in == 0 && medh.agenda[n].out == 0 {
-            break;
-        }
         if medh.agenda[n].parent == -1 {
             break;
-        } else {
-            int_stack_push(medh.agenda[n].out);
         }
+        int_stack_push(medh.agenda[n].out);
         n = medh.agenda[n].parent as usize;
     }
     printptr = 0;
@@ -1061,10 +1055,19 @@ pub fn cmatrix_print_att<W: std::io::Write + ?Sized>(net: &Fsm, outfile: &mut W)
 }
 
 // [spec:foma:def:spelling.cmatrix-print-fn]
-// [spec:foma:sem:spelling.cmatrix-print-fn]
+// [spec:foma:sem:spelling.cmatrix-print-fn+1]
 // [spec:foma:def:fomalib.cmatrix-print-fn]
-// [spec:foma:sem:fomalib.cmatrix-print-fn]
+// [spec:foma:sem:fomalib.cmatrix-print-fn+1]
 pub fn cmatrix_print(net: &Fsm) {
+    cmatrix_print_to(net, &mut std::io::stdout());
+}
+
+/// Writer-generic core of [cmatrix_print].
+/// [spec:foma:sem:spelling.cmatrix-print-fn+1] the diagonal cell (i == j) is
+/// filled to the full column width (strlen(sym_j)+1); C used that count as a
+/// `%.*s` *precision*, truncating "*" to one char and under-filling the column,
+/// which misaligned every row past the diagonal.
+fn cmatrix_print_to<W: std::io::Write + ?Sized>(net: &Fsm, out: &mut W) {
     let maxsigma = sigma_max(net.sigma.as_deref()) + 1;
     let cm = &net.medlookup.as_ref().unwrap().confusion_matrix;
 
@@ -1080,20 +1083,20 @@ pub fn cmatrix_print(net: &Fsm) {
         lsymbol = if l > lsymbol { l } else { lsymbol };
         sigma = s.next.as_deref();
     }
-    print!("{:>w$}", "", w = (lsymbol + 2) as usize);
-    print!("{}", "0 ");
+    write!(out, "{:>w$}", "", w = (lsymbol + 2) as usize).unwrap();
+    write!(out, "{}", "0 ").unwrap();
 
     let mut i = 3;
     loop {
         if let Some(thisstring) = sigma_string(i, net.sigma.as_deref()) {
-            print!("{} ", thisstring);
+            write!(out, "{} ", thisstring).unwrap();
         } else {
             break;
         }
         i += 1;
     }
 
-    println!();
+    writeln!(out).unwrap();
 
     let mut i = 0i32;
     while i < maxsigma {
@@ -1101,15 +1104,17 @@ pub fn cmatrix_print(net: &Fsm) {
         while j < maxsigma {
             if j == 0 {
                 if i == 0 {
-                    print!("{:>w$}", "0", w = (lsymbol + 1) as usize);
-                    print!("{:>2}", "*");
+                    write!(out, "{:>w$}", "0", w = (lsymbol + 1) as usize).unwrap();
+                    write!(out, "{:>2}", "*").unwrap();
                 } else {
-                    print!(
+                    write!(
+                        out,
                         "{:>w$}",
                         sigma_string(i, net.sigma.as_deref()).unwrap(),
                         w = (lsymbol + 1) as usize
-                    );
-                    print!("{:>2}", cm[(i * maxsigma + j) as usize]);
+                    )
+                    .unwrap();
+                    write!(out, "{:>2}", cm[(i * maxsigma + j) as usize]).unwrap();
                 }
                 j += 1;
                 j += 1;
@@ -1117,18 +1122,16 @@ pub fn cmatrix_print(net: &Fsm) {
                 continue;
             }
             if i == j {
-                /* printf("%.*s", strlen(sym_j)+1, "*") — precision truncates,
-                emitting exactly one "*" and under-filling the column (latent
-                misalignment bug, reproduced). */
-                print!("*");
+                let width = sigma_string(j, net.sigma.as_deref()).unwrap().len() + 1;
+                write!(out, "{:>w$}", "*", w = width).unwrap();
             } else {
                 /* printf("%.*d", strlen(sym_j)+1, cost) — zero-padded width */
                 let width = sigma_string(j, net.sigma.as_deref()).unwrap().len() + 1;
-                print!("{:0w$}", cm[(i * maxsigma + j) as usize], w = width);
+                write!(out, "{:0w$}", cm[(i * maxsigma + j) as usize], w = width).unwrap();
             }
             j += 1;
         }
-        println!();
+        writeln!(out).unwrap();
         if i == 0 {
             i += 1;
             i += 1;
@@ -1614,5 +1617,52 @@ mod tests {
         assert_eq!(r[0].0, "cat");
         assert_eq!(r[0].1, "cat");
         assert_eq!(r[0].2, 0);
+    }
+
+    // [spec:foma:sem:spelling.print-match-fn+1/test]
+    #[test]
+    fn print_match_walks_through_interior_epsilon_node() {
+        // Seed the parent chain root(parent=-1) <- interior epsilon:epsilon <- leaf.
+        // C broke the walk at the interior in==0 && out==0 node, dropping every
+        // ancestor; now only parent == -1 (the true root) terminates it, so the
+        // interior epsilon contributes its align symbol.
+        let net = parse_sorted("{cat}");
+        let mut medh = apply_med_init(&net);
+        medh.align_symbol = Some("-".to_string());
+        medh.wordlen = 1;
+        let c = 4; // 'c' has sigma number 4 (see calculate_h_heuristic).
+        medh.agenda[1].r#in = 0;
+        medh.agenda[1].out = 0;
+        medh.agenda[1].parent = -1; // root
+        medh.agenda[2].r#in = 0;
+        medh.agenda[2].out = 0;
+        medh.agenda[2].parent = 1; // interior epsilon:epsilon
+        medh.agenda[3].r#in = c;
+        medh.agenda[3].out = c;
+        medh.agenda[3].parent = 2; // leaf carrying 'c'
+        print_match(&mut medh, 3, net.sigma.as_deref(), b"c");
+        let end = medh
+            .outstring
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(medh.outstring.len());
+        let out = String::from_utf8_lossy(&medh.outstring[..end]);
+        // pass 1 pushes ins [4, 0]; popped LIFO -> 0 (align "-") then 4 ("c").
+        assert_eq!(out, "-c");
+    }
+
+    // [spec:foma:sem:spelling.cmatrix-print-fn+1/test]
+    // [spec:foma:sem:fomalib.cmatrix-print-fn+1/test]
+    #[test]
+    fn cmatrix_print_aligns_diagonal_to_column_width() {
+        // sigma has a 2-char symbol "ab" (column width 3). The diagonal star
+        // must fill that width ("  *"); C emitted a bare "*", under-filling the
+        // column and misaligning the row.
+        let mut net = parse_sorted("\"ab\" | c");
+        cmatrix_init(&mut net);
+        let mut buf: Vec<u8> = Vec::new();
+        cmatrix_print_to(&net, &mut buf);
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("  *"), "diagonal not width-padded:\n{}", out);
     }
 }

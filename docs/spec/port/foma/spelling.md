@@ -236,7 +236,7 @@
 > [spec:foma:def:spelling.cmatrix-print-fn]
 > void cmatrix_print(struct fsm *net)
 
-> [spec:foma:sem:spelling.cmatrix-print-fn]
+> [spec:foma:sem:spelling.cmatrix-print-fn+1]
 > Pretty-prints the confusion matrix to stdout as a table. maxsigma =
 > sigma_max(net->sigma)+1, cm = net->medlookup->confusion_matrix. First compute lsymbol =
 > the longest symbol-string length among sigma entries with number >= 3 (entries < 3 are
@@ -248,14 +248,16 @@
 > width lsymbol+1 — the literal "0" for row 0, else sigma_string(i) — followed by the
 > column-0 cell right-aligned in width 2: "*" for row 0 (the unused epsilon:epsilon cell),
 > else cm[i*maxsigma] (the deletion cost). Columns 1 and 2 are then skipped (j is bumped
-> from 0 to 3). For each remaining column j: on the diagonal (i == j) print "*" via
-> printf("%.*s", strlen(sym_j)+1, "*") — %s precision truncates but does not pad, so
-> exactly one character is emitted; off-diagonal print the cost via
-> printf("%.*d", strlen(sym_j)+1, cm[i*maxsigma+j]) — %d precision zero-pads, so the cost
-> occupies exactly strlen(sym_j)+1 characters, matching the header column width. Latent
-> formatting bug: the 1-character diagonal "*" under-fills its column, misaligning the
-> remainder of that row for any symbol longer than... (any symbol at all, since the column
-> width is strlen+1 >= 2). Newline after each row. No NULL checks on medlookup/cm.
+> from 0 to 3). For each remaining column j: on the diagonal (i == j) print "*" right-aligned
+> in width strlen(sym_j)+1, so it fills the column and stays aligned with the header;
+> off-diagonal print the cost via printf("%.*d", strlen(sym_j)+1, cm[i*maxsigma+j]) — %d
+> precision zero-pads, so the cost occupies exactly strlen(sym_j)+1 characters, matching the
+> header column width. Wave 5 fix: C emitted the diagonal "*" via printf("%.*s", strlen(sym_j)+1,
+> "*"), where the count is a %s *precision* that truncates rather than pads, so a single "*"
+> under-filled the column and misaligned the rest of the row for every symbol (column width
+> strlen+1 >= 2); the port pads the "*" to the full column width instead. The rendering core is
+> factored into a writer-generic `cmatrix_print_to`; `cmatrix_print` calls it with stdout.
+> Newline after each row. No NULL checks on medlookup/cm.
 
 > [spec:foma:def:spelling.cmatrix-set-cost-fn]
 > void cmatrix_set_cost(struct fsm *net, char *in, char *out, int cost)
@@ -382,15 +384,16 @@
 > [spec:foma:def:spelling.print-match-fn]
 > void print_match(struct apply_med_handle *medh, struct astarnode *node, struct sigma *sigma, char *word)
 
-> [spec:foma:sem:spelling.print-match-fn]
+> [spec:foma:sem:spelling.print-match-fn+1]
 > Reconstructs the alignment for the accepted search node into medh->outstring
 > (dictionary-side string) and medh->instring (input-word-side string), and sets
 > medh->cost = node->g. Uses the global int_stack (cleared first) to reverse the parent
 > chain. Chain walk (both passes): n = node, then n = medh->agenda + n->parent; stop
-> before pushing when n->in == 0 && n->out == 0 (intended to detect the root node, whose
-> in/out are 0/0) or when n->parent == -1. Latent bug: a non-root node representing an
-> epsilon-labeled deletion arc also has in == 0 && out == 0 and silently truncates the
-> printed alignment at that point (cost is still the full node->g).
+> before pushing only when n->parent == -1 (the search root, seeded with parent = -1). Wave 5
+> fix: C additionally stopped when n->in == 0 && n->out == 0 (intended to detect the root,
+> whose in/out are 0/0), which also truncated the walk at any interior epsilon:epsilon step;
+> since the root is uniquely identified by parent == -1 and the parent chain is acyclic
+> (parents are strictly-earlier agenda indices), the label test is dropped.
 > Pass 1: push each n->in; if medh->outstring_length < 2*wordlen (wordlen = medh->wordlen,
 > the byte length), double outstring_length once and realloc — latent bug: a single
 > doubling may still be too small for a much longer word, and multi-byte symbols /

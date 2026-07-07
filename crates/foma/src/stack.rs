@@ -426,9 +426,9 @@ pub fn stack_clear() -> i32 {
 }
 
 // [spec:foma:def:stack.stack-rotate-fn]
-// [spec:foma:sem:stack.stack-rotate-fn]
+// [spec:foma:sem:stack.stack-rotate-fn+1]
 // [spec:foma:def:foma.stack-rotate-fn]
-// [spec:foma:sem:foma.stack-rotate-fn]
+// [spec:foma:sem:foma.stack-rotate-fn+1]
 pub fn stack_rotate() -> i32 {
     /* Top element of stack to bottom */
     if stack_isempty() != 0 {
@@ -440,14 +440,21 @@ pub fn stack_rotate() -> i32 {
     }
     let stack_ptr = stack_find_top().unwrap();
     let ms = main_stack();
-    // Swap ONLY the fsm fields of bottom (main_stack) and top; number/ah/amedh
-    // are NOT swapped, so any cached apply handles on those two entries now
-    // refer to the other entry's former fsm (stale-handle quirk).
+    // [spec:foma:sem:stack.stack-rotate-fn+1] swap the cached apply/med handles
+    // (ah/amedh) together with the fsm, so each handle stays bound to its own net.
+    // C swapped only ->fsm, leaving cached handles pointing at the other entry's
+    // former net — subsequent apply/med ran against the wrong transducer.
     ARENA.with(|a| {
         let mut a = a.borrow_mut();
         let temp_fsm = a[ms].fsm.take();
         a[ms].fsm = a[stack_ptr].fsm.take();
         a[stack_ptr].fsm = temp_fsm;
+        let temp_ah = a[ms].ah.take();
+        a[ms].ah = a[stack_ptr].ah.take();
+        a[stack_ptr].ah = temp_ah;
+        let temp_amedh = a[ms].amedh.take();
+        a[ms].amedh = a[stack_ptr].amedh.take();
+        a[stack_ptr].amedh = temp_amedh;
     });
     1
 }
@@ -669,10 +676,10 @@ mod tests {
         assert_eq!(stack_entry_amedh(se2, |m| m.med_limit), 77);
     }
 
-    // [spec:foma:sem:stack.stack-rotate-fn/test]
-    // [spec:foma:sem:foma.stack-rotate-fn/test]
+    // [spec:foma:sem:stack.stack-rotate-fn+1/test]
+    // [spec:foma:sem:foma.stack-rotate-fn+1/test]
     #[test]
-    fn stack_rotate_swaps_only_top_and_bottom_fsms() {
+    fn stack_rotate_swaps_top_and_bottom_fsms_with_their_handles() {
         stack_init();
         // Empty: prints "Stack is empty." and returns -1.
         assert_eq!(stack_rotate(), -1);
@@ -682,12 +689,12 @@ mod tests {
         assert_eq!(top_fsm_name(), "bottomnet");
         add_named("b", "midnet");
         add_named("c", "topnet");
-        // Cache an apply handle on the top entry and mark it.
+        // Cache an apply handle on the top entry (holding topnet) and mark it.
         let top = stack_get_ah().unwrap();
         stack_entry_ah(top, |ah| ah.ptr = 313_131);
         assert_eq!(stack_rotate(), 1);
-        // ONLY the fsm pointers of bottom and top were exchanged; the middle
-        // entry is untouched and (for size > 2) this is a swap, not a rotate.
+        // The fsm pointers of bottom and top are exchanged; the middle entry is
+        // untouched (for size > 2 this is a swap, not a rotate).
         assert_eq!(bottom_fsm_name(), "topnet");
         assert_eq!(top_fsm_name(), "bottomnet");
         assert_eq!(
@@ -697,9 +704,14 @@ mod tests {
         // Numbers are NOT swapped...
         assert_eq!(e_number(stack_find_bottom().unwrap()), 0);
         assert_eq!(e_number(stack_find_top().unwrap()), 2);
-        // ...and neither are the cached handles: the top entry keeps the
-        // handle built for its FORMER fsm (stale-handle quirk).
-        assert_eq!(stack_entry_ah(top, |ah| ah.ptr), 313_131);
+        // ...but the cached apply handle now travels WITH its net: the handle
+        // built for topnet moved to the bottom entry alongside topnet's fsm, so
+        // apply still runs against the transducer it was created for (the C
+        // stale-handle quirk is fixed).
+        assert_eq!(
+            stack_entry_ah(stack_find_bottom().unwrap(), |ah| ah.ptr),
+            313_131
+        );
         assert_eq!(top, stack_find_top().unwrap());
     }
 

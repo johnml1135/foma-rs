@@ -610,17 +610,18 @@
 > [spec:foma:def:foma.iface-print-shortest-string-size-fn]
 > void iface_print_shortest_string_size()
 
-> [spec:foma:sem:foma.iface-print-shortest-string-size-fn]
+> [spec:foma:sem:foma.iface-print-shortest-string-size-fn+1]
 > Implemented in foma/iface.c. Requires >= 1 network on the stack; works on a copy of the top
 > net. For an automaton (arity == 1) builds Result = fsm_minimize([L .o. [?:"a"]*].l) — the
 > unary "length language" { a^n | L contains a string of length n }, using the literal symbol
-> "a" — and prints "Shortest acyclic path length: %i\n" with Result->statecount - 1. For a
-> transducer, does the same independently for the upper and lower projections and prints
-> "Shortest acyclic upper path length: %i\n" then "Shortest acyclic lower path length: %i\n".
-> Latent bug: for an acyclic net the minimal unary DFA is a chain of (max length)+1 states,
-> so statecount-1 is actually the LONGEST string length whenever the language has strings of
-> several lengths; it matches the label only in special cases (e.g. single-length or suitably
-> cyclic languages). All intermediate Result nets leak (never fsm_destroy'd); the stack is
+> "a" — and prints "Shortest acyclic path length: %i\n" with the SHORTEST accepted length,
+> computed as a breadth-first arc distance from the start state to the nearest final of Result
+> (0 for the empty language). For a transducer, does the same independently for the upper and
+> lower projections and prints "Shortest acyclic upper path length: %i\n" then
+> "Shortest acyclic lower path length: %i\n". Wave 5 fix: C printed Result->statecount - 1, but
+> the minimal unary DFA of an acyclic net is a chain of (max length)+1 states, so statecount-1 is
+> the LONGEST string length whenever the language has strings of several lengths; the BFS returns
+> the true shortest. All intermediate Result nets leak (never fsm_destroy'd); the stack is
 > unchanged.
 
 > [spec:foma:def:foma.iface-print-sigma-fn]
@@ -1397,12 +1398,13 @@
 > [spec:foma:def:foma.stack-rotate-fn]
 > int stack_rotate()
 
-> [spec:foma:sem:foma.stack-rotate-fn]
+> [spec:foma:sem:foma.stack-rotate-fn+1]
 > Implemented in foma/stack.c. On an empty stack prints "Stack is empty.\n" and returns -1;
-> with exactly one entry returns 1 doing nothing. Otherwise swaps ONLY the fsm pointers of the
-> bottom entry (main_stack) and the top entry and returns 1 — intermediate entries keep their
-> nets, and both affected entries keep their numbers and any cached ah/amedh apply handles,
-> which afterwards belong to the other entry's original net (latent bug). Despite the name it
+> with exactly one entry returns 1 doing nothing. Otherwise swaps the fsm pointers of the bottom
+> entry (main_stack) and the top entry — together with their cached ah/amedh apply/med handles —
+> and returns 1; intermediate entries keep their nets and both affected entries keep their numbers.
+> Wave 5 fix: C swapped only the fsm pointers, so cached handles afterwards belonged to the other
+> entry's original net (latent bug); the handles now move with their fsm. Despite the name it
 > performs a top/bottom swap, not a rotation.
 
 > [spec:foma:def:foma.stack-size-fn]

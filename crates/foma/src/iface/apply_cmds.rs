@@ -399,10 +399,58 @@ pub fn iface_print_shortest_string() {
     }
 }
 
+/// [spec:foma:sem:iface.iface-print-shortest-string-size-fn+1] length (in
+/// symbols) of the SHORTEST accepted string of a minimized unary acceptor —
+/// a BFS over the state graph counting arcs from the start state to the nearest
+/// final. C reported `statecount - 1`, i.e. the *longest* acyclic path (the
+/// minimal unary DFA of {a^k} is a chain of max_len+1 states). Returns 0 for the
+/// empty language (no final reachable).
+fn shortest_acyclic_length(net: &crate::types::Fsm) -> i32 {
+    use std::collections::VecDeque;
+    let n = net.statecount as usize;
+    let mut adj: Vec<Vec<i32>> = vec![Vec::new(); n];
+    let mut is_final = vec![false; n];
+    let mut start: i32 = -1;
+    let mut i = 0usize;
+    while net.states[i].state_no != -1 {
+        let s = net.states[i].state_no;
+        if net.states[i].start_state != 0 {
+            start = s;
+        }
+        if net.states[i].final_state != 0 {
+            is_final[s as usize] = true;
+        }
+        let t = net.states[i].target;
+        if t != -1 {
+            adj[s as usize].push(t);
+        }
+        i += 1;
+    }
+    if start < 0 {
+        return 0;
+    }
+    let mut dist = vec![-1i32; n];
+    let mut q: VecDeque<i32> = VecDeque::new();
+    dist[start as usize] = 0;
+    q.push_back(start);
+    while let Some(u) = q.pop_front() {
+        if is_final[u as usize] {
+            return dist[u as usize];
+        }
+        for &v in &adj[u as usize] {
+            if dist[v as usize] == -1 {
+                dist[v as usize] = dist[u as usize] + 1;
+                q.push_back(v);
+            }
+        }
+    }
+    0
+}
+
 // [spec:foma:def:iface.iface-print-shortest-string-size-fn]
-// [spec:foma:sem:iface.iface-print-shortest-string-size-fn]
+// [spec:foma:sem:iface.iface-print-shortest-string-size-fn+1]
 // [spec:foma:def:foma.iface-print-shortest-string-size-fn]
-// [spec:foma:sem:foma.iface-print-shortest-string-size-fn]
+// [spec:foma:sem:foma.iface-print-shortest-string-size-fn+1]
 pub fn iface_print_shortest_string_size() {
     if iface_stack_check(1) != 0 {
         let top = stack_find_top().unwrap();
@@ -413,7 +461,10 @@ pub fn iface_print_shortest_string_size() {
                 one,
                 fsm_kleene_star(fsm_cross_product(fsm_identity(), fsm_symbol("a"))),
             )));
-            print!("Shortest acyclic path length: {}\n", result.statecount - 1);
+            print!(
+                "Shortest acyclic path length: {}\n",
+                shortest_acyclic_length(&result)
+            );
             // Result net never fsm_destroy'd in C (leak); dropped at scope end.
         } else {
             let onel = fsm_lower(fsm_copy(&mut one));
@@ -428,11 +479,11 @@ pub fn iface_print_shortest_string_size() {
             )));
             print!(
                 "Shortest acyclic upper path length: {}\n",
-                result_u.statecount - 1
+                shortest_acyclic_length(&result_u)
             );
             print!(
                 "Shortest acyclic lower path length: {}\n",
-                result_l.statecount - 1
+                shortest_acyclic_length(&result_l)
             );
         }
     }
@@ -658,5 +709,32 @@ pub fn iface_pairs_file(filename: &str) {
         stack_entry_ah(ah, |h| apply_set_separator(h, ":"));
         stack_entry_ah(ah, |h| apply_reset_enumerator(h));
         // fclose(outfile) — dropped at scope end.
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::shortest_acyclic_length;
+    use crate::dynarray::{
+        fsm_construct_add_arc, fsm_construct_done, fsm_construct_init, fsm_construct_set_final,
+        fsm_construct_set_initial,
+    };
+
+    // [spec:foma:sem:iface.iface-print-shortest-string-size-fn+1/test]
+    // [spec:foma:sem:foma.iface-print-shortest-string-size-fn+1/test]
+    #[test]
+    fn shortest_acyclic_length_returns_the_shortest_not_longest() {
+        // Final state 1 is reachable in 1 arc (0 -a-> 1) and in 3 arcs
+        // (0 -b-> 2 -b-> 3 -b-> 1). C reported statecount-1 (the LONGEST acyclic
+        // path); the BFS reports the shortest.
+        let mut h = fsm_construct_init("s");
+        fsm_construct_add_arc(&mut h, 0, 1, "a", "a");
+        fsm_construct_add_arc(&mut h, 0, 2, "b", "b");
+        fsm_construct_add_arc(&mut h, 2, 3, "b", "b");
+        fsm_construct_add_arc(&mut h, 3, 1, "b", "b");
+        fsm_construct_set_final(&mut h, 1);
+        fsm_construct_set_initial(&mut h, 0);
+        let net = fsm_construct_done(h);
+        assert_eq!(shortest_acyclic_length(&net), 1);
     }
 }
