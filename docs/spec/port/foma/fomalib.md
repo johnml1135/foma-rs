@@ -1062,10 +1062,11 @@
 > [spec:foma:def:fomalib.fsm-create-fn]
 > fsm *fsm_create(char *name)
 
-> [spec:foma:sem:fomalib.fsm-create-fn]
-> Allocates a new empty network shell. If strlen(name) > FSM_NAME_LEN (40) a warning is printed but
-> construction proceeds. The name is strncpy'd into the fixed 40-byte field (no NUL terminator
-> guaranteed at exactly 40+ chars). Sets arity = 1, arccount = 0; is_deterministic, is_pruned,
+> [spec:foma:sem:fomalib.fsm-create-fn+1]
+> Allocates a new empty network shell. The in-memory name is stored in full. C printed a warning
+> when strlen(name) > FSM_NAME_LEN (40) and strncpy'd the name into a fixed 40-byte field (no NUL
+> terminator guaranteed at 40+ chars), truncating longer names; the binary file format still caps
+> names at 40 bytes on read/write. Sets arity = 1, arccount = 0; is_deterministic, is_pruned,
 > is_minimized, is_epsilon_free, is_loop_free, arcs_sorted_in, arcs_sorted_out all NO; sigma =
 > sigma_create() (fresh empty sigma); states = NULL; medlookup = NULL. Remaining numeric fields
 > (statecount, linecount, finalcount, pathcount, is_completed) are left uninitialized malloc
@@ -1313,15 +1314,15 @@
 > [spec:foma:def:fomalib.fsm-flatten-fn]
 > fsm *fsm_flatten(struct fsm *net, struct fsm *epsilon)
 
-> [spec:foma:sem:fomalib.fsm-flatten-fn]
+> [spec:foma:sem:fomalib.fsm-flatten-fn+1]
 > Rewrites transducer `net` as an equal-length acceptor over a flattened alphabet: each arc a:b
 > becomes two identity arcs a then b through a fresh intermediate state, with EPSILON replaced by a
 > concrete stand-in symbol.
 > net is minimized first. The stand-in string is the input label of the FIRST arc of `epsilon`
-> (strdup'd from its sigma). The guard for an arc-less epsilon net compares fsm_get_next_arc's
-> result against -1, but that function returns 0/1, so the guard never fires; an epsilon net with no
-> arcs leaves the cursor on the sentinel line (in == -1) and causes an out-of-bounds sigma read —
-> latent bug; the intended behavior was to destroy both nets and return NULL.
+> (strdup'd from its sigma). An arc-less epsilon net (fsm_get_next_arc == 0, end-of-arcs) destroys
+> both nets and returns None. C compared fsm_get_next_arc's result against -1, which it never
+> returns, so the guard never fired and an arc-less epsilon net left the cursor on the sentinel line
+> (in == -1), causing an out-of-bounds sigma read.
 > Construction handle named net->name with sigma copied verbatim from net. For the k-th arc (k from
 > 0; source s, target t, labels in:out) the intermediate state is m = net->statecount + k: if in or
 > out is EPSILON, string-based arcs (s,m,I,I) and (m,t,O,O) are added where I/O are the arc's symbol
@@ -1498,7 +1499,7 @@
 > [spec:foma:def:fomalib.fsm-ignore-fn]
 > fsm *fsm_ignore(struct fsm *net1, struct fsm *net2, int operation)
 
-> [spec:foma:sem:fomalib.fsm-ignore-fn]
+> [spec:foma:sem:fomalib.fsm-ignore-fn+1]
 > Ignore: net1 with net2-material freely interspersed. Both inputs are minimized first
 > (consumed). If net2 is then empty: destroy net2 and return net1 unchanged. Otherwise merge
 > sigmas (fsm_merge_sigma) and recount. For operation == OP_IGNORE_INTERNAL (2), compute by

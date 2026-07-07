@@ -1015,9 +1015,9 @@ pub fn fsm_quotient_right(net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm> {
 }
 
 // [spec:foma:def:constructions.fsm-ignore-fn]
-// [spec:foma:sem:constructions.fsm-ignore-fn]
+// [spec:foma:sem:constructions.fsm-ignore-fn+1]
 // [spec:foma:def:fomalib.fsm-ignore-fn]
-// [spec:foma:sem:fomalib.fsm-ignore-fn]
+// [spec:foma:sem:fomalib.fsm-ignore-fn+1]
 pub fn fsm_ignore(net1: Box<Fsm>, net2: Box<Fsm>, operation: i32) -> Box<Fsm> {
     let mut net1 = fsm_minimize(net1);
     let mut net2 = fsm_minimize(net2);
@@ -1197,22 +1197,28 @@ pub fn fsm_ignore(net1: Box<Fsm>, net2: Box<Fsm>, operation: i32) -> Box<Fsm> {
                     j += 1;
                 }
             } else {
-                /* C: target shifted unconditionally — a target of -1 would
-                become a bogus state number (cannot occur for minimized
-                net2); reproduced literally */
+                // [spec:foma:sem:constructions.fsm-ignore-fn+1] preserve a -1
+                // (final-marker) target rather than shifting it into a bogus state
+                // number. C shifted unconditionally; a -1 target cannot occur for a
+                // minimized net2, but a non-minimized net2 would be corrupted.
                 let (state_no, line_in, line_out, tgt) = (
                     net2.states[i].state_no,
                     net2.states[i].r#in as i32,
                     net2.states[i].out as i32,
                     net2.states[i].target,
                 );
+                let shifted_tgt = if tgt == -1 {
+                    -1
+                } else {
+                    tgt + state_add_counter
+                };
                 add_fsm_arc(
                     &mut new_fsm,
                     j,
                     state_no + state_add_counter,
                     line_in,
                     line_out,
-                    tgt + state_add_counter,
+                    shifted_tgt,
                     0,
                     0,
                 );
@@ -2006,18 +2012,19 @@ pub fn fsm_context_restrict(x: Box<Fsm>, lr: Option<Box<Fsmcontexts>>) -> Box<Fs
 }
 
 // [spec:foma:def:constructions.fsm-flatten-fn]
-// [spec:foma:sem:constructions.fsm-flatten-fn]
+// [spec:foma:sem:constructions.fsm-flatten-fn+1]
 // [spec:foma:def:fomalib.fsm-flatten-fn]
-// [spec:foma:sem:fomalib.fsm-flatten-fn]
+// [spec:foma:sem:fomalib.fsm-flatten-fn+1]
 pub fn fsm_flatten(net: Box<Fsm>, epsilon: Box<Fsm>) -> Option<Box<Fsm>> {
     let net = fsm_minimize(net);
 
     let mut inh = fsm_read_init(Some(net)).unwrap();
     let mut eps = fsm_read_init(Some(epsilon)).unwrap();
-    /* C: dead guard (reproduced literally) — fsm_get_next_arc returns 0/1,
-    never -1, so this branch never fires; an arc-less epsilon machine
-    reads an invalid arc below instead */
-    if fsm_get_next_arc(&mut eps) == -1 {
+    // [spec:foma:sem:constructions.fsm-flatten-fn+1] no arc in the epsilon
+    // machine (fsm_get_next_arc == 0, end-of-arcs) → return None. C tested == -1,
+    // which fsm_get_next_arc never returns, so an arc-less epsilon machine fell
+    // through and read an invalid arc below.
+    if fsm_get_next_arc(&mut eps) == 0 {
         let net = fsm_read_done(inh);
         let epsilon = fsm_read_done(eps);
         fsm_destroy(net);

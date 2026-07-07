@@ -989,7 +989,7 @@ pub(crate) fn explode_line(buf: &str, values: &mut Vec<i32>) -> i32 {
 /* / ##states## / ...TRANSITIONS... / ##end## (see foma/io.c for the full note) */
 
 // [spec:foma:def:io.io-net-read-fn]
-// [spec:foma:sem:io.io-net-read-fn+1]
+// [spec:foma:sem:io.io-net-read-fn+2]
 // C signature: struct fsm *io_net_read(io_buf_handle *iobh, char **net_name).
 // Here the net and its name are returned together; None ↔ NULL return.
 pub fn io_net_read(iobh: &mut IoBufHandle) -> Option<(Box<Fsm>, String)> {
@@ -1064,13 +1064,13 @@ pub fn io_net_read(iobh: &mut IoBufHandle) -> Option<(Box<Fsm>, String)> {
         if toks.len() > 11 {
             extras = atoi(toks[11]);
         }
-        /* %s reads the name into buf (C aliases the input); a missing name field
-        leaves buf as the whole props line — that line then becomes the net name
-        (latent quirk, reproduced) */
+        // [spec:foma:sem:io.io-net-read-fn+2] a missing name field yields an empty
+        // name. C's sscanf left the buffer holding the whole props line, so that
+        // line became the net name.
         let name = if toks.len() > 12 {
             toks[12].to_string()
         } else {
-            buf.clone()
+            String::new()
         };
         net.name = truncate_name(&name);
         net_name = name;
@@ -1099,7 +1099,7 @@ pub fn io_net_read(iobh: &mut IoBufHandle) -> Option<(Box<Fsm>, String)> {
             break;
         }
         if buf.is_empty() {
-            // [spec:foma:sem:io.io-net-read-fn+1] a truly empty line is skipped,
+            // [spec:foma:sem:io.io-net-read-fn+2] a truly empty line is skipped,
             // but at end-of-buffer io_gets yields empty lines without advancing
             // the cursor; if no progress was made the file is truncated inside the
             // sigma section, so fail instead of looping forever (C hung here).
@@ -2405,7 +2405,7 @@ mod tests {
         save_stack_att();
     }
 
-    // [spec:foma:sem:io.io-net-read-fn+1/test]
+    // [spec:foma:sem:io.io-net-read-fn+2/test]
     #[test]
     fn io_net_read_bails_on_truncated_sigma_section() {
         // Serialize a real net to text, then drop everything from "##states##"
@@ -2421,5 +2421,22 @@ mod tests {
         iobh.io_buf = Some(s[..cut].as_bytes().to_vec());
         iobh.io_buf_ptr = 0;
         assert!(io_net_read(&mut iobh).is_none());
+    }
+
+    // [spec:foma:sem:io.io-net-read-fn+2/test]
+    #[test]
+    fn io_net_read_empty_name_when_field_absent() {
+        // A net with an empty name serializes a props line with no name field, so
+        // io_net_read reads 12 tokens. The name is then empty; C's sscanf left the
+        // buffer holding the whole props line, which became the net name.
+        let mut net = fsm_parse_regex("a b", None, None).unwrap();
+        net.name = String::new();
+        let mut text: Vec<u8> = Vec::new();
+        foma_net_print(&net, &mut text);
+        let mut iobh = io_init();
+        iobh.io_buf = Some(text);
+        iobh.io_buf_ptr = 0;
+        let (net2, _name) = io_net_read(&mut iobh).expect("valid net should parse");
+        assert_eq!(net2.name, "");
     }
 }

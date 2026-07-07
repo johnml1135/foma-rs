@@ -342,7 +342,7 @@
 > [spec:foma:def:io.io-net-read-fn]
 > struct fsm *io_net_read(struct io_buf_handle *iobh, char **net_name)
 
-> [spec:foma:sem:io.io-net-read-fn+1]
+> [spec:foma:sem:io.io-net-read-fn+2]
 > Parses one network in the foma text format from the handle's in-memory buffer (format
 > as written by `[spec:foma:sem:io.foma-net-print-fn]`). All lines are read with
 > `[spec:foma:sem:io.io-gets-fn]` into a stack buffer of READ_BUF_SIZE (4096) bytes.
@@ -356,8 +356,10 @@
 > 2. The next line must be "##props##" (else perror, destroy, NULL). The line after it is
 > parsed with sscanf format "%i %i %i %i %i %lld %i %i %i %i %i %i %s" into arity,
 > arccount, statecount, linecount, finalcount, pathcount, is_deterministic, is_pruned,
-> is_minimized, is_epsilon_free, is_loop_free, extras, name; name is strncpy'd into
-> net->name (FSM_NAME_LEN = 40) and strdup'd into *net_name. extras is unpacked as:
+> is_minimized, is_epsilon_free, is_loop_free, extras, name; name (empty when the field is
+> absent) is capped at FSM_NAME_LEN (40) into net->name and strdup'd into *net_name. C's sscanf
+> left the buffer holding the whole props line when the name field was absent, so that line
+> became the net name. extras is unpacked as:
 > is_completed = extras & 3; arcs_sorted_in = (extras & 12) >> 2; arcs_sorted_out =
 > (extras & 48) >> 4.
 > 3. Lines are then skipped until one equals "##sigma##" (future-expansion room); hitting

@@ -419,11 +419,11 @@
 > [spec:foma:def:foma.iface-name-net-fn]
 > void iface_name_net(char *name)
 
-> [spec:foma:sem:foma.iface-name-net-fn]
-> Implemented in foma/iface.c. Requires >= 1 network on the stack. Copies `name` into the top
-> FSM's fixed-size name field with strncpy(dest, name, 40) (FSM_NAME_LEN = 40): shorter names
-> are NUL-padded to 40 bytes; names of 40 or more bytes fill the field WITHOUT a terminating
-> NUL (latent bug — later prints of the name can read past the field). Then calls
+> [spec:foma:sem:foma.iface-name-net-fn+1]
+> Implemented in foma/iface.c. Requires >= 1 network on the stack. Stores `name` on the top FSM in
+> full. C copied it with strncpy(dest, name, 40) (FSM_NAME_LEN = 40) into a fixed-size field: shorter
+> names were NUL-padded to 40 bytes; names of 40 or more bytes filled the field WITHOUT a terminating
+> NUL (later prints could read past the field). Then calls
 > iface_print_name(), which prints the top network's name plus a newline. The stack itself is
 > unchanged; the FSM is modified in place.
 

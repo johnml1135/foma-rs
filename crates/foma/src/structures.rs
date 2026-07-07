@@ -29,9 +29,8 @@ use crate::sigma::{
 };
 use crate::topsort::fsm_topsort;
 use crate::types::{
-    BUILD_VERSION, DefinedQuantifiers, EPSILON, FSM_NAME_LEN, Fsm, FsmOptions, FsmState, IDENTITY,
-    MAJOR_VERSION, MINOR_VERSION, NO, OP_IGNORE_ALL, STATUS_VERSION, Sigma, StateArray, UNKNOWN,
-    YES,
+    BUILD_VERSION, DefinedQuantifiers, EPSILON, Fsm, FsmOptions, FsmState, IDENTITY, MAJOR_VERSION,
+    MINOR_VERSION, NO, OP_IGNORE_ALL, STATUS_VERSION, Sigma, StateArray, UNKNOWN, YES,
 };
 
 thread_local! {
@@ -312,26 +311,15 @@ pub fn fsm_destroy(net: Box<Fsm>) -> i32 {
 }
 
 // [spec:foma:def:structures.fsm-create-fn]
-// [spec:foma:sem:structures.fsm-create-fn]
+// [spec:foma:sem:structures.fsm-create-fn+1]
 // [spec:foma:def:fomalib.fsm-create-fn]
-// [spec:foma:sem:fomalib.fsm-create-fn]
+// [spec:foma:sem:fomalib.fsm-create-fn+1]
 pub fn fsm_create(name: &str) -> Box<Fsm> {
-    if name.len() > FSM_NAME_LEN {
-        print!(
-            "Network name '{}' should consist of at most {} characters.\n",
-            name, FSM_NAME_LEN
-        );
-    }
-    /* strncpy(fsm->name, name, FSM_NAME_LEN): at most 40 bytes are copied,
-    with no NUL terminator when the name is >= 40 bytes — reproduced as
-    truncation to 40 bytes per the conventions.
-    DEVIATION from C (a cut inside a UTF-8 codepoint is lossy-decoded; C
-    would keep the raw byte prefix) */
-    let name = if name.len() > FSM_NAME_LEN {
-        String::from_utf8_lossy(&name.as_bytes()[..FSM_NAME_LEN]).into_owned()
-    } else {
-        name.to_string()
-    };
+    // [spec:foma:sem:structures.fsm-create-fn+1] the in-memory net name is stored
+    // in full. C used a fixed char[40] field (strncpy without a NUL terminator for
+    // names >= 40 bytes), truncating longer names and printing a warning. (The
+    // binary file format still caps names at 40 bytes on read/write.)
+    let name = name.to_string();
     Box::new(Fsm {
         name,
         arity: 1,
@@ -1760,10 +1748,10 @@ mod tests {
         assert_eq!(t[1].state_no, -1); // sentinel
     }
 
-    // [spec:foma:sem:structures.fsm-create-fn/test]
-    // [spec:foma:sem:fomalib.fsm-create-fn/test]
+    // [spec:foma:sem:structures.fsm-create-fn+1/test]
+    // [spec:foma:sem:fomalib.fsm-create-fn+1/test]
     #[test]
-    fn create_defaults_and_name_truncation() {
+    fn create_defaults_and_full_name() {
         let net = fsm_create("mynet");
         assert_eq!(net.name, "mynet");
         assert_eq!(net.arity, 1);
@@ -1778,11 +1766,10 @@ mod tests {
         assert!(sig.next.is_none());
         assert!(net.states.is_empty());
 
-        // name > 40 bytes is truncated to exactly 40 bytes (strncpy quirk)
+        // in-memory names are stored in full (C truncated to a fixed 40-byte field)
         let long: String = "a".repeat(45);
         let net2 = fsm_create(&long);
-        assert_eq!(net2.name.len(), FSM_NAME_LEN);
-        assert_eq!(net2.name, "a".repeat(40));
+        assert_eq!(net2.name, long);
     }
 
     // [spec:foma:sem:structures.fsm-sigma-destroy-fn/test]

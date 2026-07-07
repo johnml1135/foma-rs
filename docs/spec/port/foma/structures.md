@@ -57,9 +57,9 @@
 > [spec:foma:def:structures.fsm-create-fn]
 > struct fsm *fsm_create (char *name)
 
-> [spec:foma:sem:structures.fsm-create-fn]
-> If `strlen(name) > FSM_NAME_LEN` (40), prints `Network name '%s' should consist of at most %d characters.\n` to stdout and proceeds anyway.
-> Mallocs a `struct fsm` and copies the name via `strncpy(fsm->name, name, FSM_NAME_LEN)` into the fixed 40-byte field (no NUL terminator is written when the name is >= 40 chars).
+> [spec:foma:sem:structures.fsm-create-fn+1]
+> The in-memory name is stored in full. C printed `Network name '%s' should consist of at most %d characters.\n` to stdout when `strlen(name) > FSM_NAME_LEN` (40) and copied the name via `strncpy(fsm->name, name, FSM_NAME_LEN)` into a fixed 40-byte field (no NUL terminator when the name is >= 40 chars), truncating longer names. The binary file format still caps names at 40 bytes on read/write.
+> Mallocs a `struct fsm`.
 > Initializes: arity=1, arccount=0, is_deterministic/is_pruned/is_minimized/is_epsilon_free/is_loop_free/arcs_sorted_in/arcs_sorted_out = NO (0), sigma = sigma_create() (single node {number=-1, symbol=NULL, next=NULL}), states=NULL, medlookup=NULL.
 > statecount, linecount, finalcount, pathcount and is_completed are left uninitialized. Caller owns the result.
 

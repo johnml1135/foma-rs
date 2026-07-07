@@ -32,19 +32,17 @@ pub fn iface_pop() {
 }
 
 // [spec:foma:def:iface.iface-name-net-fn]
-// [spec:foma:sem:iface.iface-name-net-fn]
+// [spec:foma:sem:iface.iface-name-net-fn+1]
 // [spec:foma:def:foma.iface-name-net-fn]
-// [spec:foma:sem:foma.iface-name-net-fn]
+// [spec:foma:sem:foma.iface-name-net-fn+1]
 pub fn iface_name_net(name: &str) {
     if iface_stack_check(1) != 0 {
         let top = stack_find_top().unwrap();
         stack_entry_fsm(top, |f| {
-            // strncpy(top->fsm->name, name, 40): copy <= 40 bytes; when
-            // strlen(name) >= 40 the field is left WITHOUT a NUL terminator, i.e.
-            // truncated to 40 bytes (latent bug — reproduced literally).
-            let bytes = name.as_bytes();
-            let n = if bytes.len() < 40 { bytes.len() } else { 40 };
-            f.name = String::from_utf8_lossy(&bytes[..n]).into_owned();
+            // [spec:foma:sem:iface.iface-name-net-fn+1] store the name in full. C
+            // used a fixed char[40] field (strncpy without a NUL terminator for
+            // names >= 40 bytes), truncating longer names.
+            f.name = name.to_string();
         });
         iface_print_name();
     }

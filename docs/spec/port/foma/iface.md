@@ -333,11 +333,11 @@
 > [spec:foma:def:iface.iface-name-net-fn]
 > void iface_name_net(char *name)
 
-> [spec:foma:sem:iface.iface-name-net-fn]
-> "name net <string>": requires ≥1 net. Copies `name` into the top net's fixed name field with
-> strncpy(top->fsm->name, name, 40) — the field is char[40] (FSM_NAME_LEN), so if strlen(name) >= 40 the
-> field is truncated WITHOUT NUL termination (latent bug; document literal behavior). Then calls
-> iface_print_name(), printing the (new) name plus "\n". Does not pop; net stays on the stack.
+> [spec:foma:sem:iface.iface-name-net-fn+1]
+> "name net <string>": requires ≥1 net. Stores `name` on the top net in full. C copied it with
+> strncpy(top->fsm->name, name, 40) into a char[40] (FSM_NAME_LEN) field, so a name >= 40 bytes was
+> truncated WITHOUT NUL termination. Then calls iface_print_name(), printing the (new) name plus
+> "\n". Does not pop; net stays on the stack.
 
 > [spec:foma:def:iface.iface-negate-fn]
 > void iface_negate()

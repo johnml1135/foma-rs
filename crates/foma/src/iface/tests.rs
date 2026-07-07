@@ -575,14 +575,14 @@ fn lower_words_prints_without_consuming() {
 }
 
 // name net + print name: name net strncpy's <=40 bytes into the top net's
-// name (no NUL when >=40 → truncated to 40 bytes) and calls print name; the
-// net stays on the stack.
-// [spec:foma:sem:iface.iface-name-net-fn/test]
-// [spec:foma:sem:foma.iface-name-net-fn/test]
+// name (stored in full; C truncated to a fixed 40-byte field) and calls print
+// name; the net stays on the stack.
+// [spec:foma:sem:iface.iface-name-net-fn+1/test]
+// [spec:foma:sem:foma.iface-name-net-fn+1/test]
 // [spec:foma:sem:iface.iface-print-name-fn/test]
 // [spec:foma:sem:foma.iface-print-name-fn/test]
 #[test]
-fn name_net_sets_name_truncating_at_40_then_prints() {
+fn name_net_sets_full_name_then_prints() {
     stack_init();
     iface_name_net("nope"); // empty: refusal, no panic
     iface_print_name(); // empty: refusal
@@ -593,13 +593,12 @@ fn name_net_sets_name_truncating_at_40_then_prints() {
     let top = stack_find_top().unwrap();
     assert_eq!(stack_entry_fsm(top, |f| f.name.clone()), "hello");
     iface_print_name(); // prints "hello"
-    // >= 40 bytes: truncated to exactly 40 bytes (no NUL terminator in C).
+    // >= 40 bytes: stored in full (C truncated to a fixed 40-byte field).
     let long = "x".repeat(45);
     iface_name_net(&long);
     let top = stack_find_top().unwrap();
     let name = stack_entry_fsm(top, |f| f.name.clone());
-    assert_eq!(name.len(), 40);
-    assert_eq!(name, "x".repeat(40));
+    assert_eq!(name, long);
 }
 
 // print dot: requires >=1; writes dot to stdout (None) or a file (Some);

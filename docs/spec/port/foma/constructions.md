@@ -574,16 +574,16 @@
 > [spec:foma:def:constructions.fsm-flatten-fn]
 > struct fsm *fsm_flatten(struct fsm *net, struct fsm *epsilon)
 
-> [spec:foma:sem:constructions.fsm-flatten-fn]
+> [spec:foma:sem:constructions.fsm-flatten-fn+1]
 > Flattens a transducer into an automaton over single symbols by splitting every
 > arc a:b into two consecutive arcs a:a then b:b through a fresh intermediate
 > state, with EPSILON replaced by a visible symbol taken from the `epsilon`
 > machine (the input-side string of its first arc).
-> Steps: net = fsm_minimize(net). Read `epsilon`'s first arc; epssym = strdup of
-> its input symbol string. (Latent bug: the emptiness check compares
-> fsm_get_next_arc's result to -1, but that function returns 0 at end-of-arcs, so
-> the "return NULL" branch for an arc-less epsilon machine is dead code and an
-> arc-less `epsilon` leads to reading an invalid arc.) Create a construct handle
+> Steps: net = fsm_minimize(net). Read `epsilon`'s first arc; if it has none
+> (fsm_get_next_arc == 0, end-of-arcs) return None. epssym = strdup of its input
+> symbol string. C compared fsm_get_next_arc's result to -1, which it never
+> returns, so the "return NULL" branch for an arc-less epsilon machine was dead
+> and an arc-less `epsilon` led to reading an invalid arc. Create a construct handle
 > (name and sigma copied from net); maxstate starts at net->statecount and each
 > processed arc allocates one fresh intermediate state (maxstate++).
 > For each arc of net (source s, target t, labels in:out): if either side is
@@ -611,7 +611,7 @@
 > [spec:foma:def:constructions.fsm-ignore-fn]
 > struct fsm *fsm_ignore(struct fsm *net1, struct fsm *net2, int operation)
 
-> [spec:foma:sem:constructions.fsm-ignore-fn]
+> [spec:foma:sem:constructions.fsm-ignore-fn+1]
 > The ignore operator: net1 with freely interspersed strings from net2.
 > `operation` is OP_IGNORE_ALL (1: ignore anywhere, A/B) or OP_IGNORE_INTERNAL
 > (2: ignore only strictly inside A, A./.B).
@@ -637,10 +637,11 @@
 >   of each FINAL state of net2 (tracked via handled_states2, reset per splice),
 >   emit instead an EPSILON:EPSILON arc from the shifted state back to
 >   return_state[spliceIndex] (non-final), followed by the line's own arc if it
->   has a real target. Latent bug: in the plain-copy branch the target is shifted
->   unconditionally (`target + offset`), so a target of -1 would become a bogus
->   state number; this cannot occur for minimized net2 (every arc-less state is
->   final and handled by the first branch).
+>   has a real target. In the plain-copy branch a target of -1 (a final marker) is
+>   preserved; only a real target is shifted by the offset. C shifted the target
+>   unconditionally (`target + offset`), so a -1 would become a bogus state number
+>   — this cannot occur for a minimized net2 (every arc-less state is final and
+>   handled by the first branch) but would corrupt a non-minimized net2.
 > - Append the sentinel; free the bitmaps and return table; free net1's old
 >   lines; destroy net2; install the new array on net1; fsm_update_flags(net1,
 >   NO,NO,NO,NO,NO,NO); fsm_count(net1). Returns net1 (not minimized). Both

@@ -717,6 +717,20 @@ children (
                         kind @note
                         text "Tier D — dead code + degenerate/malformed-only correctness.\nD1 constructions/derived.rs:2020 [constructions.fsm-flatten-fn] — dead guard tests fsm_get_next_arc == -1, but that fn only returns 0/1; on an arc-free epsilon machine it proceeds to read an invalid arc. Fix: compare == 0 (end-of-arcs).\nD2 constructions/derived.rs:1215 [constructions.fsm-ignore-fn] — plain-copy branch adds the state offset to a -1 final-marker target on a non-minimized net2 → bogus state number. Fix: preserve target == -1 unchanged.\nD3 structures.rs:326 [structures.fsm-create-fn] + iface/stack_ops.rs:46 [iface.iface-name-net-fn] — 40-byte name-field truncation (no NUL in C). Fix: unbounded owned String for net names.\nD4 io.rs:1069 [io.io-net-read-fn] — when the name field is absent, sscanf leaves the buffer holding the props line → props reused as the net name. Fix: fall back to \"\" on missing field."
                     }
+
+                    {
+                        at 2026-07-07T01:20:55.78713Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Todo → Doing (nplan_start)"
+                    }
+
+                    {
+                        at 2026-07-07T01:35:21.321192Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan_complete)"
+                    }
                 )
             }
 

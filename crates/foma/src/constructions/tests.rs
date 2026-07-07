@@ -982,17 +982,27 @@ fn fsm_follows_is_not_a_then_b_and_consumes_neither() {
 
 /* ---- flatten / unflatten ------------------------------------------ */
 
-// [spec:foma:sem:constructions.fsm-flatten-fn/test]
-// [spec:foma:sem:fomalib.fsm-flatten-fn/test]
+// [spec:foma:sem:constructions.fsm-flatten-fn+1/test]
+// [spec:foma:sem:fomalib.fsm-flatten-fn+1/test]
 #[test]
 fn fsm_flatten_splits_pairs_into_identity_arcs() {
-    // Normal path (the -1 guard is dead): a:b -> acceptor "ab".
+    // Normal path: a:b -> acceptor "ab".
     let flat = fsm_flatten(re("a:b"), fsm_symbol("E")).unwrap();
     assert_eq!(words(&flat), ws(&["ab"]));
     // EPSILON on a side is replaced by the epsilon machine's symbol "E".
     let a0 = fsm_cross_product(fsm_symbol("a"), fsm_empty_string());
     let flat2 = fsm_flatten(a0, fsm_symbol("E")).unwrap();
     assert_eq!(words(&flat2), ws(&["aE"]));
+}
+
+// [spec:foma:sem:constructions.fsm-flatten-fn+1/test]
+// [spec:foma:sem:fomalib.fsm-flatten-fn+1/test]
+#[test]
+fn fsm_flatten_none_when_epsilon_machine_has_no_arcs() {
+    // An arc-less epsilon machine (empty-set: a single non-final start, no arcs)
+    // has no first arc, so fsm_flatten returns None. C tested fsm_get_next_arc
+    // == -1 (never returned), fell through, and read an invalid arc (panic here).
+    assert!(fsm_flatten(re("a:b"), fsm_empty_set()).is_none());
 }
 
 // [spec:foma:sem:constructions.fsm-unflatten-fn/test]
