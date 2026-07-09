@@ -1,6 +1,6 @@
 schema_version 7
 
-last_sync_at 2026-07-07T19:37:15.797696Z
+last_sync_at 2026-07-09T15:15:53.010791Z
 
 derived_priorities (
     {id foma-mono-io, priority 0, derived_at 2026-07-07T19:37:15.797696Z}
@@ -97,6 +97,6 @@ assertions (
     {id w7-utf8-io, kind @complete, author "brendan@necessary.nu", at 2026-07-07T19:25:42.744007Z}
     {id w7-apply-runtime, kind @complete, author "brendan@necessary.nu", at 2026-07-07T19:36:46.227718Z}
     {id w8-stack, kind @complete, author "brendan@necessary.nu", at 2026-07-08T17:54:26.850046Z}
-    {id w8-options, kind @doing, author "brendan@necessary.nu", at 2026-07-09T14:38:21.504551Z}
-    {id w8-defines, kind @doing, author "brendan@necessary.nu", at 2026-07-09T15:03:16.781201Z}
+    {id w8-options, kind @complete, author "brendan@necessary.nu", at 2026-07-09T15:15:35.564304Z}
+    {id w8-defines, kind @complete, author "brendan@necessary.nu", at 2026-07-09T15:15:38.151188Z}
 )

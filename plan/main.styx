@@ -945,6 +945,13 @@ children (
                         kind @decision
                         text "Full library threading chosen over CLI-only (operator call): the node's \"pass as params where the cascade is small\" premise was false — g_minimal/g_minimize_hopcroft are read inside fsm_minimize, which has 147 pure-library call sites, so a param means threading the whole construction layer. Done: new options::FomaOptions (bools as bool, i32 limits, att_epsilon String; C defaults), owned by Session (session.opts) and passed as &FomaOptions first param through fsm_minimize/fsm_compose/flag_eliminate/read_att/net_print_att/add_defined_function and their ~85-function transitive caller closure (constructions, rewrite, regex build_* chain, my_yyparse). lexcread absorbs a FomaOptions clone into LexcCompiler at the parse entry points (fsm_lexc_parse_string/file lose the ignored C `verbose` int param). iface global_vars[] table now carries FomaOptions field projections (GvField::Bool/Int/Str fn pointers) instead of &'static thread_local pointers; set/show variable take &mut Session. Session gains stack_entry_{fsm,ah,amedh}_with_opts borrow-splitting accessors for closure sites needing opts + handle. flag_eliminate's g_flag_is_epsilon save/set/restore became a modified opts copy passed to its composes. All 21 G_* thread_locals deleted from mem.rs. 556 tests green; observable behaviour unchanged (byte-exact CLI transcripts pass)."
                     }
+
+                    {
+                        at 2026-07-09T15:15:35.564304Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan_complete)"
+                    }
                 )
             }
 
@@ -965,6 +972,13 @@ children (
                         author "brendan@necessary.nu"
                         kind @decision
                         text "Done: G_DEFINES/G_DEFINES_F thread_locals deleted; Session owns defines/defines_f (Box'd dummy-head registries, init'd by Session::new — C main's defined_*_init). fsm_lexc_parse_string/file take defines: Option<&mut DefinedNetworks> (the C g_defines \"olddefines\" dance became a plain parameter). iface_load/save_defined + iface_print_defined take the session; iface_substitute_defined temporarily mem::replace-takes the registry out of the session because the found subnet stays mutably borrowed across the stack calls (fsm_substitute_label merges sigmas into the registry's live net, as C does — a copy would observably diverge). Pre-init NULL-registry branches (\"No defined symbols./No defined networks.\") are unrepresentable now and removed: an empty registry prints nothing / still creates the (empty) save file, matching C's post-init behaviour. FSM_OPTIONS also folded: FsmOptions struct deleted from types.rs, skip_word_boundary_marker is a FomaOptions field (annotation moved), fsm_set/get_option take the option set, fsm_merge_sigma (its one library reader) gained the opts param (+ fsm_union/fsm_equivalent/fsm_left_rewr in its caller closure). Remaining thread_locals are out-of-scope algorithm scratch (dynarray rand, int_stack, regex parse state, QUANTIFIERS) and bin arg-state. 556 tests green."
+                    }
+
+                    {
+                        at 2026-07-09T15:15:38.151188Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Doing → Done (nplan_complete)"
                     }
                 )
             }
