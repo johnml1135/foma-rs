@@ -8,8 +8,12 @@ use super::*;
 // [spec:foma:sem:foma.iface-load-defined-fn]
 pub fn iface_load_defined(session: &mut Session, filename: &str) {
     // C: load_defined(g_defines, filename); the registry is the session's
-    // init'd dummy head.
-    load_defined(&mut session.defines, filename);
+    // init'd dummy head. The library reader is now silent and returns a Result;
+    // the user-facing progress line and any error live here.
+    print!("Loading definitions from {filename}.\n");
+    if let Err(e) = load_defined(&mut session.defines, filename) {
+        eprint!("{e}\n");
+    }
 }
 
 // [spec:foma:def:iface.iface-read-att-fn]
@@ -93,8 +97,13 @@ pub fn iface_read_text(session: &mut Session, filename: &str) -> i32 {
 pub fn iface_save_defined(session: &mut Session, filename: &str) {
     // save_defined(g_defines, filename). C printed "No defined networks.\n"
     // when g_defines was NULL (possible only before main's init); the session
-    // registry always exists, so that branch is gone.
-    save_defined(&mut session.defines, filename);
+    // registry always exists, so that branch is gone. The library writer is now
+    // silent and returns a Result; the user-facing progress line and any error
+    // live here.
+    print!("Writing definitions to file {filename}.\n");
+    if let Err(e) = save_defined(&mut session.defines, filename) {
+        eprint!("{e}\n");
+    }
 }
 
 // [spec:foma:def:iface.iface-write-att-fn]
@@ -136,6 +145,16 @@ pub fn iface_write_prolog(session: &mut Session, filename: Option<&str>) {
         let Some(top) = session.stack_find_top() else {
             return;
         };
-        session.stack_entry_fsm(top, |f| foma_write_prolog(f, filename));
+        // C printed "Writing prolog to file '…'." from foma_write_prolog itself;
+        // that user-facing progress now lives here (the library fn is silent and
+        // returns a Result). A file-create failure prints the error instead of
+        // C's silent stdout fallback.
+        if let Some(name) = filename {
+            print!("Writing prolog to file '{name}'.\n");
+        }
+        let result = session.stack_entry_fsm(top, |f| foma_write_prolog(f, filename));
+        if let Err(e) = result {
+            eprint!("{e}\n");
+        }
     }
 }

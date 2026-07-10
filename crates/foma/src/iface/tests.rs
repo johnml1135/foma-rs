@@ -746,7 +746,7 @@ fn load_defined_restores_saved_definitions() {
     // Define Foo = [x y] and write the file via the io primitive.
     let def = fsm_parse_regex(&session.opts, "x y", None, None).unwrap();
     add_defined(&mut session.defines, Some(def), "Foo");
-    save_defined(&mut session.defines, p);
+    save_defined(&mut session.defines, p).expect("save definitions to scratch file");
     // Load the file back into a fresh session's registry.
     let mut session = Session::new();
     iface_load_defined(&mut session, p);
@@ -898,7 +898,7 @@ fn read_att_and_prolog_roundtrip_and_error() {
     let pl = plp.to_str().unwrap();
     {
         let mut net = fsm_parse_regex(opts, "a b", None, None).unwrap();
-        foma_write_prolog(&mut net, Some(pl));
+        foma_write_prolog(&mut net, Some(pl)).expect("prolog write to temp file");
     }
     let mut session = Session::new();
     assert_eq!(iface_read_att(&mut session, "/no/such/foma/att"), 1);

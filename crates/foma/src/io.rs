@@ -198,26 +198,21 @@ pub fn escape_print<W: std::io::Write + ?Sized>(stream: &mut W, string: &str) {
 // [spec:foma:sem:io.foma-write-prolog-fn+1]
 // [spec:foma:def:fomalib.foma-write-prolog-fn]
 // [spec:foma:sem:fomalib.foma-write-prolog-fn]
-pub fn foma_write_prolog(net: &mut Fsm, filename: Option<&str>) -> i32 {
-    let mut out: Output;
-    match filename {
-        None => {
-            out = Output::Stdout(std::io::stdout());
-        }
-        Some(fname) => {
-            match File::create(fname) {
-                Ok(f) => {
-                    out = Output::File(f);
-                }
-                Err(_) => {
-                    print!("Error writing to file '{}'. Using stdout.\n", fname);
-                    out = Output::Stdout(std::io::stdout());
-                }
+pub fn foma_write_prolog(net: &mut Fsm, filename: Option<&str>) -> Result<(), FomaError> {
+    /* C fell back to stdout (printing "Error writing to file … Using stdout.")
+    when the target could not be created; here the caller is handed the error
+    instead so it can report and abort. */
+    let mut out: Output = match filename {
+        None => Output::Stdout(std::io::stdout()),
+        Some(fname) => match File::create(fname) {
+            Ok(f) => Output::File(f),
+            Err(e) => {
+                return Err(FomaError::Io(format!(
+                    "cannot write prolog to '{fname}': {e}"
+                )));
             }
-            /* printed whenever filename != NULL, even after the stdout fallback */
-            print!("Writing prolog to file '{}'.\n", fname);
-        }
-    }
+        },
+    };
     fsm_count(net);
     let maxsigma = sigma_max(&net.sigma);
     /* calloc(maxsigma+1, sizeof(int)) */
@@ -339,7 +334,7 @@ pub fn foma_write_prolog(net: &mut Fsm, filename: Option<&str>) -> i32 {
     }
     /* if (filename != NULL) fclose(out); — the File is dropped here either way;
     stdout is not closed. free(finals)/free(used_symbols) — dropped. */
-    1
+    Ok(())
 }
 
 // [spec:foma:def:io.read-att-fn]
@@ -789,14 +784,15 @@ pub fn fsm_read_binary_file_multiple(
         io_net_read(&mut handle.iobh)
     };
     match result {
-        None => {
+        Ok(Some((net, _net_name))) => {
+            /* free(net_name) — dropped */
+            Some(net)
+        }
+        // Clean end of stream or a format error: the C returned NULL either way.
+        Ok(None) | Err(_) => {
             /* io_free(iobh) — drop the whole handle */
             *fsrh = None;
             None
-        }
-        Some((net, _net_name)) => {
-            /* free(net_name) — dropped */
-            Some(net)
         }
     }
 }
@@ -829,9 +825,9 @@ pub fn fsm_read_binary_file(filename: &str) -> Result<Box<Fsm>, FomaError> {
         )));
     }
     /* *net_name is strdup'd and never freed in C (leak); here it is dropped */
-    let net = io_net_read(&mut iobh).map(|(n, _net_name)| n);
+    let net = io_net_read(&mut iobh).map(|opt| opt.map(|(n, _net_name)| n));
     io_free(iobh);
-    net.ok_or_else(|| FomaError::Format(format!("malformed foma binary file '{filename}'")))
+    net?.ok_or_else(|| FomaError::Format(format!("malformed foma binary file '{filename}'")))
 }
 
 // [spec:foma:def:io.fsm-read-binary-mem-fn]
@@ -855,7 +851,7 @@ pub fn fsm_read_binary_mem(bytes: &[u8]) -> Result<Box<Fsm>, FomaError> {
         io_buf: Some(content),
         io_buf_ptr: 0,
     };
-    io_net_read(&mut iobh)
+    io_net_read(&mut iobh)?
         .map(|(net, _net_name)| net)
         .ok_or_else(|| FomaError::Format("malformed foma binary image".to_string()))
 }
@@ -887,7 +883,7 @@ pub fn fsm_read_binary_mem_prefix(bytes: &[u8]) -> Result<(Box<Fsm>, usize), Fom
         io_buf: Some(content),
         io_buf_ptr: 0,
     };
-    let net = io_net_read(&mut iobh)
+    let net = io_net_read(&mut iobh)?
         .map(|(net, _net_name)| net)
         .ok_or_else(|| FomaError::Format("malformed foma binary image".to_string()))?;
     Ok((net, consumed))
@@ -909,23 +905,23 @@ pub fn fsm_read_binary<R: std::io::Read>(mut reader: R) -> Result<Box<Fsm>, Foma
 // [spec:foma:sem:io.save-defined-fn]
 // [spec:foma:def:fomalib.save-defined-fn]
 // [spec:foma:sem:fomalib.save-defined-fn]
-pub fn save_defined(def: &mut DefinedNetworks, filename: &str) -> i32 {
+pub fn save_defined(def: &mut DefinedNetworks, filename: &str) -> Result<(), FomaError> {
     /* C: def == NULL → "No defined networks.\n" (stderr) and return 0. A &mut
     reference is never NULL, so that NULL check stays at the call site. */
     let file = match File::create(filename) {
         Ok(f) => f,
-        Err(_) => {
-            print!("Error opening file {} for writing.\n", filename);
-            return -1;
+        Err(e) => {
+            return Err(FomaError::Io(format!(
+                "cannot open file {filename} for writing: {e}"
+            )));
         }
     };
-    print!("Writing definitions to file {}.\n", filename);
     let mut outfile = GzEncoder::new(file, Compression::default());
     let mut d = Some(&mut *def);
     while let Some(node) = d {
         let name = node.name.as_deref().unwrap_or("").to_string();
         let Some(net) = node.net.as_mut() else {
-            print!("Skipping definition without network.\n");
+            tracing::warn!("Skipping definition without network.");
             d = node.next.as_deref_mut();
             continue;
         };
@@ -936,33 +932,34 @@ pub fn save_defined(def: &mut DefinedNetworks, filename: &str) -> i32 {
     }
     /* gzclose(outfile) */
     let _ = outfile.finish();
-    1
+    Ok(())
 }
 
 // [spec:foma:def:io.load-defined-fn]
 // [spec:foma:sem:io.load-defined-fn]
 // [spec:foma:def:fomalib.load-defined-fn]
 // [spec:foma:sem:fomalib.load-defined-fn]
-pub fn load_defined(def: &mut DefinedNetworks, filename: &str) -> i32 {
+pub fn load_defined(def: &mut DefinedNetworks, filename: &str) -> Result<(), FomaError> {
     let mut iobh = io_init();
-    print!("Loading definitions from {}.\n", filename);
     if io_gz_file_to_mem(&mut iobh, filename) == 0 {
-        eprint!("File error.\n");
         io_free(iobh);
-        return 0;
+        return Err(FomaError::Io(format!(
+            "cannot read definitions from {filename}"
+        )));
     }
-    loop {
+    let result = loop {
         match io_net_read(&mut iobh) {
-            None => break,
-            Some((net, net_name)) => {
+            Ok(None) => break Ok(()),
+            Ok(Some((net, net_name))) => {
                 /* the stored net name is the definition name; add_defined copies
                 it, so the strdup'd net_name is leaked in C (dropped here) */
                 add_defined(def, Some(net), &net_name);
             }
+            Err(e) => break Err(e),
         }
-    }
+    };
     io_free(iobh);
-    1
+    result
 }
 
 // [spec:foma:def:io.explode-line-fn]
@@ -1003,8 +1000,10 @@ pub(crate) fn explode_line(buf: &str, values: &mut Vec<i32>) -> i32 {
 // [spec:foma:def:io.io-net-read-fn]
 // [spec:foma:sem:io.io-net-read-fn+3]
 // C signature: struct fsm *io_net_read(io_buf_handle *iobh, char **net_name).
-// Here the net and its name are returned together; None ↔ NULL return.
-pub fn io_net_read(iobh: &mut IoBufHandle) -> Option<(Box<Fsm>, String)> {
+// Here the net and its name are returned together. `Ok(None)` is a clean end of
+// the buffer (no more nets); `Err` is a structural format error (the C printed a
+// diagnostic and returned NULL — the caller now decides what to report).
+pub fn io_net_read(iobh: &mut IoBufHandle) -> Result<Option<(Box<Fsm>, String)>, FomaError> {
     let mut buf = String::new();
     let net_name: String;
     let mut lineint: Vec<i32> = Vec::new();
@@ -1015,22 +1014,19 @@ pub fn io_net_read(iobh: &mut IoBufHandle) -> Option<(Box<Fsm>, String)> {
     let mut last_final: i8 = b'1' as i8;
 
     if io_gets(iobh, &mut buf) == 0 {
-        return None;
+        return Ok(None);
     }
 
     let mut net = fsm_create("");
 
     if buf != "##foma-net 1.0##" {
         fsm_destroy(net);
-        /* C: perror("File format error foma!\n") */
-        eprint!("File format error foma!\n");
-        return None;
+        return Err(FomaError::Format("File format error foma!".to_string()));
     }
     io_gets(iobh, &mut buf);
     if buf != "##props##" {
-        eprint!("File format error props!\n");
         fsm_destroy(net);
-        return None;
+        return Err(FomaError::Format("File format error props!".to_string()));
     }
     /* Properties */
     io_gets(iobh, &mut buf);
@@ -1096,9 +1092,10 @@ pub fn io_net_read(iobh: &mut IoBufHandle) -> Option<(Box<Fsm>, String)> {
     /* Sigma header: skip anything until ##sigma## */
     while buf != "##sigma##" {
         if buf.is_empty() {
-            print!("File format error at sigma definition!\n");
             fsm_destroy(net);
-            return None;
+            return Err(FomaError::Format(
+                "File format error at sigma definition!".to_string(),
+            ));
         }
         io_gets(iobh, &mut buf);
     }
@@ -1116,9 +1113,10 @@ pub fn io_net_read(iobh: &mut IoBufHandle) -> Option<(Box<Fsm>, String)> {
             // the cursor; if no progress was made the file is truncated inside the
             // sigma section, so fail instead of looping forever (C hung here).
             if iobh.io_buf_ptr == before {
-                print!("File format error in sigma section!\n");
                 fsm_destroy(net);
-                return None;
+                return Err(FomaError::Format(
+                    "File format error in sigma section!".to_string(),
+                ));
             }
             continue;
         }
@@ -1127,9 +1125,10 @@ pub fn io_net_read(iobh: &mut IoBufHandle) -> Option<(Box<Fsm>, String)> {
         let p = match buf.find(' ') {
             Some(p) => p,
             None => {
-                print!("File format error in sigma section!\n");
                 fsm_destroy(net);
-                return None;
+                return Err(FomaError::Format(
+                    "File format error in sigma section!".to_string(),
+                ));
             }
         };
         let number_str = &buf[..p];
@@ -1145,9 +1144,8 @@ pub fn io_net_read(iobh: &mut IoBufHandle) -> Option<(Box<Fsm>, String)> {
 
     /* States */
     if buf != "##states##" {
-        print!("File format error!\n");
         /* C leaks net here */
-        return None;
+        return Err(FomaError::Format("File format error!".to_string()));
     }
     /* malloc(linecount * sizeof(struct fsm_state)).
     DEVIATION from C (more lines than linecount OOB-write in C; Rust panics on
@@ -1205,9 +1203,8 @@ pub fn io_net_read(iobh: &mut IoBufHandle) -> Option<(Box<Fsm>, String)> {
                 last_final = lineint[4] as i8;
             }
             _ => {
-                print!("File format error\n");
                 /* C leaks net here */
-                return None;
+                return Err(FomaError::Format("File format error".to_string()));
             }
         }
         if laststate > 0 {
@@ -1239,11 +1236,10 @@ pub fn io_net_read(iobh: &mut IoBufHandle) -> Option<(Box<Fsm>, String)> {
         }
     }
     if buf != "##end##" {
-        print!("File format error!\n");
         /* C leaks net here */
-        return None;
+        return Err(FomaError::Format("File format error!".to_string()));
     }
-    Some((net, net_name))
+    Ok(Some((net, net_name)))
 }
 
 // [spec:foma:def:io.io-gets-fn]
@@ -1921,7 +1917,7 @@ mod tests {
             io_buf: Some(buf),
             io_buf_ptr: 0,
         };
-        let (net, name) = io_net_read(&mut h).unwrap();
+        let (net, name) = io_net_read(&mut h).unwrap().unwrap();
         assert_eq!(name, "test");
         assert_net_eq(&net, &craft_ab_net("test"));
     }
@@ -1933,7 +1929,7 @@ mod tests {
             io_buf: Some(b"garbage\0".to_vec()),
             io_buf_ptr: 0,
         };
-        assert!(io_net_read(&mut h).is_none());
+        assert!(matches!(io_net_read(&mut h), Err(FomaError::Format(_))));
     }
 
     // [spec:foma:sem:io.fsm-write-binary-file-fn/test]
@@ -2098,12 +2094,12 @@ mod tests {
         add_defined(&mut def, Some(parse("a:b")), "T1");
         add_defined(&mut def, Some(parse("[c d]")), "T2");
         let f = Scratch::new("def");
-        assert_eq!(save_defined(&mut def, f.path()), 1);
+        save_defined(&mut def, f.path()).expect("save round-trip");
         /* gzip magic present */
         assert_eq!(read_first_bytes(f.path(), 2), vec![0x1f, 0x8b]);
 
         let mut def2 = defined_networks_init();
-        assert_eq!(load_defined(&mut def2, f.path()), 1);
+        load_defined(&mut def2, f.path()).expect("load round-trip");
         let t1 = find_defined(&mut def2, "T1").expect("T1 reloaded");
         assert_eq!(drain_down(t1, "a"), vec!["b".to_string()]);
         let t2 = find_defined(&mut def2, "T2").expect("T2 reloaded");
@@ -2118,7 +2114,10 @@ mod tests {
         let mut p = std::env::temp_dir();
         p.push("foma_io_absent_def_zzz.foma");
         let _ = std::fs::remove_file(&p);
-        assert_eq!(load_defined(&mut def, p.to_str().unwrap()), 0);
+        assert!(matches!(
+            load_defined(&mut def, p.to_str().unwrap()),
+            Err(FomaError::Io(_))
+        ));
     }
 
     // [spec:foma:sem:io.net-print-att-fn/test]
@@ -2165,7 +2164,7 @@ mod tests {
         let mut net = parse("a:b");
         net.name = "rt".to_string();
         let f = Scratch::new("prolog");
-        assert_eq!(foma_write_prolog(&mut net, Some(f.path())), 1);
+        assert!(foma_write_prolog(&mut net, Some(f.path())).is_ok());
         let back = fsm_read_prolog(f.path()).unwrap();
         assert_eq!(drain_down(&back, "a"), vec!["b".to_string()]);
         assert_eq!(drain_up(&back, "b"), vec!["a".to_string()]);
@@ -2223,7 +2222,7 @@ mod tests {
             sent(),
         ];
         let f = Scratch::new("prologbug");
-        foma_write_prolog(&mut net, Some(f.path()));
+        foma_write_prolog(&mut net, Some(f.path())).expect("write prolog to scratch file");
         let s = std::fs::read_to_string(f.path()).unwrap();
         assert!(s.contains("arc(bug, 0, 1, \"0\":\"%?\")."), "got:\n{}", s);
         assert!(!s.contains("\"0\":\"?\")"));
@@ -2431,8 +2430,8 @@ mod tests {
         let opts = &FomaOptions::default();
         // Serialize a real net to text, then drop everything from "##states##"
         // onward so the buffer ends inside the sigma section. io_net_read must
-        // return None instead of looping forever on the empty lines io_gets
-        // yields at end-of-buffer.
+        // return a Format error instead of looping forever on the empty lines
+        // io_gets yields at end-of-buffer.
         let net = fsm_parse_regex(opts, "a b", None, None).unwrap();
         let mut text: Vec<u8> = Vec::new();
         foma_net_print(&net, &mut text);
@@ -2441,7 +2440,7 @@ mod tests {
         let mut iobh = io_init();
         iobh.io_buf = Some(s[..cut].as_bytes().to_vec());
         iobh.io_buf_ptr = 0;
-        assert!(io_net_read(&mut iobh).is_none());
+        assert!(matches!(io_net_read(&mut iobh), Err(FomaError::Format(_))));
     }
 
     // [spec:foma:sem:io.io-net-read-fn+3/test]
@@ -2458,12 +2457,14 @@ mod tests {
         let mut iobh = io_init();
         iobh.io_buf = Some(text);
         iobh.io_buf_ptr = 0;
-        let (net2, _name) = io_net_read(&mut iobh).expect("valid net should parse");
+        let (net2, _name) = io_net_read(&mut iobh)
+            .expect("valid net should parse")
+            .expect("a net, not clean EOF");
         assert_eq!(net2.name, "");
     }
 
-    // A sigma line with no separating space returns None instead of crashing
-    // (C's strstr(buf, " ") NULL-derefs on a spaceless line).
+    // A sigma line with no separating space returns a Format error instead of
+    // crashing (C's strstr(buf, " ") NULL-derefs on a spaceless line).
     // [spec:foma:sem:io.io-net-read-fn+3/test]
     #[test]
     fn io_net_read_bails_on_spaceless_sigma_line() {
@@ -2480,6 +2481,6 @@ mod tests {
         let mut iobh = io_init();
         iobh.io_buf = Some(corrupted.into_bytes());
         iobh.io_buf_ptr = 0;
-        assert!(io_net_read(&mut iobh).is_none());
+        assert!(io_net_read(&mut iobh).is_err());
     }
 }
