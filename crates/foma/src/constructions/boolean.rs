@@ -111,8 +111,8 @@ pub fn fsm_concat(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm
     /* free(net1->states) */
     fsm_destroy(net2);
     net1.states = new_fsm;
-    if sigma_find_number(EPSILON, net1.sigma.as_deref()) == -1 {
-        sigma_add_special(EPSILON, net1.sigma.as_deref_mut().unwrap());
+    if sigma_find_number(EPSILON, &net1.sigma) == -1 {
+        sigma_add_special(EPSILON, &mut net1.sigma);
     }
     fsm_count(&mut net1);
     net1.is_epsilon_free = NO;
@@ -225,8 +225,8 @@ pub fn fsm_union(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm>
     net1.finalcount = net1.finalcount + net2.finalcount;
     fsm_destroy(net2);
     fsm_update_flags(&mut net1, NO, NO, NO, NO, UNK, NO);
-    if sigma_find_number(EPSILON, net1.sigma.as_deref()) == -1 {
-        sigma_add_special(EPSILON, net1.sigma.as_deref_mut().unwrap());
+    if sigma_find_number(EPSILON, &net1.sigma) == -1 {
+        sigma_add_special(EPSILON, &mut net1.sigma);
     }
     net1
 }
@@ -245,21 +245,21 @@ pub fn fsm_completes(opts: &FomaOptions, net: Box<Fsm>, operation: i32) -> Box<F
     }
 
     let mut incomplete = 0;
-    if sigma_find_number(UNKNOWN, net.sigma.as_deref()) != -1 {
+    if sigma_find_number(UNKNOWN, &net.sigma) != -1 {
         /* C: sigma_remove's returned new head is discarded (harmless
         unless UNKNOWN were the head node); the owned list here must be
         reassigned */
-        net.sigma = sigma_remove("@_UNKNOWN_SYMBOL_@", net.sigma.take());
+        sigma_remove("@_UNKNOWN_SYMBOL_@", &mut net.sigma);
     }
-    if sigma_find_number(IDENTITY, net.sigma.as_deref()) == -1 {
-        sigma_add_special(IDENTITY, net.sigma.as_deref_mut().unwrap());
+    if sigma_find_number(IDENTITY, &net.sigma) == -1 {
+        sigma_add_special(IDENTITY, &mut net.sigma);
         incomplete = 1;
     }
 
-    let mut sigsize = sigma_size(net.sigma.as_deref());
-    let last_sigma = sigma_max(net.sigma.as_deref());
+    let mut sigsize = sigma_size(&net.sigma);
+    let last_sigma = sigma_max(&net.sigma);
 
-    if sigma_find_number(EPSILON, net.sigma.as_deref()) != -1 {
+    if sigma_find_number(EPSILON, &net.sigma) != -1 {
         sigsize -= 1;
     }
 
@@ -488,7 +488,7 @@ pub fn fsm_minus(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm>
     let point_a = init_state_pointers(&net1.states);
     let point_b = init_state_pointers(&net2.states);
 
-    let mut builder = fsm_state_init(sigma_max(net1.sigma.as_deref()));
+    let mut builder = fsm_state_init(sigma_max(&net1.sigma));
 
     while !int_stack.is_empty() {
         statecount += 1;

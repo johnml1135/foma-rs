@@ -16,7 +16,7 @@ pub(crate) fn perror(s: &str) {
 // Static helper (C: `static char *sigptr`). Returns an owned display string; C
 // returns borrowed static/sigma pointers or a leaked malloc'd "NONE(%i)", but
 // the owned String here is observably identical.
-pub(crate) fn sigptr(sigma: Option<&Sigma>, number: i32) -> String {
+pub(crate) fn sigptr(sigma: &[Sigma], number: i32) -> String {
     if number == EPSILON {
         return "0".to_string();
     }
@@ -26,10 +26,9 @@ pub(crate) fn sigptr(sigma: Option<&Sigma>, number: i32) -> String {
     if number == IDENTITY {
         return "@".to_string();
     }
-    let mut s = sigma;
-    while let Some(node) = s {
+    for node in sigma {
         if node.number == number {
-            let sym = node.symbol.as_deref().unwrap_or("");
+            let sym = node.symbol.as_str();
             if sym == "0" {
                 return "\"0\"".to_string();
             }
@@ -44,7 +43,6 @@ pub(crate) fn sigptr(sigma: Option<&Sigma>, number: i32) -> String {
             }
             return sym.to_string();
         }
-        s = node.next.as_deref();
     }
     // malloc(40) + snprintf "NONE(%i)" — leaked in C.
     format!("NONE({})", number)
@@ -84,7 +82,7 @@ pub(crate) fn print_net(net: &mut Fsm, filename: Option<&str>) -> i32 {
         }
         i += 1;
     }
-    print_sigma(net.sigma.as_deref(), &mut out);
+    print_sigma(&net.sigma, &mut out);
     let _ = write!(out, "Net: {}\n", net.name);
     let _ = write!(out, "Flags: ");
     if net.is_deterministic == YES {
@@ -144,14 +142,14 @@ pub(crate) fn print_net(net: &mut Fsm, filename: Option<&str>) -> i32 {
             } else if in_ == UNKNOWN {
                 let _ = write!(out, "?:? -> ");
             } else {
-                let _ = write!(out, "{} -> ", sigptr(net.sigma.as_deref(), in_));
+                let _ = write!(out, "{} -> ", sigptr(&net.sigma, in_));
             }
         } else {
             let _ = write!(
                 out,
                 "<{}:{}> -> ",
-                sigptr(net.sigma.as_deref(), in_),
-                sigptr(net.sigma.as_deref(), out_)
+                sigptr(&net.sigma, in_),
+                sigptr(&net.sigma, out_)
             );
         }
         if finals[target as usize] == 1 {
@@ -180,17 +178,12 @@ pub(crate) fn print_mem_size(net: &Fsm) {
     const SIZEOF_FSM: u32 = 128;
     const SIZEOF_FSM_STATE: u32 = 16;
     let mut s: u32 = 0;
-    let mut sig = net.sigma.as_deref();
-    while let Some(node) = sig {
-        if node.number == -1 {
-            break;
-        }
-        let symlen = node.symbol.as_deref().unwrap_or("").len() as u32;
+    for node in &net.sigma {
+        let symlen = node.symbol.len() as u32;
         s = s
             .wrapping_add(symlen)
             .wrapping_add(1)
             .wrapping_add(SIZEOF_SIGMA);
-        sig = node.next.as_deref();
     }
     s = s.wrapping_add(SIZEOF_FSM);
     s = s.wrapping_add(SIZEOF_FSM_STATE.wrapping_mul(net.linecount as u32));
@@ -243,13 +236,12 @@ pub fn print_stats(net: &Fsm) -> i32 {
 
 // [spec:foma:def:iface.print-sigma-fn]
 // [spec:foma:sem:iface.print-sigma-fn]
-pub(crate) fn print_sigma<W: std::io::Write + ?Sized>(sigma: Option<&Sigma>, out: &mut W) -> i32 {
+pub(crate) fn print_sigma<W: std::io::Write + ?Sized>(sigma: &[Sigma], out: &mut W) -> i32 {
     let mut size = 0;
     let _ = write!(out, "Sigma:");
-    let mut s = sigma;
-    while let Some(node) = s {
+    for node in sigma {
         if node.number > 2 {
-            let _ = write!(out, " {}", node.symbol.as_deref().unwrap_or(""));
+            let _ = write!(out, " {}", node.symbol);
             size += 1;
         }
         if node.number == IDENTITY {
@@ -258,7 +250,6 @@ pub(crate) fn print_sigma<W: std::io::Write + ?Sized>(sigma: Option<&Sigma>, out
         if node.number == UNKNOWN {
             let _ = write!(out, " {}", "?");
         }
-        s = node.next.as_deref();
     }
     let _ = write!(out, "\n");
     let _ = write!(out, "Size: {}.\n", size);
@@ -325,12 +316,12 @@ pub(crate) fn print_dot(net: &mut Fsm, filename: Option<&str>) -> i32 {
                 let in_j = net.states[j].r#in as i32;
                 let out_j = net.states[j].out as i32;
                 if in_j == out_j && out_j != UNKNOWN {
-                    let sig = sigptr(net.sigma.as_deref(), in_j);
+                    let sig = sigptr(&net.sigma, in_j);
                     let _ = dotfile.write_all(&escape_string(sig.as_bytes(), b'"'));
                     linelen += sig.len() as i32;
                 } else {
-                    let sig_in = sigptr(net.sigma.as_deref(), in_j);
-                    let sig_out = sigptr(net.sigma.as_deref(), out_j);
+                    let sig_in = sigptr(&net.sigma, in_j);
+                    let sig_out = sigptr(&net.sigma, out_j);
                     let _ = dotfile.write_all(b"<");
                     let _ = dotfile.write_all(&escape_string(sig_in.as_bytes(), b'"'));
                     let _ = dotfile.write_all(b":");

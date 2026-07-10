@@ -48,15 +48,10 @@ fn lines(net: &Fsm) -> Vec<(i32, i16, i16, i32, i8, i8)> {
 }
 
 fn sigma_pairs(net: &Fsm) -> Vec<(i32, String)> {
-    let mut out = Vec::new();
-    let mut s = net.sigma.as_deref();
-    while let Some(n) = s {
-        if n.number != -1 {
-            out.push((n.number, n.symbol.clone().unwrap_or_default()));
-        }
-        s = n.next.as_deref();
-    }
-    out
+    net.sigma
+        .iter()
+        .map(|n| (n.number, n.symbol.clone()))
+        .collect()
 }
 
 fn sigma_nums(net: &Fsm) -> Vec<i32> {
@@ -351,18 +346,15 @@ fn add_to_mergesigma_dense_ordinary_numbering_and_special_passthrough() {
     };
     let s_id = Sigma {
         number: IDENTITY,
-        symbol: Some("@_IDENTITY_SYMBOL_@".to_string()),
-        next: None,
+        symbol: "@_IDENTITY_SYMBOL_@".to_string(),
     };
     let s_a = Sigma {
         number: 3,
-        symbol: Some("a".to_string()),
-        next: None,
+        symbol: "a".to_string(),
     };
     let s_b = Sigma {
         number: 9,
-        symbol: Some("b".to_string()),
-        next: None,
+        symbol: "b".to_string(),
     };
     {
         let t1 = add_to_mergesigma(&mut head, &s_id, 1);
@@ -392,18 +384,19 @@ fn add_to_mergesigma_dense_ordinary_numbering_and_special_passthrough() {
 // [spec:foma:sem:constructions.copy-mergesigma-fn/test]
 #[test]
 fn copy_mergesigma_deep_copies_number_and_symbol_dropping_presence() {
-    assert!(copy_mergesigma(None).is_none());
-    // Dummy-head-only list is copied verbatim (number -1 survives).
+    assert!(copy_mergesigma(None).is_empty());
+    // Dummy-head-only list is copied verbatim (number -1 survives, NULL
+    // symbol becomes the empty string).
     let only = Mergesigma {
         number: -1,
         symbol: None,
         presence: 0,
         next: None,
     };
-    let s = copy_mergesigma(Some(&only)).unwrap();
-    assert_eq!(s.number, -1);
-    assert!(s.symbol.is_none());
-    assert!(s.next.is_none());
+    let s = copy_mergesigma(Some(&only));
+    assert_eq!(s.len(), 1);
+    assert_eq!(s[0].number, -1);
+    assert_eq!(s[0].symbol, "");
     // Multi-node list keeps number+symbol, in order.
     let m = Mergesigma {
         number: IDENTITY,
@@ -416,14 +409,13 @@ fn copy_mergesigma_deep_copies_number_and_symbol_dropping_presence() {
             next: None,
         })),
     };
-    let s = copy_mergesigma(Some(&m)).unwrap();
+    let s = copy_mergesigma(Some(&m));
     assert_eq!(
-        (s.number, s.symbol.as_deref()),
-        (2, Some("@_IDENTITY_SYMBOL_@"))
+        s.iter()
+            .map(|e| (e.number, e.symbol.as_str()))
+            .collect::<Vec<_>>(),
+        vec![(2, "@_IDENTITY_SYMBOL_@"), (3, "a")]
     );
-    let s2 = s.next.as_deref().unwrap();
-    assert_eq!((s2.number, s2.symbol.as_deref()), (3, Some("a")));
-    assert!(s2.next.is_none());
 }
 
 /* ---- fsm_merge_sigma ---------------------------------------------- */
@@ -724,7 +716,7 @@ fn fsm_optionality_short_circuits_to_union_with_empty_string() {
     assert_eq!(words(&o), ws(&["", "a"]));
     // Built by the union construction, so nondeterministic with an epsilon start.
     assert_eq!(o.is_deterministic, NO);
-    assert_ne!(sigma_find_number(EPSILON, o.sigma.as_deref()), -1);
+    assert_ne!(sigma_find_number(EPSILON, &o.sigma), -1);
 }
 
 /* ---- rule-compilation helper -------------------------------------- */
@@ -1292,7 +1284,7 @@ fn fsm_ignore_empty_second_returns_first_unchanged() {
 fn fsm_compact_removes_completely_unused_symbol() {
     // No IDENTITY arcs: only wholly-unused sigma symbols are removed.
     let mut net = re("a b");
-    sigma_add("z", net.sigma.as_deref_mut().unwrap());
+    sigma_add("z", &mut net.sigma);
     sigma_sort(&mut net);
     assert!(syms(&net).contains(&"z".to_string()));
     fsm_compact(&mut net);

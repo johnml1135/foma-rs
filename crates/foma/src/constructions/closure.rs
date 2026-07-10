@@ -120,8 +120,8 @@ pub fn fsm_kleene_closure(opts: &FomaOptions, net: Box<Fsm>, operation: i32) -> 
     net.pathcount = PATHCOUNT_UNKNOWN;
     /* free(net->states) */
     net.states = new_fsm;
-    if sigma_find_number(EPSILON, net.sigma.as_deref()) == -1 {
-        sigma_add_special(EPSILON, net.sigma.as_deref_mut().unwrap());
+    if sigma_find_number(EPSILON, &net.sigma) == -1 {
+        sigma_add_special(EPSILON, &mut net.sigma);
     }
     fsm_update_flags(&mut net, NO, NO, NO, NO, UNK, NO);
     net

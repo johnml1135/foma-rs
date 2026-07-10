@@ -787,7 +787,7 @@ pub(crate) fn sigma_to_pairs(m: &mut Minimizer, net: &mut Fsm) {
     let mut next_x: i32 = 0;
 
     m.epsilon_symbol = -1;
-    m.maxsigma = sigma_max(net.sigma.as_deref()) + 1;
+    m.maxsigma = sigma_max(&net.sigma) + 1;
     let maxsigma = m.maxsigma;
 
     /* two flat lookup tables: single (back-map, only read where written) and

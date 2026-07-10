@@ -187,7 +187,7 @@ pub fn fsm_symbol(symbol: &str) -> Box<Fsm> {
     fsm_update_flags(&mut net, YES, YES, YES, YES, YES, NO);
     if symbol == "@_EPSILON_SYMBOL_@" {
         /* Epsilon */
-        sigma_add_special(EPSILON, net.sigma.as_deref_mut().unwrap());
+        sigma_add_special(EPSILON, &mut net.sigma);
         /* C: malloc(2 lines), uninitialized; written by add_fsm_arc below */
         net.states = vec![
             FsmState {
@@ -211,9 +211,9 @@ pub fn fsm_symbol(symbol: &str) -> Box<Fsm> {
         net.is_epsilon_free = NO;
     } else {
         let symbol_no = if symbol == "@_IDENTITY_SYMBOL_@" {
-            sigma_add_special(IDENTITY, net.sigma.as_deref_mut().unwrap())
+            sigma_add_special(IDENTITY, &mut net.sigma)
         } else {
-            sigma_add(symbol, net.sigma.as_deref_mut().unwrap())
+            sigma_add(symbol, &mut net.sigma)
         };
         /* C: malloc(3 lines), uninitialized; written by add_fsm_arc below */
         net.states = vec![
@@ -250,22 +250,8 @@ pub fn fsm_symbol(symbol: &str) -> Box<Fsm> {
 // [spec:foma:def:fomalib.fsm-network-to-char-fn]
 // [spec:foma:sem:fomalib.fsm-network-to-char-fn]
 pub fn fsm_network_to_char(net: &Fsm) -> Option<String> {
-    /* C crashes if net->sigma is NULL (cannot happen via fsm_create) —
-    unwrap panics likewise */
-    let mut sigma = net.sigma.as_deref();
-    if sigma.unwrap().number == -1 {
-        return None;
-    }
-    let mut sigprev: Option<&Sigma> = None;
-    while let Some(s) = sigma {
-        if s.number == -1 {
-            break;
-        }
-        sigprev = Some(s);
-        sigma = s.next.as_deref();
-    }
-    /* strdup(sigprev->symbol) */
-    Some(sigprev.unwrap().symbol.as_deref().unwrap().to_string())
+    /* an empty alphabet has no last symbol; otherwise strdup(last->symbol) */
+    net.sigma.last().map(|s| s.symbol.clone())
 }
 
 // [spec:foma:def:constructions.fsm-substitute-label-fn]
@@ -295,7 +281,7 @@ pub fn fsm_substitute_label(
     }
     let name = net.name.clone();
     let mut outh = fsm_construct_init(&name);
-    fsm_construct_copy_sigma(&mut outh, net.sigma.as_deref());
+    fsm_construct_copy_sigma(&mut outh, &net.sigma);
     while fsm_get_next_arc(&mut inh) != 0 {
         let mut source = fsm_get_arc_source(&inh);
         let mut target = fsm_get_arc_target(&inh);
@@ -403,7 +389,7 @@ pub fn fsm_substitute_symbol(net: Box<Fsm>, original: &str, substitute: &str) ->
     if original == substitute {
         return net;
     }
-    let o = sigma_find(original, net.sigma.as_deref());
+    let o = sigma_find(original, &net.sigma);
     if o == -1 {
         //fprintf(stderr, "\nSymbol '%s' not found in network!\n", original);
         return net;
@@ -414,9 +400,9 @@ pub fn fsm_substitute_symbol(net: Box<Fsm>, original: &str, substitute: &str) ->
     } else {
         /* C: substitute != NULL && (s = sigma_find(...)) == -1 → sigma_add
         (substitute is never NULL here) */
-        let found = sigma_find(substitute, net.sigma.as_deref());
+        let found = sigma_find(substitute, &net.sigma);
         s = if found == -1 {
-            sigma_add(substitute, net.sigma.as_deref_mut().unwrap())
+            sigma_add(substitute, &mut net.sigma)
         } else {
             found
         };
@@ -431,7 +417,7 @@ pub fn fsm_substitute_symbol(net: Box<Fsm>, original: &str, substitute: &str) ->
         }
         i += 1;
     }
-    net.sigma = sigma_remove(original, net.sigma.take());
+    sigma_remove(original, &mut net.sigma);
     sigma_sort(&mut net);
     fsm_update_flags(&mut net, NO, NO, NO, NO, NO, NO);
     sigma_cleanup(&mut net, 0);
@@ -505,8 +491,8 @@ pub fn fsm_unflatten(
     let mut net = fsm_minimize(opts, net);
     fsm_count(&mut net);
 
-    let epsilon = sigma_find(epsilon_sym, net.sigma.as_deref());
-    let repeat = sigma_find(repeat_sym, net.sigma.as_deref());
+    let epsilon = sigma_find(epsilon_sym, &net.sigma);
+    let repeat = sigma_find(repeat_sym, &net.sigma);
 
     /* new state 0 = {0,0} */
 
@@ -517,7 +503,7 @@ pub fn fsm_unflatten(
     let mut th = triplet_hash_init();
     triplet_hash_insert(&mut th, 0, 0, 0);
 
-    let mut builder = fsm_state_init(sigma_max(net.sigma.as_deref()));
+    let mut builder = fsm_state_init(sigma_max(&net.sigma));
 
     let point_a = init_state_pointers(&net.states);
 
@@ -625,7 +611,7 @@ pub fn fsm_shuffle(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
     let mut th = triplet_hash_init();
     triplet_hash_insert(&mut th, 0, 0, 0);
 
-    let mut builder = fsm_state_init(sigma_max(net1.sigma.as_deref()));
+    let mut builder = fsm_state_init(sigma_max(&net1.sigma));
 
     let point_a = init_state_pointers(&net1.states);
     let point_b = init_state_pointers(&net2.states);
@@ -859,7 +845,7 @@ pub fn fsm_universal() -> Box<Fsm> {
         };
         2
     ];
-    let s = sigma_add_special(IDENTITY, net.sigma.as_deref_mut().unwrap());
+    let s = sigma_add_special(IDENTITY, &mut net.sigma);
     add_fsm_arc(&mut net.states, 0, 0, s, s, 0, 1, 1);
     add_fsm_arc(&mut net.states, 1, -1, -1, -1, -1, -1, -1);
     net.arccount = 1;
@@ -1114,7 +1100,7 @@ pub fn fsm_quotient_interleave(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm
         ),
     ));
 
-    result.sigma = sigma_remove("@>@", result.sigma.take());
+    sigma_remove("@>@", &mut result.sigma);
     /* Could clean up sigma */
     result
 }
@@ -1194,7 +1180,7 @@ pub fn fsm_ignore(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>, operation:
                 fsm_simple_replace(opts, fsm_symbol("@i<@"), fsm_copy(&mut net2)),
             ),
         ));
-        result.sigma = sigma_remove("@i<@", result.sigma.take());
+        sigma_remove("@i<@", &mut result.sigma);
         fsm_destroy(net1);
         fsm_destroy(net2);
         return result;
@@ -1405,7 +1391,7 @@ pub fn fsm_compact(net: &mut Fsm) {
         target: i32,
     }
 
-    let numsymbols = sigma_max(net.sigma.as_deref());
+    let numsymbols = sigma_max(&net.sigma);
 
     /* C: malloc'd (uninitialized); every entry initialized just below */
     let mut potential: Vec<bool> = vec![false; (numsymbols + 1) as usize];
@@ -1427,15 +1413,10 @@ pub fn fsm_compact(net: &mut Fsm) {
     /* For consistency reasons, can't remove symbols longer than 1 */
     /* since @ and ? only match utf8 symbols of length 1           */
 
-    let mut sig = net.sigma.as_deref();
-    while let Some(s) = sig {
-        if s.number == -1 {
-            break;
-        }
-        if s.symbol.as_deref().unwrap_or("").chars().count() > 1 {
+    for s in &net.sigma {
+        if s.symbol.chars().count() > 1 {
             potential[s.number as usize] = false;
         }
-        sig = s.next.as_deref();
     }
 
     let mut prevstate = 0;
@@ -1554,24 +1535,9 @@ pub fn fsm_compact(net: &mut Fsm) {
         start_state,
     );
 
-    /* C: unlink via sigprev->next with no NULL check — a removable FIRST
-    sigma entry would deref NULL (cannot occur: sigmas start with a
-    special <= 2 entry). DEVIATION from C (head removal removes instead
-    of crashing) */
-    let mut cur: &mut Option<Box<Sigma>> = &mut net.sigma;
-    loop {
-        let remove = match cur.as_deref() {
-            Some(s) if s.number != -1 => s.number > 2 && potential[s.number as usize],
-            _ => break,
-        };
-        if remove {
-            /* free(sig->symbol); free(sig) */
-            let next = cur.as_mut().unwrap().next.take();
-            *cur = next;
-        } else {
-            cur = &mut cur.as_mut().unwrap().next;
-        }
-    }
+    /* drop every alphabet entry with number > 2 flagged in `potential` */
+    net.sigma
+        .retain(|s| !(s.number > 2 && potential[s.number as usize]));
     /* free(potential); free(checktable) */
     drop(potential);
     drop(checktable);
@@ -1583,7 +1549,7 @@ pub fn fsm_compact(net: &mut Fsm) {
 // [spec:foma:def:fomalib.fsm-symbol-occurs-fn]
 // [spec:foma:sem:fomalib.fsm-symbol-occurs-fn]
 pub fn fsm_symbol_occurs(net: &Fsm, symbol: &str, side: i32) -> i32 {
-    let sym = sigma_find(symbol, net.sigma.as_deref());
+    let sym = sigma_find(symbol, &net.sigma);
     if sym == -1 {
         return 0;
     }
@@ -1641,8 +1607,8 @@ pub fn fsm_equal_substrings(
         ),
     );
 
-    sigma_add("@<eq<@", net.sigma.as_deref_mut().unwrap());
-    sigma_add("@>eq>@", net.sigma.as_deref_mut().unwrap());
+    sigma_add("@<eq<@", &mut net.sigma);
+    sigma_add("@>eq>@", &mut net.sigma);
     sigma_sort(&mut net);
 
     /* Insert our aux markers into the language                */
@@ -1820,13 +1786,12 @@ pub fn fsm_equal_substrings(
     let mut r#move = fsm_empty_string();
 
     let mut syms = 0;
-    let mut sig = labels.sigma.as_deref();
-    while let Some(s) = sig {
+    for s in &labels.sigma {
         /* Unclear which is faster: the first or the second version */
         /* ThisMove = [\LB* LB:X X:LB]* \LB*       */
         /* ThisMove = [\LB* LB:0 X 0:LB]* \LB*     */
         if s.number >= 3 {
-            let mut this_symbol = fsm_symbol(s.symbol.as_deref().unwrap());
+            let mut this_symbol = fsm_symbol(&s.symbol);
             let this_move = fsm_concat(
                 opts,
                 fsm_kleene_star(
@@ -1851,7 +1816,6 @@ pub fn fsm_equal_substrings(
             r#move = fsm_union(opts, r#move, this_move);
             syms += 1;
         }
-        sig = s.next.as_deref();
     }
     let mut r#move = fsm_minimize(opts, r#move);
     if syms == 0 {
@@ -1877,8 +1841,8 @@ pub fn fsm_equal_substrings(
     );
     /* C: sigma_remove's returned new head is discarded (harmless unless
     the removed node were the head); the owned list is reassigned here */
-    result.sigma = sigma_remove("@<eq<@", result.sigma.take());
-    result.sigma = sigma_remove("@>eq>@", result.sigma.take());
+    sigma_remove("@<eq<@", &mut result.sigma);
+    sigma_remove("@>eq>@", &mut result.sigma);
     fsm_compact(&mut result);
     sigma_sort(&mut result);
     fsm_destroy(oldnet);
@@ -1924,8 +1888,8 @@ pub fn fsm_left_rewr(opts: &FomaOptions, net: Box<Fsm>, rewr: Box<Fsm>) -> Box<F
     let sinkstate = fsm_get_num_states(&inh);
     let name = inh.net.as_ref().unwrap().name.clone();
     let mut outh = fsm_construct_init(&name);
-    fsm_construct_copy_sigma(&mut outh, inh.net.as_ref().unwrap().sigma.as_deref());
-    let mut maxsigma = sigma_max(inh.net.as_ref().unwrap().sigma.as_deref());
+    fsm_construct_copy_sigma(&mut outh, &inh.net.as_ref().unwrap().sigma);
+    let mut maxsigma = sigma_max(&inh.net.as_ref().unwrap().sigma);
     maxsigma += 1;
     /* C: malloc'd (uninitialized); initialized to -1 just below */
     let mut sigmatable: Vec<i32> = vec![0; maxsigma as usize];
@@ -1994,8 +1958,8 @@ pub fn fsm_add_sink(net: Box<Fsm>, r#final: i32) -> Box<Fsm> {
     let sinkstate = fsm_get_num_states(&inh);
     let name = inh.net.as_ref().unwrap().name.clone();
     let mut outh = fsm_construct_init(&name);
-    fsm_construct_copy_sigma(&mut outh, inh.net.as_ref().unwrap().sigma.as_deref());
-    let mut maxsigma = sigma_max(inh.net.as_ref().unwrap().sigma.as_deref());
+    fsm_construct_copy_sigma(&mut outh, &inh.net.as_ref().unwrap().sigma);
+    let mut maxsigma = sigma_max(&inh.net.as_ref().unwrap().sigma);
     maxsigma += 1;
     /* C: malloc'd (uninitialized); initialized to -1 just below */
     let mut sigmatable: Vec<i32> = vec![0; maxsigma as usize];
@@ -2062,7 +2026,7 @@ pub fn fsm_add_loop(net: Box<Fsm>, marker: &Fsm, finals: i32) -> Box<Fsm> {
 
     let name = inh.net.as_ref().unwrap().name.clone();
     let mut outh = fsm_construct_init(&name);
-    fsm_construct_copy_sigma(&mut outh, inh.net.as_ref().unwrap().sigma.as_deref());
+    fsm_construct_copy_sigma(&mut outh, &inh.net.as_ref().unwrap().sigma);
 
     while fsm_get_next_arc(&mut inh) != 0 {
         let (source, target, num_in, num_out) = (
@@ -2142,7 +2106,7 @@ pub fn fsm_context_restrict(
 
     /* We add the variable symbol to all alphabets to avoid ? mathing it */
     /* which would cause extra nondeterminism */
-    sigma_add("@VARX@", x.sigma.as_deref_mut().unwrap());
+    sigma_add("@VARX@", &mut x.sigma);
     sigma_sort(&mut x);
 
     /* Also, if any L or R is undeclared we add 0 */
@@ -2152,16 +2116,16 @@ pub fn fsm_context_restrict(
             p.left = Some(fsm_empty_string());
         } else {
             let left = p.left.as_deref_mut().unwrap();
-            sigma_add("@VARX@", left.sigma.as_deref_mut().unwrap());
-            sigma_substitute(".#.", "@#@", left.sigma.as_deref_mut().unwrap());
+            sigma_add("@VARX@", &mut left.sigma);
+            sigma_substitute(".#.", "@#@", &mut left.sigma);
             sigma_sort(left);
         }
         if p.right.is_none() {
             p.right = Some(fsm_empty_string());
         } else {
             let right = p.right.as_deref_mut().unwrap();
-            sigma_add("@VARX@", right.sigma.as_deref_mut().unwrap());
-            sigma_substitute(".#.", "@#@", right.sigma.as_deref_mut().unwrap());
+            sigma_add("@VARX@", &mut right.sigma);
+            sigma_substitute(".#.", "@#@", &mut right.sigma);
             sigma_sort(right);
         }
         pairs = p.next.as_deref_mut();
@@ -2233,7 +2197,7 @@ pub fn fsm_context_restrict(
             ),
         ),
     );
-    if sigma_find("@VARX@", result.sigma.as_deref()) != -1 {
+    if sigma_find("@VARX@", &result.sigma) != -1 {
         result = fsm_complement(
             opts,
             fsm_substitute_symbol(result, "@VARX@", "@_EPSILON_SYMBOL_@"),
@@ -2242,7 +2206,7 @@ pub fn fsm_context_restrict(
         result = fsm_complement(opts, result);
     }
 
-    if sigma_find("@#@", result.sigma.as_deref()) != -1 {
+    if sigma_find("@#@", &result.sigma) != -1 {
         let word = fsm_minimize(
             opts,
             fsm_concat(
@@ -2298,7 +2262,7 @@ pub fn fsm_flatten(opts: &FomaOptions, net: Box<Fsm>, epsilon: Box<Fsm>) -> Opti
     let mut outh = fsm_construct_init(&name);
     let mut maxstate = inh.net.as_ref().unwrap().statecount;
 
-    fsm_construct_copy_sigma(&mut outh, inh.net.as_ref().unwrap().sigma.as_deref());
+    fsm_construct_copy_sigma(&mut outh, &inh.net.as_ref().unwrap().sigma);
 
     while fsm_get_next_arc(&mut inh) != 0 {
         let target = fsm_get_arc_target(&inh);
@@ -2357,7 +2321,7 @@ pub fn fsm_close_sigma(opts: &FomaOptions, net: Box<Fsm>, mode: i32) -> Box<Fsm>
     let mut inh = fsm_read_init(net);
     let name = inh.net.as_ref().unwrap().name.clone();
     let mut newh = fsm_construct_init(&name);
-    fsm_construct_copy_sigma(&mut newh, inh.net.as_ref().unwrap().sigma.as_deref());
+    fsm_construct_copy_sigma(&mut newh, &inh.net.as_ref().unwrap().sigma);
 
     while fsm_get_next_arc(&mut inh) != 0 {
         let num_in = fsm_get_arc_num_in(&inh);

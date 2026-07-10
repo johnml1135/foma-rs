@@ -540,15 +540,12 @@ pub fn fsm_rewrite(opts: &FomaOptions, all_rules: &mut RewriteSet) -> Box<Fsm> {
     /* C: for (i = 0; specialsymbols[i] != NULL; i++) */
     let mut si: usize = 0;
     while si < SPECIALSYMBOLS.len() {
-        base.sigma = sigma_remove(SPECIALSYMBOLS[si], base.sigma.take());
+        sigma_remove(SPECIALSYMBOLS[si], &mut base.sigma);
         si += 1;
     }
     rule_number = 1;
     while rule_number <= num_rules {
-        base.sigma = sigma_remove(
-            &rb.namestrings[(rule_number - 1) as usize],
-            base.sigma.take(),
-        );
+        sigma_remove(&rb.namestrings[(rule_number - 1) as usize], &mut base.sigma);
         rule_number += 1;
     }
 
@@ -1350,24 +1347,21 @@ pub fn rewrite_add_special_syms(rb: &RewriteBatch, net: Option<&mut Fsm>) {
         Some(net) => net,
         None => return,
     };
-    sigma_substitute(".#.", "@#@", net.sigma.as_deref_mut().unwrap()); /* We convert boundaries to our interal rep.                          */
+    sigma_substitute(".#.", "@#@", &mut net.sigma); /* We convert boundaries to our interal rep.                          */
     /* This is because sigma merging (fsm_merge_sigma(opts, )) is handled       */
     /* in a special way for .#., which we don't want here.                */
 
     /* C: for (i = 0; specialsymbols[i] != NULL; i++) */
     let mut i: usize = 0;
     while i < SPECIALSYMBOLS.len() {
-        if sigma_find(SPECIALSYMBOLS[i], net.sigma.as_deref()) == -1 {
-            sigma_add(SPECIALSYMBOLS[i], net.sigma.as_deref_mut().unwrap());
+        if sigma_find(SPECIALSYMBOLS[i], &net.sigma) == -1 {
+            sigma_add(SPECIALSYMBOLS[i], &mut net.sigma);
         }
         i += 1;
     }
     let mut i: i32 = 1;
     while i <= rb.num_rules {
-        sigma_add(
-            &rb.namestrings[(i - 1) as usize],
-            net.sigma.as_deref_mut().unwrap(),
-        );
+        sigma_add(&rb.namestrings[(i - 1) as usize], &mut net.sigma);
         i += 1;
     }
     sigma_sort(net);
@@ -1419,8 +1413,8 @@ pub fn rewr_context_restrict(
     /* which would cause extra nondeterminism */
 
     let mut newx = fsm_copy(x);
-    if sigma_find("@VARX@", newx.sigma.as_deref()) == -1 {
-        sigma_add("@VARX@", newx.sigma.as_deref_mut().unwrap());
+    if sigma_find("@VARX@", &newx.sigma) == -1 {
+        sigma_add("@VARX@", &mut newx.sigma);
         sigma_sort(&mut newx);
     }
     let mut union_p = fsm_empty_set();
@@ -1432,7 +1426,7 @@ pub fn rewr_context_restrict(
             left = fsm_empty_string();
         } else {
             let mut l = fsm_copy(p.cpleft.as_deref_mut().unwrap());
-            sigma_add("@VARX@", l.sigma.as_deref_mut().unwrap());
+            sigma_add("@VARX@", &mut l.sigma);
             sigma_sort(&mut l);
             left = l;
         }
@@ -1441,7 +1435,7 @@ pub fn rewr_context_restrict(
             right = fsm_empty_string();
         } else {
             let mut r = fsm_copy(p.cpright.as_deref_mut().unwrap());
-            sigma_add("@VARX@", r.sigma.as_deref_mut().unwrap());
+            sigma_add("@VARX@", &mut r.sigma);
             sigma_sort(&mut r);
             right = r;
         }
@@ -1487,7 +1481,7 @@ pub fn rewr_context_restrict(
         ),
     );
 
-    if sigma_find("@VARX@", result.sigma.as_deref()) != -1 {
+    if sigma_find("@VARX@", &result.sigma) != -1 {
         result = fsm_complement(
             opts,
             fsm_substitute_symbol(result, "@VARX@", "@_EPSILON_SYMBOL_@"),

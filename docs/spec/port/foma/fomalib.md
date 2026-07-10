@@ -2715,20 +2715,19 @@
 > structs — bucket heads are in-line (string NULL = empty), collisions are chained. Returns
 > the handle; freed with sh_done.
 
-> [spec:foma:def:fomalib.sigma]
-> struct sigma {
->   int number;
->   char *symbol;
->   struct sigma *next;
-> }
+> [spec:foma:def:fomalib.sigma+1]
+> One sigma alphabet entry `{ int number; symbol }`. The alphabet as a whole is
+> a `Vec<Sigma>` in insertion order; number < IDENTITY is reserved for special
+> symbols and an entry's number is an independent, possibly-sparse id (not the
+> Vec index). An empty alphabet is an empty Vec — there is no sentinel node.
 
 > [spec:foma:def:fomalib.sigma-copy-fn]
 > sigma *sigma_copy(struct sigma *sigma)
 
-> [spec:foma:sem:fomalib.sigma-copy-fn]
-> Deep-copies a sigma linked list: NULL → NULL; otherwise allocates a new node per input
-> node, copying number, strdup-ing symbol (NULL stays NULL), preserving order. Returns the
-> new head; the caller owns all nodes and strings. The source list is untouched.
+> [spec:foma:sem:fomalib.sigma-copy-fn+1]
+> Deep-copies a sigma alphabet: an empty alphabet copies to an empty alphabet; otherwise
+> every entry is copied in order (number and symbol). Returns the new alphabet; the source
+> is untouched.
 
 > [spec:foma:def:fomalib.trie-hash]
 > struct trie_hash {

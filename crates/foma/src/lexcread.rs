@@ -146,7 +146,7 @@ struct LexcCompiler {
     lexstates: Option<usize>,
 
     /* C: static struct sigma *lexsigma */
-    lexsigma: Option<Box<Sigma>>,
+    lexsigma: Vec<Sigma>,
     /* C: static struct lexc_hashtable *hashtable — 3079 calloc'd bucket heads */
     hashtable: Vec<LexcHashtable>,
     /* C: static struct fsm *current_regex_network */
@@ -187,7 +187,7 @@ impl LexcCompiler {
             statelist: None,
             mc: None,
             lexstates: None,
-            lexsigma: None,
+            lexsigma: Vec::new(),
             hashtable: Vec::new(),
             current_regex_network: None,
             cwordin: Vec::new(),
@@ -306,7 +306,7 @@ fn lexc_add_sigma_hash(lx: &mut LexcCompiler, symbol: &str, number: i32) {
 // [spec:foma:def:lexc.lexc-init-fn]
 // [spec:foma:sem:lexc.lexc-init-fn]
 fn lexc_init(lx: &mut LexcCompiler) {
-    lx.lexsigma = Some(sigma_create());
+    lx.lexsigma = sigma_create();
     lx.mc = None;
     lx.lexstates = None;
     lx.clexicon = None;
@@ -415,32 +415,26 @@ fn lexc_add_network(lx: &mut LexcCompiler) {
     let mut net = lx.current_regex_network.take().unwrap();
 
     /* sigreplace = calloc(sigma_max(net->sigma)+1, sizeof(int)) */
-    let mut sigreplace: Vec<i32> = vec![0; (sigma_max(net.sigma.as_deref()) + 1) as usize];
+    let mut sigreplace: Vec<i32> = vec![0; (sigma_max(&net.sigma) + 1) as usize];
 
     /* for (sigma = net->sigma; sigma != NULL && sigma->number != -1; ...) */
-    {
-        let mut node = net.sigma.as_deref();
-        while let Some(s) = node {
-            if s.number == -1 {
-                break;
-            }
-            let sym = s.symbol.as_deref().unwrap_or("");
-            let signumber = lexc_find_sigma_hash(lx, sym);
-            if signumber == -1 {
-                /* Add to existing lexc sigma */
-                let signumber = sigma_add(sym, lx.lexsigma.as_deref_mut().unwrap());
-                first_new_sigma = if first_new_sigma > 0 {
-                    first_new_sigma
-                } else {
-                    signumber
-                };
-                lexc_add_sigma_hash(lx, sym, signumber);
-                sigreplace[s.number as usize] = signumber;
+    for idx in 0..net.sigma.len() {
+        let s_number = net.sigma[idx].number;
+        let sym = net.sigma[idx].symbol.clone();
+        let signumber = lexc_find_sigma_hash(lx, &sym);
+        if signumber == -1 {
+            /* Add to existing lexc sigma */
+            let signumber = sigma_add(&sym, &mut lx.lexsigma);
+            first_new_sigma = if first_new_sigma > 0 {
+                first_new_sigma
             } else {
-                /* We already have it, add to conversion table */
-                sigreplace[s.number as usize] = signumber;
-            }
-            node = s.next.as_deref();
+                signumber
+            };
+            lexc_add_sigma_hash(lx, &sym, signumber);
+            sigreplace[s_number as usize] = signumber;
+        } else {
+            /* We already have it, add to conversion table */
+            sigreplace[s_number as usize] = signumber;
         }
     }
 
@@ -472,20 +466,13 @@ fn lexc_add_network(lx: &mut LexcCompiler) {
     /* unk: 0-terminated list of concrete lexsigma symbols absent from net */
     let mut unk: Vec<i32> = Vec::new();
     if unknown_symbols == 1 {
-        unk = vec![0; (sigma_max(lx.lexsigma.as_deref()) + 2) as usize];
+        unk = vec![0; (sigma_max(&lx.lexsigma) + 2) as usize];
         let mut i = 0usize;
-        let mut node = lx.lexsigma.as_deref();
-        while let Some(s) = node {
-            if s.number == -1 {
-                break;
-            }
-            if s.number > 2
-                && sigma_find(s.symbol.as_deref().unwrap_or(""), net.sigma.as_deref()) == -1
-            {
+        for s in &lx.lexsigma {
+            if s.number > 2 && sigma_find(&s.symbol, &net.sigma) == -1 {
                 unk[i] = s.number;
                 i += 1;
             }
-            node = s.next.as_deref();
         }
     }
 
@@ -941,7 +928,7 @@ fn intern_symbol(lx: &mut LexcCompiler, sym: &str) -> i32 {
     if n != -1 {
         return n;
     }
-    let n = sigma_add(sym, lx.lexsigma.as_deref_mut().unwrap());
+    let n = sigma_add(sym, &mut lx.lexsigma);
     lexc_add_sigma_hash(lx, sym, n);
     n
 }
@@ -995,7 +982,7 @@ fn lexc_add_mc(lx: &mut LexcCompiler, raw: &str) {
             lx.mc_arena[p].next = Some(mcnew);
         }
 
-        let s = sigma_add(&symbol, lx.lexsigma.as_deref_mut().unwrap());
+        let s = sigma_add(&symbol, &mut lx.lexsigma);
         lexc_add_sigma_hash(lx, &symbol, s);
         lx.mc_arena[mcnew].sigma_number = s as i16;
     }
@@ -1476,7 +1463,7 @@ fn lexc_to_fsm(lx: &mut LexcCompiler) -> Box<Fsm> {
     lexc_merge_states(lx);
     let mut net = fsm_create("");
     /* free(net->sigma); net->sigma = lexsigma (ownership transfer) */
-    net.sigma = lx.lexsigma.take();
+    net.sigma = core::mem::take(&mut lx.lexsigma);
     lexc_number_states(lx);
     if lx.hasfinal == 0 {
         if lx.opts.verbose {
@@ -1571,8 +1558,8 @@ fn lexc_to_fsm(lx: &mut LexcCompiler) -> Box<Fsm> {
     net.statecount = lx.lexc_statecount;
     fsm_update_flags(&mut net, UNK, UNK, UNK, UNK, UNK, UNK);
     /* lexsigma is now net.sigma (aliased in C); operate on net.sigma */
-    if sigma_find_number(EPSILON, net.sigma.as_deref()) == -1 {
-        sigma_add_special(EPSILON, net.sigma.as_deref_mut().unwrap());
+    if sigma_find_number(EPSILON, &net.sigma) == -1 {
+        sigma_add_special(EPSILON, &mut net.sigma);
     }
     /* free(s): C frees the sa array here (s == sa after the build loop);
     the sa Vec drops at scope end, observably identical */
@@ -2199,7 +2186,8 @@ mod tests {
         let mut lx = LexcCompiler::new_empty();
         lexc_init(&mut lx);
         assert_eq!(lx.hashtable.len(), SIGMA_HASH_TABLESIZE);
-        assert!(lx.lexsigma.is_some());
+        /* lexc_init resets the alphabet to empty */
+        assert!(lx.lexsigma.is_empty());
         assert_eq!(lx.lexc_statecount, 0);
         assert_eq!(lx.hashtable[0].sigma_number, -1);
         assert!(lexc_find_lex_state(&lx, "Root").is_none());

@@ -1131,9 +1131,7 @@ pub fn iface_print_defined(session: &mut Session) {
 pub fn iface_print_sigma(session: &mut Session) {
     if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
-        session.stack_entry_fsm(top, |f| {
-            print_sigma(f.sigma.as_deref(), &mut std::io::stdout())
-        });
+        session.stack_entry_fsm(top, |f| print_sigma(&f.sigma, &mut std::io::stdout()));
     }
 }
 

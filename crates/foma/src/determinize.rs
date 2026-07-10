@@ -238,12 +238,12 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
     }
 
     let mut builder = if operation == SUBSET_TEST_STAR_FREE {
-        let sm = sigma_max(net.sigma.as_deref());
+        let sm = sigma_max(&net.sigma);
         let builder = fsm_state_init(sm + 1);
         s.star_free_mark = 0;
         builder
     } else {
-        let sm = sigma_max(net.sigma.as_deref());
+        let sm = sigma_max(&net.sigma);
         let builder = fsm_state_init(sm);
         /* consume the old line table; fsm_state_close installs the rebuilt
         one at the end */
@@ -794,7 +794,7 @@ pub(crate) fn sigma_to_pairs(s: &mut Subset, net: &mut Fsm) {
     let mut next_x: i32 = 0;
 
     s.epsilon_symbol = -1;
-    s.maxsigma = sigma_max(net.sigma.as_deref()) + 1;
+    s.maxsigma = sigma_max(&net.sigma) + 1;
     let maxsigma = s.maxsigma;
 
     /* two flat lookup tables: single (back-map, only read where written) and

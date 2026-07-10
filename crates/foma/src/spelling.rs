@@ -70,15 +70,11 @@ fn net_line_state_no(medh: &ApplyMedHandle, off: usize) -> i32 {
 
 // [spec:foma:def:spelling.print-sym-fn]
 // [spec:foma:sem:spelling.print-sym-fn]
-fn print_sym(sym: i32, sigma: Option<&Sigma>) -> Option<&str> {
-    let mut sigma = sigma;
-    while let Some(s) = sigma {
-        if s.number == sym {
-            return s.symbol.as_deref();
-        }
-        sigma = s.next.as_deref();
-    }
-    None
+fn print_sym(sym: i32, sigma: &[Sigma]) -> Option<&str> {
+    sigma
+        .iter()
+        .find(|s| s.number == sym)
+        .map(|s| s.symbol.as_str())
 }
 
 // [spec:foma:def:spelling.apply-med-set-heap-max-fn]
@@ -154,7 +150,7 @@ pub fn apply_med_clear(medh: Option<Box<ApplyMedHandle>>) {
 
 // [spec:foma:def:spelling.print-match-fn]
 // [spec:foma:sem:spelling.print-match-fn+1]
-fn print_match(medh: &mut ApplyMedHandle, node: usize, sigma: Option<&Sigma>, word: &str) {
+fn print_match(medh: &mut ApplyMedHandle, node: usize, sigma: &[Sigma], word: &str) {
     let mut int_stack = IntStack::new();
     let wordlen = medh.wordlen;
     /* Pass 1: walk the parent chain pushing each n->in, terminating at the root.
@@ -448,7 +444,7 @@ pub fn fsm_create_letter_lookup(medh: &mut ApplyMedHandle, net: &Fsm) {
     medh.maxdepth = 2;
 
     num_states = net.statecount;
-    num_symbols = sigma_max(net.sigma.as_deref());
+    num_symbols = sigma_max(&net.sigma);
 
     /* BITNSLOTS(num_symbols+1) */
     medh.bytes_per_letter_array = ((num_symbols + 1) + CHAR_BIT - 1) / CHAR_BIT;
@@ -674,21 +670,12 @@ pub fn apply_med_init(net: &Fsm) -> Box<ApplyMedHandle> {
             medh.cm = ml.confusion_matrix.clone(); /* DEVIATION: owned copy of borrowed matrix */
         }
     }
-    medh.maxsigma = sigma_max(net.sigma.as_deref()) + 1;
+    medh.maxsigma = sigma_max(&net.sigma) + 1;
     medh.sigmahash = Some(sh_init());
-    let mut sigma = net.sigma.as_deref();
-    while let Some(s) = sigma {
-        if s.number == -1 {
-            break;
-        }
+    for s in &net.sigma {
         if s.number > IDENTITY {
-            let _ = sh_add_string(
-                medh.sigmahash.as_mut().unwrap(),
-                s.symbol.as_deref().unwrap(),
-                s.number,
-            );
+            let _ = sh_add_string(medh.sigmahash.as_mut().unwrap(), &s.symbol, s.number);
         }
-        sigma = s.next.as_deref();
     }
 
     fsm_create_letter_lookup(&mut medh, net);
@@ -820,7 +807,7 @@ pub fn apply_med(medh: &mut ApplyMedHandle, word: Option<&str>) -> Option<String
                         let sigma = medh.net.as_ref().unwrap().sigma.clone();
                         let word = medh.word.clone().unwrap();
                         let off = medh.curr_agenda_offset as usize;
-                        print_match(medh, off, sigma.as_deref(), &word);
+                        print_match(medh, off, &sigma, &word);
                         medh.nummatches += 1;
                         return Some(medh.outstring.clone());
                     }
@@ -961,7 +948,7 @@ pub fn apply_med(medh: &mut ApplyMedHandle, word: Option<&str>) -> Option<String
 // [spec:foma:def:fomalib.cmatrix-print-att-fn]
 // [spec:foma:sem:fomalib.cmatrix-print-att-fn]
 pub fn cmatrix_print_att<W: std::io::Write + ?Sized>(net: &Fsm, outfile: &mut W) {
-    let maxsigma = sigma_max(net.sigma.as_deref()) + 1;
+    let maxsigma = sigma_max(&net.sigma) + 1;
     let cm = &net.medlookup.as_ref().unwrap().confusion_matrix;
 
     for i in 0..maxsigma {
@@ -974,14 +961,14 @@ pub fn cmatrix_print_att<W: std::io::Write + ?Sized>(net: &Fsm, outfile: &mut W)
                     outfile,
                     "0\t0\t{}\t{}\t{}",
                     "@0@",
-                    sigma_string(j, net.sigma.as_deref()).unwrap(),
+                    sigma_string(j, &net.sigma).unwrap(),
                     cm[(i * maxsigma + j) as usize]
                 );
             } else if j == 0 && i != 0 {
                 let _ = writeln!(
                     outfile,
                     "0\t0\t{}\t{}\t{}",
-                    sigma_string(i, net.sigma.as_deref()).unwrap(),
+                    sigma_string(i, &net.sigma).unwrap(),
                     "@0@",
                     cm[(i * maxsigma + j) as usize]
                 );
@@ -989,8 +976,8 @@ pub fn cmatrix_print_att<W: std::io::Write + ?Sized>(net: &Fsm, outfile: &mut W)
                 let _ = writeln!(
                     outfile,
                     "0\t0\t{}\t{}\t{}",
-                    sigma_string(i, net.sigma.as_deref()).unwrap(),
-                    sigma_string(j, net.sigma.as_deref()).unwrap(),
+                    sigma_string(i, &net.sigma).unwrap(),
+                    sigma_string(j, &net.sigma).unwrap(),
                     cm[(i * maxsigma + j) as usize]
                 );
             }
@@ -1012,27 +999,24 @@ pub fn cmatrix_print(net: &Fsm) {
 /// `%.*s` *precision*, truncating "*" to one char and under-filling the column,
 /// which misaligned every row past the diagonal.
 fn cmatrix_print_to<W: std::io::Write + ?Sized>(net: &Fsm, out: &mut W) {
-    let maxsigma = sigma_max(net.sigma.as_deref()) + 1;
+    let maxsigma = sigma_max(&net.sigma) + 1;
     let cm = &net.medlookup.as_ref().unwrap().confusion_matrix;
 
     let mut lsymbol: i32 = 0;
-    let mut sigma = net.sigma.as_deref();
-    while let Some(s) = sigma {
+    for s in &net.sigma {
         if s.number < 3 {
-            sigma = s.next.as_deref();
             continue;
         }
         /* strlen(sigma->symbol) — byte length, as in C */
-        let l = s.symbol.as_deref().unwrap().len() as i32;
+        let l = s.symbol.len() as i32;
         lsymbol = if l > lsymbol { l } else { lsymbol };
-        sigma = s.next.as_deref();
     }
     write!(out, "{:>w$}", "", w = (lsymbol + 2) as usize).unwrap();
     write!(out, "{}", "0 ").unwrap();
 
     let mut i = 3;
     loop {
-        if let Some(thisstring) = sigma_string(i, net.sigma.as_deref()) {
+        if let Some(thisstring) = sigma_string(i, &net.sigma) {
             write!(out, "{} ", thisstring).unwrap();
         } else {
             break;
@@ -1054,7 +1038,7 @@ fn cmatrix_print_to<W: std::io::Write + ?Sized>(net: &Fsm, out: &mut W) {
                     write!(
                         out,
                         "{:>w$}",
-                        sigma_string(i, net.sigma.as_deref()).unwrap(),
+                        sigma_string(i, &net.sigma).unwrap(),
                         w = (lsymbol + 1) as usize
                     )
                     .unwrap();
@@ -1066,11 +1050,11 @@ fn cmatrix_print_to<W: std::io::Write + ?Sized>(net: &Fsm, out: &mut W) {
                 continue;
             }
             if i == j {
-                let width = sigma_string(j, net.sigma.as_deref()).unwrap().len() + 1;
+                let width = sigma_string(j, &net.sigma).unwrap().len() + 1;
                 write!(out, "{:>w$}", "*", w = width).unwrap();
             } else {
                 /* printf("%.*d", strlen(sym_j)+1, cost) — zero-padded width */
-                let width = sigma_string(j, net.sigma.as_deref()).unwrap().len() + 1;
+                let width = sigma_string(j, &net.sigma).unwrap().len() + 1;
                 write!(out, "{:0w$}", cm[(i * maxsigma + j) as usize], w = width).unwrap();
             }
             j += 1;
@@ -1095,7 +1079,7 @@ pub fn cmatrix_init(net: &mut Fsm) {
             confusion_matrix: Vec::new(),
         }));
     }
-    maxsigma = sigma_max(net.sigma.as_deref()) + 1;
+    maxsigma = sigma_max(&net.sigma) + 1;
     let mut cm = vec![0i32; (maxsigma * maxsigma) as usize];
     for i in 0..maxsigma {
         for j in 0..maxsigma {
@@ -1114,7 +1098,7 @@ pub fn cmatrix_init(net: &mut Fsm) {
 // [spec:foma:def:fomalib.cmatrix-default-substitute-fn]
 // [spec:foma:sem:fomalib.cmatrix-default-substitute-fn]
 pub fn cmatrix_default_substitute(net: &mut Fsm, cost: i32) {
-    let maxsigma = sigma_max(net.sigma.as_deref()) + 1;
+    let maxsigma = sigma_max(&net.sigma) + 1;
     let cm = &mut net.medlookup.as_mut().unwrap().confusion_matrix;
     for i in 1..maxsigma {
         for j in 1..maxsigma {
@@ -1132,7 +1116,7 @@ pub fn cmatrix_default_substitute(net: &mut Fsm, cost: i32) {
 // [spec:foma:def:fomalib.cmatrix-default-insert-fn]
 // [spec:foma:sem:fomalib.cmatrix-default-insert-fn]
 pub fn cmatrix_default_insert(net: &mut Fsm, cost: i32) {
-    let maxsigma = sigma_max(net.sigma.as_deref()) + 1;
+    let maxsigma = sigma_max(&net.sigma) + 1;
     let cm = &mut net.medlookup.as_mut().unwrap().confusion_matrix;
     for i in 0..maxsigma {
         cm[i as usize] = cost;
@@ -1144,7 +1128,7 @@ pub fn cmatrix_default_insert(net: &mut Fsm, cost: i32) {
 // [spec:foma:def:fomalib.cmatrix-default-delete-fn]
 // [spec:foma:sem:fomalib.cmatrix-default-delete-fn]
 pub fn cmatrix_default_delete(net: &mut Fsm, cost: i32) {
-    let maxsigma = sigma_max(net.sigma.as_deref()) + 1;
+    let maxsigma = sigma_max(&net.sigma) + 1;
     let cm = &mut net.medlookup.as_mut().unwrap().confusion_matrix;
     for i in 0..maxsigma {
         cm[(i * maxsigma) as usize] = cost;
@@ -1156,14 +1140,14 @@ pub fn cmatrix_default_delete(net: &mut Fsm, cost: i32) {
 // [spec:foma:def:fomalib.cmatrix-set-cost-fn]
 // [spec:foma:sem:fomalib.cmatrix-set-cost-fn]
 pub fn cmatrix_set_cost(net: &mut Fsm, r#in: Option<&str>, out: Option<&str>, cost: i32) {
-    let maxsigma = sigma_max(net.sigma.as_deref()) + 1;
+    let maxsigma = sigma_max(&net.sigma) + 1;
     let i: i32 = match r#in {
         None => 0,
-        Some(s) => sigma_find(s, net.sigma.as_deref()),
+        Some(s) => sigma_find(s, &net.sigma),
     };
     let o: i32 = match out {
         None => 0,
-        Some(s) => sigma_find(s, net.sigma.as_deref()),
+        Some(s) => sigma_find(s, &net.sigma),
     };
     if i == -1 {
         println!("Warning, symbol '{}' not in alphabet", r#in.unwrap());
@@ -1210,18 +1194,19 @@ mod tests {
     // [spec:foma:sem:spelling.print-sym-fn/test]
     #[test]
     fn print_sym_linear_scan() {
-        let sig = Sigma {
-            number: 4,
-            symbol: Some("abc".to_string()),
-            next: Some(Box::new(Sigma {
+        let sig = vec![
+            Sigma {
+                number: 4,
+                symbol: "abc".to_string(),
+            },
+            Sigma {
                 number: 3,
-                symbol: Some("a".to_string()),
-                next: None,
-            })),
-        };
-        assert_eq!(print_sym(4, Some(&sig)), Some("abc"));
-        assert_eq!(print_sym(3, Some(&sig)), Some("a"));
-        assert_eq!(print_sym(99, Some(&sig)), None);
+                symbol: "a".to_string(),
+            },
+        ];
+        assert_eq!(print_sym(4, &sig), Some("abc"));
+        assert_eq!(print_sym(3, &sig), Some("a"));
+        assert_eq!(print_sym(99, &sig), None);
     }
 
     // [spec:foma:sem:spelling.letterbits-add-fn/test]
@@ -1585,7 +1570,7 @@ mod tests {
         medh.agenda[3].r#in = c;
         medh.agenda[3].out = c;
         medh.agenda[3].parent = 2; // leaf carrying 'c'
-        print_match(&mut medh, 3, net.sigma.as_deref(), "c");
+        print_match(&mut medh, 3, &net.sigma, "c");
         // pass 1 pushes ins [4, 0]; popped LIFO -> 0 (align "-") then 4 ("c").
         assert_eq!(medh.outstring, "-c");
     }

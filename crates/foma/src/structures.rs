@@ -195,21 +195,19 @@ pub fn fsm_sigma_net(net: Box<Fsm>) -> Box<Fsm> {
     /* from state 0 to state 1 with each (state 1 is final) */
     let mut net = net;
 
-    if sigma_size(net.sigma.as_deref()) == 0 {
+    if sigma_size(&net.sigma) == 0 {
         fsm_destroy(net);
         return fsm_empty_set();
     }
 
-    let mut builder = fsm_state_init(sigma_max(net.sigma.as_deref()));
+    let mut builder = fsm_state_init(sigma_max(&net.sigma));
     fsm_state_set_current_state(&mut builder, 0, 0, 1);
     let mut pathcount: i32 = 0;
-    let mut sig = net.sigma.as_deref();
-    while let Some(s) = sig {
+    for s in &net.sigma {
         if s.number >= 3 || s.number == IDENTITY {
             pathcount += 1;
             fsm_state_add_arc(&mut builder, 0, s.number, s.number, 1, 0, 1);
         }
-        sig = s.next.as_deref();
     }
     fsm_state_end_state(&mut builder);
     fsm_state_set_current_state(&mut builder, 1, 1, 0);
@@ -232,11 +230,11 @@ pub fn fsm_sigma_pairs_net(net: Box<Fsm>) -> Box<Fsm> {
     /* Create FSM of attested pairs */
     let mut net = net;
 
-    let smax: i32 = sigma_max(net.sigma.as_deref()) + 1;
+    let smax: i32 = sigma_max(&net.sigma) + 1;
     /* calloc(smax*smax, sizeof(char)) */
     let mut pairs: Vec<i8> = vec![0; (smax * smax) as usize];
 
-    let mut builder = fsm_state_init(sigma_max(net.sigma.as_deref()));
+    let mut builder = fsm_state_init(sigma_max(&net.sigma));
     fsm_state_set_current_state(&mut builder, 0, 0, 1);
     let mut pathcount: i32 = 0;
     let mut i: usize = 0;
@@ -278,15 +276,10 @@ pub fn fsm_sigma_pairs_net(net: Box<Fsm>) -> Box<Fsm> {
 // [spec:foma:sem:structures.fsm-sigma-destroy-fn]
 // [spec:foma:def:fomalib.fsm-sigma-destroy-fn]
 // [spec:foma:sem:fomalib.fsm-sigma-destroy-fn]
-pub fn fsm_sigma_destroy(sigma: Option<Box<Sigma>>) -> i32 {
-    /* per node: save next, free(symbol), free(node) — iterative drop (also
-    avoids recursive-drop stack depth on long lists) */
-    let mut sig = sigma;
-    while let Some(mut node) = sig {
-        let sigp = node.next.take();
-        drop(node);
-        sig = sigp;
-    }
+pub fn fsm_sigma_destroy(sigma: Vec<Sigma>) -> i32 {
+    /* per node: free(symbol), free(node) — the Vec (and its owned symbols)
+    is dropped when this consumed argument goes out of scope */
+    drop(sigma);
     1
 }
 
@@ -302,7 +295,7 @@ pub fn fsm_destroy(net: Box<Fsm>) -> i32 {
         /* free(net->medlookup->confusion_matrix); free(net->medlookup) */
         net.medlookup = None;
     }
-    fsm_sigma_destroy(net.sigma.take());
+    fsm_sigma_destroy(core::mem::take(&mut net.sigma));
     if !net.states.is_empty() {
         /* free(net->states) */
         net.states = Vec::new();
@@ -339,7 +332,7 @@ pub fn fsm_create(name: &str) -> Box<Fsm> {
         is_completed: 0,
         arcs_sorted_in: NO,
         arcs_sorted_out: NO,
-        sigma: Some(sigma_create()),
+        sigma: sigma_create(),
         states: Vec::new(),
         medlookup: None,
     })
@@ -381,8 +374,6 @@ pub fn fsm_empty_string() -> Box<Fsm> {
 // [spec:foma:sem:fomalib.fsm-identity-fn]
 pub fn fsm_identity() -> Box<Fsm> {
     let mut net = fsm_create("");
-    /* free(net->sigma) — the single empty sigma node fsm_create made */
-    net.sigma = None;
     /* C: malloc(3 lines), uninitialized; written by add_fsm_arc below */
     net.states = vec![
         FsmState {
@@ -398,12 +389,10 @@ pub fn fsm_identity() -> Box<Fsm> {
     add_fsm_arc(&mut net.states, 0, 0, 2, 2, 1, 0, 1);
     add_fsm_arc(&mut net.states, 1, 1, -1, -1, -1, 1, 0);
     add_fsm_arc(&mut net.states, 2, -1, -1, -1, -1, -1, -1);
-    let sigma = Box::new(Sigma {
+    net.sigma = vec![Sigma {
         number: IDENTITY,
-        symbol: Some("@_IDENTITY_SYMBOL_@".to_string()),
-        next: None,
-    });
-    net.sigma = Some(sigma);
+        symbol: "@_IDENTITY_SYMBOL_@".to_string(),
+    }];
     fsm_update_flags(&mut net, YES, YES, YES, YES, YES, NO);
     net.statecount = 2;
     net.finalcount = 1;
@@ -473,7 +462,7 @@ pub fn fsm_isuniversal(opts: &FomaOptions, net: Box<Fsm>) -> bool {
         && fsm[0].r#in as i32 == IDENTITY
         && fsm[0].out as i32 == IDENTITY
         && fsm[1].state_no == -1
-        && sigma_max(net.sigma.as_deref()) < 3
+        && sigma_max(&net.sigma) < 3
 }
 
 // [spec:foma:def:structures.fsm-isempty-fn]
@@ -495,9 +484,9 @@ pub fn fsm_isempty(opts: &FomaOptions, net: &mut Fsm) -> bool {
 // [spec:foma:sem:fomalib.fsm-issequential-fn]
 pub fn fsm_issequential(net: &Fsm) -> bool {
     /* calloc(sigma_max+1, sizeof(int)) followed by the explicit -2 fill */
-    let mut sigtable: Vec<i32> = vec![0; (sigma_max(net.sigma.as_deref()) + 1) as usize];
+    let mut sigtable: Vec<i32> = vec![0; (sigma_max(&net.sigma) + 1) as usize];
     let mut i: i32 = 0;
-    while i < sigma_max(net.sigma.as_deref()) + 1 {
+    while i < sigma_max(&net.sigma) + 1 {
         sigtable[i as usize] = -2;
         i += 1;
     }
@@ -872,7 +861,7 @@ pub fn fsm_lowerdet(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
     fsm_count(&mut net);
     newsym = 8723643;
     let mut maxarc: i32 = 0;
-    let maxsigma = sigma_max(net.sigma.as_deref());
+    let maxsigma = sigma_max(&net.sigma);
 
     let mut i: usize = 0;
     let mut j: i32 = 0;
@@ -892,7 +881,7 @@ pub fn fsm_lowerdet(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
             /* sprintf(repstr, "%012X", newsym++) */
             let repstr = format!("{:012X}", newsym);
             newsym += 1;
-            sigma_add(&repstr, net.sigma.as_deref_mut().unwrap());
+            sigma_add(&repstr, &mut net.sigma);
             i -= 1;
         }
         sigma_sort(&mut net);
@@ -928,7 +917,7 @@ pub fn fsm_lowerdeteps(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
     fsm_count(&mut net);
     newsym = 8723643;
     let mut maxarc: i32 = 0;
-    let maxsigma = sigma_max(net.sigma.as_deref());
+    let maxsigma = sigma_max(&net.sigma);
 
     let mut i: usize = 0;
     let mut j: i32 = 0;
@@ -948,7 +937,7 @@ pub fn fsm_lowerdeteps(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
             /* sprintf(repstr, "%012X", newsym++) */
             let repstr = format!("{:012X}", newsym);
             newsym += 1;
-            sigma_add(&repstr, net.sigma.as_deref_mut().unwrap());
+            sigma_add(&repstr, &mut net.sigma);
             i -= 1;
         }
         sigma_sort(&mut net);
@@ -997,7 +986,7 @@ pub fn fsm_extract_nonidentity(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
     convention the rebinding below is the safe equivalent */
     let mut net = fsm_minimize(opts, net);
     fsm_count(&mut net);
-    let killnum = sigma_add("@KILL@", net.sigma.as_deref_mut().unwrap());
+    let killnum = sigma_add("@KILL@", &mut net.sigma);
 
     let num_states = net.statecount;
     /* calloc — zeroed records */
@@ -1177,7 +1166,7 @@ pub fn fsm_extract_nonidentity(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
     /* C: sigma_remove("@KILL@", net2->sigma) — the returned new head is
     discarded (fine unless @KILL@ were the head node); the owned list here
     must be reassigned */
-    net2.sigma = sigma_remove("@KILL@", net2.sigma.take());
+    sigma_remove("@KILL@", &mut net2.sigma);
     sigma_sort(&mut net2);
     /* free(state_array); free(discrepancy) — drops */
     drop(state_array);
@@ -1215,14 +1204,14 @@ pub fn fsm_copy(net: &mut Fsm) -> Box<Fsm> {
         arcs_sorted_in: net.arcs_sorted_in,
         arcs_sorted_out: net.arcs_sorted_out,
         states: Vec::new(),
-        sigma: None,
+        sigma: Vec::new(),
         // The C memcpy left medlookup SHARED between source and copy (a
         // double-free hazard); a deep clone here keeps them independent, as
         // recorded in types.rs.
         medlookup: net.medlookup.clone(),
     });
 
-    net_copy.sigma = sigma_copy(net.sigma.as_deref());
+    net_copy.sigma = sigma_copy(&net.sigma);
     net_copy.states = fsm_state_copy(&net.states, net.linecount);
     net_copy
 }
@@ -1314,10 +1303,7 @@ pub fn union_quantifiers(quantifiers: &Quantifiers) -> Box<Fsm> {
     let mut symlo: i32 = 0;
     let mut q = quantifiers.head.as_deref();
     while let Some(node) = q {
-        let s = sigma_add(
-            node.name.as_deref().unwrap(),
-            net.sigma.as_deref_mut().unwrap(),
-        );
+        let s = sigma_add(node.name.as_deref().unwrap(), &mut net.sigma);
         if symlo == 0 {
             symlo = s;
         }
@@ -1741,10 +1727,9 @@ mod tests {
         assert_eq!(net.states[1].final_state, 1);
         assert_eq!(net.states[2].state_no, -1); // sentinel
         // single sigma node = IDENTITY symbol
-        let sig = net.sigma.as_deref().unwrap();
-        assert_eq!(sig.number, IDENTITY);
-        assert_eq!(sig.symbol.as_deref(), Some("@_IDENTITY_SYMBOL_@"));
-        assert!(sig.next.is_none());
+        assert_eq!(net.sigma.len(), 1);
+        assert_eq!(net.sigma[0].number, IDENTITY);
+        assert_eq!(net.sigma[0].symbol, "@_IDENTITY_SYMBOL_@");
         assert_eq!(net.statecount, 2);
         assert_eq!(net.finalcount, 1);
         assert_eq!(net.arccount, 1);
@@ -1778,11 +1763,8 @@ mod tests {
         assert_eq!(net.is_deterministic, NO);
         assert_eq!(net.is_minimized, NO);
         assert_eq!(net.arcs_sorted_in, NO);
-        // sigma = single empty node
-        let sig = net.sigma.as_deref().unwrap();
-        assert_eq!(sig.number, -1);
-        assert!(sig.symbol.is_none());
-        assert!(sig.next.is_none());
+        // sigma = empty alphabet
+        assert!(net.sigma.is_empty());
         assert!(net.states.is_empty());
 
         // in-memory names are stored in full (C truncated to a fixed 40-byte field)
@@ -1795,16 +1777,17 @@ mod tests {
     // [spec:foma:sem:fomalib.fsm-sigma-destroy-fn/test]
     #[test]
     fn sigma_destroy_always_returns_1() {
-        assert_eq!(fsm_sigma_destroy(None), 1);
-        let list = Some(Box::new(Sigma {
-            number: 3,
-            symbol: Some("a".to_string()),
-            next: Some(Box::new(Sigma {
+        assert_eq!(fsm_sigma_destroy(Vec::new()), 1);
+        let list = vec![
+            Sigma {
+                number: 3,
+                symbol: "a".to_string(),
+            },
+            Sigma {
                 number: 4,
-                symbol: Some("b".to_string()),
-                next: None,
-            })),
-        }));
+                symbol: "b".to_string(),
+            },
+        ];
         assert_eq!(fsm_sigma_destroy(list), 1);
     }
 
@@ -2138,7 +2121,7 @@ mod tests {
 
         // sigma_size == 0 (sigma == NULL) -> destroy and return empty set
         let mut bare = fsm_create("");
-        bare.sigma = None;
+        bare.sigma = Vec::new();
         let res = fsm_sigma_net(bare);
         assert_eq!(res.statecount, 1);
         assert_eq!(res.finalcount, 0);

@@ -352,16 +352,12 @@ pub fn flag_build(
 // [spec:foma:def:flags.flag-purge-fn]
 // [spec:foma:sem:flags.flag-purge-fn]
 pub(crate) fn flag_purge(net: &mut Fsm, name: Option<&str>) {
-    let sigmasize = sigma_max(net.sigma.as_deref()) + 1;
+    let sigmasize = sigma_max(&net.sigma) + 1;
     /* C: malloc'd int array, zeroed by the following loop */
     let mut ftable: Vec<i32> = vec![0; sigmasize as usize];
 
-    let mut sigma = net.sigma.as_deref();
-    while let Some(s) = sigma {
-        if s.number == -1 {
-            break;
-        }
-        let symbol = s.symbol.as_deref().unwrap_or("");
+    for s in &net.sigma {
+        let symbol = s.symbol.as_str();
         if flag_check(symbol) {
             match name {
                 None => {
@@ -382,11 +378,10 @@ pub(crate) fn flag_purge(net: &mut Fsm, name: Option<&str>) {
                 }
             }
         }
-        sigma = s.next.as_deref();
     }
     for i in 0..sigmasize {
         if ftable[i as usize] != 0 {
-            net.sigma = sigma_remove_num(i, net.sigma.take());
+            sigma_remove_num(i, &mut net.sigma);
         }
     }
 
@@ -416,9 +411,8 @@ pub(crate) fn flag_purge(net: &mut Fsm, name: Option<&str>) {
 // [spec:foma:sem:flags.flag-extract-fn]
 pub(crate) fn flag_extract(net: &Fsm) -> Option<Box<Flags>> {
     let mut flags: Option<Box<Flags>> = None;
-    let mut sigma = net.sigma.as_deref();
-    while let Some(s) = sigma {
-        let symbol = s.symbol.as_deref().unwrap_or("");
+    for s in &net.sigma {
+        let symbol = s.symbol.as_str();
         if flag_check(symbol) {
             let flagst = Box::new(Flags {
                 r#type: flag_get_type(symbol),
@@ -428,7 +422,6 @@ pub(crate) fn flag_extract(net: &Fsm) -> Option<Box<Flags>> {
             });
             flags = Some(flagst);
         }
-        sigma = s.next.as_deref();
     }
     flags
 }
@@ -681,21 +674,11 @@ pub fn flag_twosided(opts: &FomaOptions, mut net: Box<Fsm>) -> Box<Fsm> {
     /* Enforces twosided flag diacritics */
 
     /* Mark flag symbols */
-    let maxsigma = sigma_max(net.sigma.as_deref());
+    let maxsigma = sigma_max(&net.sigma);
     /* C: calloc(maxsigma+1, sizeof(int)) */
     let mut isflag: Vec<i32> = vec![0; (maxsigma + 1) as usize];
-    let mut sigma = net.sigma.as_deref();
-    while let Some(s) = sigma {
-        /* DEVIATION from C (an empty-sigma sentinel node has number == -1;
-        the C writes isflag[-1], an out-of-bounds write — skipped here) */
-        if s.number != -1 {
-            if flag_check(s.symbol.as_deref().unwrap_or("")) {
-                isflag[s.number as usize] = 1;
-            } else {
-                isflag[s.number as usize] = 0;
-            }
-        }
-        sigma = s.next.as_deref();
+    for s in &net.sigma {
+        isflag[s.number as usize] = if flag_check(&s.symbol) { 1 } else { 0 };
     }
     let mut maxstate = 0;
     let mut change = 0;
@@ -823,16 +806,7 @@ mod tests {
 
     /* All symbols in a net's sigma (excluding the -1 sentinel), by symbol text. */
     fn sigma_syms(net: &Fsm) -> Vec<String> {
-        let mut v = Vec::new();
-        let mut s = net.sigma.as_deref();
-        while let Some(node) = s {
-            if node.number != -1 {
-                if let Some(sym) = &node.symbol {
-                    v.push(sym.clone());
-                }
-            }
-            s = node.next.as_deref();
-        }
+        let mut v: Vec<String> = net.sigma.iter().map(|node| node.symbol.clone()).collect();
         v.sort();
         v
     }
@@ -842,12 +816,10 @@ mod tests {
         if n as i32 == EPSILON {
             return "0".to_string();
         }
-        let mut s = net.sigma.as_deref();
-        while let Some(node) = s {
+        for node in &net.sigma {
             if node.number == n as i32 {
-                return node.symbol.clone().unwrap_or_default();
+                return node.symbol.clone();
             }
-            s = node.next.as_deref();
         }
         format!("#{}", n)
     }

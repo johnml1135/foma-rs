@@ -450,42 +450,42 @@
 > [spec:foma:def:fomalibconf.sigma-add-fn]
 > FEXPORT int sigma_add (char *symbol, struct sigma *sigma)
 
-> [spec:foma:sem:fomalibconf.sigma-add-fn]
-> Adds `symbol` (copied) to the singly linked sigma list (`struct sigma { int number; char *symbol; struct sigma *next; }`; an empty sigma is a single sentinel node with number == -1, symbol NULL) and returns the number it was assigned. First classify: the literal strings "@_EPSILON_SYMBOL_@", "@_UNKNOWN_SYMBOL_@", "@_IDENTITY_SYMBOL_@" map to reserved codes EPSILON=0, UNKNOWN=1, IDENTITY=2 respectively; anything else is non-special.
-> Non-special: if the head is the empty sentinel (number == -1), reuse it in place: number = 3, next = NULL, symbol = strdup(symbol); return 3. Otherwise walk to the last node and append a fresh malloc'd node with number = last->number + 1, but forced up to 3 if last->number + 1 < 3; symbol = strdup(symbol), next = NULL; return that number. Note this assumes the list's last node carries the maximum number (list kept sorted); no duplicate check is done, and per the source comment the caller is responsible for sorting sigma before merge_sigma is called.
-> Special (code `assert` in 0..2): if the head is the empty sentinel, reuse it: number = assert, next = NULL, symbol = strdup(symbol); return assert. Otherwise walk with a `previous` pointer while the node exists, its number < assert, and its number != -1 — i.e. stop at the first node with number >= assert (or the -1 sentinel, or end). Then malloc a splice node. If `previous` is non-NULL, link previous->next = splice, splice = {number: assert, symbol: fresh malloc'd copy of symbol, next: stop node (may be NULL)}. If `previous` is NULL (insertion before the head), instead copy the head's number/symbol/next fields into the splice node, then overwrite the head with {number: assert, symbol: fresh copy, next: splice} so external pointers to the head stay valid. Return assert. No duplicate check here either: adding a special code already present inserts a second node with the same number immediately before the existing one. Implementation: foma/sigma.c.
+> [spec:foma:sem:fomalibconf.sigma-add-fn+1]
+> Adds `symbol` (copied) to the sigma alphabet (a `Vec` of entries `{ int number; symbol }` in insertion order; an empty alphabet is an empty Vec) and returns the number it was assigned. First classify: the literal strings "@_EPSILON_SYMBOL_@", "@_UNKNOWN_SYMBOL_@", "@_IDENTITY_SYMBOL_@" map to reserved codes EPSILON=0, UNKNOWN=1, IDENTITY=2 respectively; anything else is non-special.
+> Non-special: append a new entry at the tail with number = last->number + 1, forced up to 3 if last->number + 1 < 3 (an empty alphabet starts at 3); return that number. Note this assumes the alphabet's last entry carries the maximum number (entries kept sorted); no duplicate check is done, and per the source comment the caller is responsible for sorting sigma before merge_sigma is called.
+> Special (code `assert` in 0..2): insert the `{number: assert, symbol}` entry keeping the alphabet sorted by number — before the first entry whose number is >= assert (so a duplicate code lands before any equal-numbered entry), or at the tail. Return assert. No duplicate check here either. Implementation: crates/foma/src/sigma.rs.
 
 > [spec:foma:def:fomalibconf.sigma-add-number-fn]
 > FEXPORT int sigma_add_number(struct sigma *sigma, char *symbol, int number)
 
-> [spec:foma:sem:fomalibconf.sigma-add-number-fn]
-> Appends `symbol` with an explicit caller-chosen `number` to the sigma list, always returning 1. If the head is the empty sentinel (number == -1), reuse it in place: symbol = strdup(symbol), number = number, next = NULL. Otherwise walk to the last node and append a fresh malloc'd node {symbol: strdup(symbol), number, next: NULL}. No sortedness maintenance, no duplicate check, no validation that `number` is unused — the caller controls numbering entirely. Implementation: foma/sigma.c.
+> [spec:foma:sem:fomalibconf.sigma-add-number-fn+1]
+> Appends `symbol` with an explicit caller-chosen `number` at the tail of the sigma alphabet, always returning 1. No sortedness maintenance, no duplicate check, no validation that `number` is unused — the caller controls numbering entirely. Implementation: crates/foma/src/sigma.rs.
 
 > [spec:foma:def:fomalibconf.sigma-add-special-fn]
 > FEXPORT int sigma_add_special (int symbol, struct sigma *sigma)
 
-> [spec:foma:sem:fomalibconf.sigma-add-special-fn+1]
-> Inserts the reserved symbol with code `symbol` into the sigma list in sorted (ascending number) position and returns `symbol`. The stored string is the canonical name: EPSILON=0 → "@_EPSILON_SYMBOL_@", IDENTITY=2 → "@_IDENTITY_SYMBOL_@", UNKNOWN=1 → "@_UNKNOWN_SYMBOL_@". C left the string NULL for any other code (later strcmp/free on that node dereferenced NULL); a non-reserved code now yields a well-formed placeholder "@_SPECIAL_<code>_@" so the node is never symbol-less.
-> Insertion is identical to the special branch of `sigma_add`: if the head is the empty sentinel (number == -1), reuse it ({number: symbol, symbol: str, next: NULL}). Otherwise walk with a `previous` pointer while node->number < symbol and node->number != -1; malloc a splice node; if `previous` is non-NULL splice the new {symbol code, str} node between previous and the stop node; if inserting before the head, move the head's fields into the splice node and overwrite the head with the new values, next = splice. No duplicate check: adding an already-present code inserts a duplicate node. Implementation: foma/sigma.c.
+> [spec:foma:sem:fomalibconf.sigma-add-special-fn+2]
+> Inserts the reserved symbol with code `symbol` into the sigma alphabet in sorted (ascending number) position and returns `symbol`. The stored string is the canonical name: EPSILON=0 → "@_EPSILON_SYMBOL_@", IDENTITY=2 → "@_IDENTITY_SYMBOL_@", UNKNOWN=1 → "@_UNKNOWN_SYMBOL_@". C left the string NULL for any other code (later strcmp/free on that node dereferenced NULL); a non-reserved code now yields a well-formed placeholder "@_SPECIAL_<code>_@" so the entry is never symbol-less.
+> Insertion is identical to the special branch of `sigma_add`: place the `{number: symbol code, str}` entry before the first entry whose number is >= symbol (or at the tail). No duplicate check: adding an already-present code inserts a duplicate entry before the existing one. Implementation: crates/foma/src/sigma.rs.
 
 > [spec:foma:def:fomalibconf.sigma-cleanup-fn]
 > void sigma_cleanup (struct fsm *net, int force)
 
-> [spec:foma:sem:fomalibconf.sigma-cleanup-fn]
+> [spec:foma:sem:fomalibconf.sigma-cleanup-fn+1]
 > Removes from `net->sigma` every symbol that never occurs on any transition, and renumbers the survivors densely. Steps:
 > 1. If `force == 0` and the sigma contains IDENTITY (2) or UNKNOWN (1) (checked via `sigma_find_number`), return immediately without changes — unknown-matching symbols make "unused" undecidable. If `force == 1`, always proceed.
 > 2. Compute `maxsigma = sigma_max(net->sigma)`; if negative (NULL or empty sigma), return.
 > 3. malloc an int array `attested[0..maxsigma]`, zero it. Scan `net->states` lines until the `state_no == -1` sentinel; for each line set attested[in] = 1 and attested[out] = 1 when the respective field is >= 0 (negative in/out, e.g. the -1s on dummy lines, are skipped).
 > 4. Build the renumbering in place: with `j` starting at 3, for `i` from 3 to maxsigma, if attested[i] is set, overwrite attested[i] = j and increment j. Reserved codes 0–2 keep their numbers (their attested slots stay 0/1 flags).
 > 5. Rewrite the machine: rescan all transition lines; any `in` > 2 becomes attested[in], any `out` > 2 becomes attested[out].
-> 6. Walk the sigma list (stopping at NULL or the number == -1 sentinel), keeping a trailing `sig_prev`: if attested[node->number] is 0 (unused — including reserved codes 0–2 that appear in sigma but on no arc), free the node's symbol string and the node, and unlink it (update `net->sigma` itself when the head is removed); otherwise set node->number = attested[node->number] when >= 3 (reserved numbers unchanged). `sig_prev` only advances onto kept nodes.
-> 7. free the attested array. Returns void; mutates both `net->states` and `net->sigma` in place. Implementation: foma/sigma.c.
+> 6. In alphabet order, drop every entry with attested[number] == 0 (unused — including reserved codes 0–2 that appear in sigma but on no arc); for each surviving entry set number = attested[number] when >= 3 (reserved numbers unchanged). Order is otherwise preserved.
+> 7. Returns void; mutates both `net->states` and `net->sigma` in place. Implementation: crates/foma/src/sigma.rs.
 
 > [spec:foma:def:fomalibconf.sigma-create-fn]
 > sigma *sigma_create ()
 
-> [spec:foma:sem:fomalibconf.sigma-create-fn]
-> Allocates (malloc) and returns a new empty sigma: a single sentinel node with number = -1, symbol = NULL, next = NULL. All other sigma functions recognize number == -1 as "empty" and reuse this node in place for the first insertion. Caller owns the node. Implementation: foma/sigma.c.
+> [spec:foma:sem:fomalibconf.sigma-create-fn+1]
+> Returns a fresh empty sigma alphabet (an empty Vec — there is no sentinel node). Implementation: crates/foma/src/sigma.rs.
 
 > [spec:foma:def:fomalibconf.sigma-find-fn]
 > int sigma_find (char *symbol, struct sigma *sigma)
@@ -502,37 +502,37 @@
 > [spec:foma:def:fomalibconf.sigma-max-fn]
 > FEXPORT int sigma_max(struct sigma *sigma)
 
-> [spec:foma:sem:fomalibconf.sigma-max-fn]
-> Returns the maximum `number` over all nodes in the sigma list, starting the accumulator at -1; returns -1 for a NULL sigma or an empty sigma (single sentinel node with number == -1). Unlike most sigma walks, this one does not stop at a -1 sentinel — it visits every node to the end of the list. Implementation: foma/sigma.c.
+> [spec:foma:sem:fomalibconf.sigma-max-fn+1]
+> Returns the maximum `number` over all entries in the sigma alphabet, starting the accumulator at -1; an empty alphabet therefore yields -1. Implementation: crates/foma/src/sigma.rs.
 
 > [spec:foma:def:fomalibconf.sigma-remove-fn]
 > sigma *sigma_remove(char *symbol, struct sigma *sigma)
 
-> [spec:foma:sem:fomalibconf.sigma-remove-fn]
-> Removes the first node whose `symbol` strcmp-equals the argument from the sigma list and returns the (possibly new) head pointer; callers must reassign their sigma pointer. Walks with a trailing `prev` pointer while node != NULL and node->number != -1 (so an empty sentinel-only sigma is left untouched); on match, frees the node's symbol string and the node itself, relinks prev->next past it (or, if the match is the head, the returned head becomes head->next), and stops. If no match, the list is unchanged and the original head is returned. Removing the only real node returns NULL (not an empty sentinel), since real lists have no -1 tail sentinel. Implementation: foma/sigma.c.
+> [spec:foma:sem:fomalibconf.sigma-remove-fn+1]
+> Removes, in place, the first entry whose `symbol` strcmp-equals the argument from the sigma alphabet; the remaining entries keep their order. An empty alphabet or a symbol that is absent is a no-op. Implementation: crates/foma/src/sigma.rs.
 
 > [spec:foma:def:fomalibconf.sigma-remove-num-fn]
 > sigma *sigma_remove_num(int num, struct sigma *sigma)
 
-> [spec:foma:sem:fomalibconf.sigma-remove-num-fn]
-> Identical to `sigma_remove` except the first matching node is selected by node->number == num instead of by strcmp on the symbol string: walks with a trailing `prev` while node != NULL and node->number != -1; on match frees the symbol string and the node, unlinks it, and returns the (possibly new) head; if absent returns the unchanged head. Implementation: foma/sigma.c.
+> [spec:foma:sem:fomalibconf.sigma-remove-num-fn+1]
+> Identical to `sigma_remove` except the first matching entry is selected by number == num instead of by strcmp on the symbol string: removes it in place; an empty alphabet or a number that is absent is a no-op. Implementation: crates/foma/src/sigma.rs.
 
 > [spec:foma:def:fomalibconf.sigma-size-fn]
 > int sigma_size(struct sigma *sigma)
 
-> [spec:foma:sem:fomalibconf.sigma-size-fn]
-> Returns the count of nodes in the sigma list, following `next` to NULL with no sentinel check. Consequence: a freshly `sigma_create`d empty sigma (one number == -1 sentinel node) counts as 1, not 0; NULL counts as 0. Implementation: foma/sigma.c.
+> [spec:foma:sem:fomalibconf.sigma-size-fn+1]
+> Returns the number of entries in the sigma alphabet; an empty alphabet returns 0. Implementation: crates/foma/src/sigma.rs.
 
 > [spec:foma:def:fomalibconf.sigma-sort-fn]
 > int sigma_sort (struct fsm *net)
 
-> [spec:foma:sem:fomalibconf.sigma-sort-fn+1]
+> [spec:foma:sem:fomalibconf.sigma-sort-fn+2]
 > Sorts the non-reserved symbols of `net->sigma` by symbol string (strcmp order via qsort), renumbers them consecutively from 3, and rewrites all transition in/out numbers to match. Always returns 1 (also returns 1 early, doing nothing, when `sigma_max(net->sigma)` < 0). Steps:
 > 1. `size = sigma_max(net->sigma)`; allocate a temp array of `size` {symbol, number} pairs.
-> 2. Walk sigma collecting every node with number > IDENTITY (2) into the array; let `max` = count; qsort the array by strcmp on symbol.
+> 2. Collect every alphabet entry with number > IDENTITY (2) into the array (moving each symbol out); let `max` = count; sort the array by strcmp on symbol.
 > 3. Build an int `replacearray` of size+3 entries. The C left it uninitialized (garbage; the Wave-2 port zeroed it), so an arc numbered with a symbol absent from sigma got corrupted. Seed it with the identity map (replacearray[k]=k), then set replacearray[pair.number] = sorted-index + 3 for each collected pair — old number → new number; absent numbers keep their own value.
 > 4. Walk `net->states` lines to the state_no == -1 sentinel, replacing any `in` > 2 with replacearray[in] and any `out` > 2 with replacearray[out]. An arc carrying a number absent from sigma is now left unchanged rather than corrupted.
-> 5. Walk the sigma list again in list order with counter i: each node with number > 2 gets number = i+3 and symbol = sorted array entry i's symbol (shuffled between nodes), i++. Since reserved nodes 0–2 sort before the rest in a sorted list, the list ends up sorted by number with symbols in strcmp order. Implementation: crates/foma/src/sigma.rs.
+> 5. Walk the entries again in alphabet order with counter i: each entry with number > 2 gets number = i+3 and symbol = sorted array entry i's symbol (moved back), i++. Since reserved entries 0–2 sort before the rest, the alphabet ends up sorted by number with symbols in strcmp order. Implementation: crates/foma/src/sigma.rs.
 
 > [spec:foma:def:fomalibconf.sigma-string-fn]
 > FEXPORT char *sigma_string(int number, struct sigma *sigma)

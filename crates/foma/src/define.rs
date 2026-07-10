@@ -289,14 +289,7 @@ mod tests {
     }
 
     fn has_sym(net: &Fsm, sym: &str) -> bool {
-        let mut s = net.sigma.as_deref();
-        while let Some(node) = s {
-            if node.symbol.as_deref() == Some(sym) {
-                return true;
-            }
-            s = node.next.as_deref();
-        }
-        false
+        net.sigma.iter().any(|node| node.symbol == sym)
     }
 
     // [spec:foma:sem:define.defined-networks-init-fn/test]

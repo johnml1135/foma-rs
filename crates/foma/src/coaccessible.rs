@@ -135,8 +135,8 @@ pub fn fsm_coaccessible(net: Box<Fsm>) -> Box<Fsm> {
         // of a disconnected component, so the empty machine is the correct result.
         if coacc.is_empty() || coacc[0] == 0 {
             net.states = fsm_empty();
-            fsm_sigma_destroy(net.sigma.take());
-            net.sigma = Some(sigma_create());
+            fsm_sigma_destroy(core::mem::take(&mut net.sigma));
+            net.sigma = sigma_create();
             net.statecount = 1;
             net.finalcount = 0;
             net.arccount = 0;
@@ -325,9 +325,7 @@ mod tests {
         assert_eq!(net.statecount, 1);
         assert_eq!(net.linecount, 2);
         assert_eq!(net.arccount, 0);
-        let sigma = net.sigma.as_deref().unwrap();
-        assert_eq!(sigma.number, -1, "fresh empty sigma");
-        assert!(sigma.symbol.is_none());
+        assert!(net.sigma.is_empty(), "fresh empty sigma");
         assert_eq!(net.is_pruned, YES);
         // Idempotent: re-pruning the empty machine (statecount 1 ⟹ non-empty
         // coacc) returns the same shape instead of indexing coacc out of bounds.
@@ -424,10 +422,7 @@ mod tests {
         assert_eq!(net.statecount, 1);
         assert_eq!(net.linecount, 2);
         assert_eq!(net.arccount, 0);
-        let sigma = net.sigma.as_deref().unwrap();
-        assert_eq!(sigma.number, -1, "fresh empty sigma");
-        assert!(sigma.symbol.is_none());
-        assert!(sigma.next.is_none());
+        assert!(net.sigma.is_empty(), "fresh empty sigma");
         assert_eq!(net.is_pruned, YES);
     }
 }

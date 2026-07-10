@@ -29,7 +29,7 @@ pub fn fsm_intersect(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<
 
     fsm_update_flags(&mut net1, YES, NO, UNK, YES, UNK, UNK);
 
-    let sigma2size = sigma_max(net2.sigma.as_deref()) + 1;
+    let sigma2size = sigma_max(&net2.sigma) + 1;
     /* calloc — zeroed entries; mainloop stamps start at 1 below, so all
     entries begin stale */
     let mut array: Vec<Blookup> = vec![
@@ -51,7 +51,7 @@ pub fn fsm_intersect(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<
     let mut th = triplet_hash_init();
     triplet_hash_insert(&mut th, 0, 0, 0);
 
-    let mut builder = fsm_state_init(sigma_max(net1.sigma.as_deref()));
+    let mut builder = fsm_state_init(sigma_max(&net1.sigma));
 
     let point_a = init_state_pointers(&net1.states);
     let point_b = init_state_pointers(&net2.states);
@@ -141,8 +141,8 @@ pub fn fsm_intersect(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<
         fsm_state_end_state(&mut builder);
     }
     let mut new_net = fsm_create("");
-    fsm_sigma_destroy(new_net.sigma.take());
-    new_net.sigma = net1.sigma.take();
+    fsm_sigma_destroy(core::mem::take(&mut new_net.sigma));
+    new_net.sigma = core::mem::take(&mut net1.sigma);
     fsm_destroy(net2);
     fsm_destroy(net1);
     fsm_state_close(&mut builder, &mut new_net);
@@ -225,35 +225,28 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
     if g_flag_is_epsilon {
         let mut flags1 = 0;
         let mut flags2 = 0;
-        let max2sigma = sigma_max(net2.sigma.as_deref());
-        let mut sig1 = net1.sigma.as_deref();
-        while let Some(s1) = sig1 {
-            if flag_check(s1.symbol.as_deref().unwrap_or("")) {
+        let max2sigma = sigma_max(&net2.sigma);
+        for idx in 0..net1.sigma.len() {
+            let sym = net1.sigma[idx].symbol.clone();
+            if flag_check(&sym) {
                 flags1 = 1;
-                if sigma_find(s1.symbol.as_deref().unwrap_or(""), net2.sigma.as_deref()) == -1 {
-                    sigma_add(
-                        s1.symbol.as_deref().unwrap_or(""),
-                        net2.sigma.as_deref_mut().unwrap(),
-                    );
+                if sigma_find(&sym, &net2.sigma) == -1 {
+                    sigma_add(&sym, &mut net2.sigma);
                 }
             }
-            sig1 = s1.next.as_deref();
         }
 
-        let mut sig2 = net2.sigma.as_deref();
-        while let Some(s2) = sig2 {
-            if flag_check(s2.symbol.as_deref().unwrap_or("")) {
-                if s2.number <= max2sigma {
+        for idx in 0..net2.sigma.len() {
+            let s2num = net2.sigma[idx].number;
+            let sym = net2.sigma[idx].symbol.clone();
+            if flag_check(&sym) {
+                if s2num <= max2sigma {
                     flags2 = 1;
                 }
-                if sigma_find(s2.symbol.as_deref().unwrap_or(""), net1.sigma.as_deref()) == -1 {
-                    sigma_add(
-                        s2.symbol.as_deref().unwrap_or(""),
-                        net1.sigma.as_deref_mut().unwrap(),
-                    );
+                if sigma_find(&sym, &net1.sigma) == -1 {
+                    sigma_add(&sym, &mut net1.sigma);
                 }
             }
-            sig2 = s2.next.as_deref();
         }
         sigma_sort(&mut net2);
         sigma_sort(&mut net1);
@@ -271,21 +264,15 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
         /* Create lookup table for quickly checking if a symbol is a flag */
         /* C: malloc'd (uninitialized for numbers absent from the sigma);
         zero-initialized here */
-        is_flag = vec![false; (sigma_max(net1.sigma.as_deref()) + 1) as usize];
-        let mut sig1 = net1.sigma.as_deref();
-        while let Some(s1) = sig1 {
-            if flag_check(s1.symbol.as_deref().unwrap_or("")) {
-                is_flag[s1.number as usize] = true;
-            } else {
-                is_flag[s1.number as usize] = false;
-            }
-            sig1 = s1.next.as_deref();
+        is_flag = vec![false; (sigma_max(&net1.sigma) + 1) as usize];
+        for s1 in &net1.sigma {
+            is_flag[s1.number as usize] = flag_check(&s1.symbol);
         }
     }
 
     fsm_update_flags(&mut net1, YES, NO, UNK, YES, UNK, UNK);
 
-    let max2sigma = sigma_max(net2.sigma.as_deref());
+    let max2sigma = sigma_max(&net2.sigma);
 
     /* Create an index for looking up input symbols in machine b quickly */
     /* We store each machine_b->in symbol in outarray[symin][...] */
@@ -319,7 +306,7 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
     let mut th = triplet_hash_init();
     triplet_hash_insert(&mut th, 0, 0, 0);
 
-    let mut builder = fsm_state_init(sigma_max(net1.sigma.as_deref()));
+    let mut builder = fsm_state_init(sigma_max(&net1.sigma));
 
     let point_a = init_state_pointers(&net1.states);
     let point_b = init_state_pointers(&net2.states);
@@ -667,7 +654,7 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
     let mut th = triplet_hash_init();
     triplet_hash_insert(&mut th, 0, 0, 0);
 
-    let mut builder = fsm_state_init(sigma_max(net1.sigma.as_deref()));
+    let mut builder = fsm_state_init(sigma_max(&net1.sigma));
 
     let point_a = init_state_pointers(&net1.states);
     let point_b = init_state_pointers(&net2.states);
@@ -835,13 +822,13 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
         i += 1;
     }
     if epsilon == 1 {
-        if sigma_find_number(EPSILON, net1.sigma.as_deref()) == -1 {
-            sigma_add_special(EPSILON, net1.sigma.as_deref_mut().unwrap());
+        if sigma_find_number(EPSILON, &net1.sigma) == -1 {
+            sigma_add_special(EPSILON, &mut net1.sigma);
         }
     }
     if unknown == 1 {
-        if sigma_find_number(UNKNOWN, net1.sigma.as_deref()) == -1 {
-            sigma_add_special(UNKNOWN, net1.sigma.as_deref_mut().unwrap());
+        if sigma_find_number(UNKNOWN, &net1.sigma) == -1 {
+            sigma_add_special(UNKNOWN, &mut net1.sigma);
         }
     }
     /* free(point_a); free(point_b) */

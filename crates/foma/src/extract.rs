@@ -24,7 +24,7 @@ use crate::types::{Fsm, IDENTITY, NO, UNK, UNKNOWN};
 pub fn fsm_lower(net: Box<Fsm>) -> Box<Fsm> {
     let mut net = net;
     /* C: fsm = net->states — reads below index net.states directly */
-    let mut builder = fsm_state_init(sigma_max(net.sigma.as_deref()));
+    let mut builder = fsm_state_init(sigma_max(&net.sigma));
     let mut prevstate = -1;
     let mut i: i32 = 0;
     while net.states[i as usize].state_no != -1 {
@@ -75,7 +75,7 @@ pub fn fsm_lower(net: Box<Fsm>) -> Box<Fsm> {
 pub fn fsm_upper(net: Box<Fsm>) -> Box<Fsm> {
     let mut net = net;
     /* C: fsm = net->states — reads below index net.states directly */
-    let mut builder = fsm_state_init(sigma_max(net.sigma.as_deref()));
+    let mut builder = fsm_state_init(sigma_max(&net.sigma));
     let mut prevstate = -1;
     let mut i: i32 = 0;
     while net.states[i as usize].state_no != -1 {
@@ -127,15 +127,10 @@ mod tests {
     use crate::types::EPSILON;
 
     fn sigma_syms(net: &Fsm) -> Vec<(i32, String)> {
-        let mut v = Vec::new();
-        let mut s = net.sigma.as_deref();
-        while let Some(node) = s {
-            if let Some(sym) = &node.symbol {
-                v.push((node.number, sym.clone()));
-            }
-            s = node.next.as_deref();
-        }
-        v
+        net.sigma
+            .iter()
+            .map(|node| (node.number, node.symbol.clone()))
+            .collect()
     }
 
     fn arc_labels(net: &Fsm) -> Vec<(i16, i16)> {

@@ -178,7 +178,7 @@ pub struct Fsm {
     /// The line table: sentinel-terminated (final line has state_no == -1),
     /// exactly as in C (pointer to first line). Empty vec ↔ NULL.
     pub states: Vec<FsmState>,
-    pub sigma: Option<Box<Sigma>>,
+    pub sigma: Vec<Sigma>,
     // DEVIATION from C (aliased pointer; fsm_copy shares medlookup between copies and C double-frees)
     pub medlookup: Option<Box<Medlookup>>,
 }
@@ -240,13 +240,13 @@ pub struct RewriteSet {
     pub rule_direction: i32,
 }
 
-/// Linked list of sigma; number < IDENTITY is reserved for special symbols
-// [spec:foma:def:fomalib.sigma]
+/// One sigma alphabet entry; number < IDENTITY is reserved for special
+/// symbols. The alphabet as a whole is a `Vec<Sigma>` in insertion order.
+// [spec:foma:def:fomalib.sigma+1]
 #[derive(Debug, Clone)]
 pub struct Sigma {
     pub number: i32,
-    pub symbol: Option<String>,
-    pub next: Option<Box<Sigma>>,
+    pub symbol: String,
 }
 
 // [spec:foma:def:fomalib.fsm-options]
@@ -614,7 +614,7 @@ pub struct ApplyHandle {
     // DEVIATION from C (gstates = net->states, an interior pointer; base index into last_net's line table)
     pub gstates: usize,
     // DEVIATION from C (gsigma = net->sigma, an aliased pointer; owned copy here)
-    pub gsigma: Option<Box<Sigma>>,
+    pub gsigma: Vec<Sigma>,
     /// C: struct apply_state_index ** — malloc'd array of chain heads, one per state
     pub index_in: Vec<Option<Box<ApplyStateIndex>>>,
     /// C: struct apply_state_index ** — malloc'd array of chain heads, one per state

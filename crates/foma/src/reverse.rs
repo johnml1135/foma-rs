@@ -30,7 +30,7 @@ pub fn fsm_reverse(net: Box<Fsm>) -> Box<Fsm> {
     let mut inh = fsm_read_init(net);
     let name = inh.net.as_ref().unwrap().name.clone();
     let mut revh = fsm_construct_init(&name);
-    fsm_construct_copy_sigma(&mut revh, inh.net.as_ref().unwrap().sigma.as_deref());
+    fsm_construct_copy_sigma(&mut revh, &inh.net.as_ref().unwrap().sigma);
 
     while fsm_get_next_arc(&mut inh) != 0 {
         let (target, source) = (fsm_get_arc_target(&inh), fsm_get_arc_source(&inh));

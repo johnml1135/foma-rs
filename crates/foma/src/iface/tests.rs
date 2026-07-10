@@ -1586,36 +1586,37 @@ fn write_att_and_prolog_roundtrip() {
 // [spec:foma:sem:iface.sigptr-fn/test]
 #[test]
 fn sigptr_maps_reserved_and_special_symbols() {
-    let sig = Sigma {
-        number: 3,
-        symbol: Some("0".to_string()),
-        next: Some(Box::new(Sigma {
+    let sig = vec![
+        Sigma {
+            number: 3,
+            symbol: "0".to_string(),
+        },
+        Sigma {
             number: 4,
-            symbol: Some("?".to_string()),
-            next: Some(Box::new(Sigma {
-                number: 5,
-                symbol: Some("\n".to_string()),
-                next: Some(Box::new(Sigma {
-                    number: 6,
-                    symbol: Some("\r".to_string()),
-                    next: Some(Box::new(Sigma {
-                        number: 7,
-                        symbol: Some("hello".to_string()),
-                        next: None,
-                    })),
-                })),
-            })),
-        })),
-    };
-    assert_eq!(sigptr(Some(&sig), EPSILON), "0");
-    assert_eq!(sigptr(Some(&sig), UNKNOWN), "?");
-    assert_eq!(sigptr(Some(&sig), IDENTITY), "@");
-    assert_eq!(sigptr(Some(&sig), 3), "\"0\"");
-    assert_eq!(sigptr(Some(&sig), 4), "\"?\"");
-    assert_eq!(sigptr(Some(&sig), 5), "\\n");
-    assert_eq!(sigptr(Some(&sig), 6), "\\r");
-    assert_eq!(sigptr(Some(&sig), 7), "hello");
-    assert_eq!(sigptr(Some(&sig), 99), "NONE(99)");
+            symbol: "?".to_string(),
+        },
+        Sigma {
+            number: 5,
+            symbol: "\n".to_string(),
+        },
+        Sigma {
+            number: 6,
+            symbol: "\r".to_string(),
+        },
+        Sigma {
+            number: 7,
+            symbol: "hello".to_string(),
+        },
+    ];
+    assert_eq!(sigptr(&sig, EPSILON), "0");
+    assert_eq!(sigptr(&sig, UNKNOWN), "?");
+    assert_eq!(sigptr(&sig, IDENTITY), "@");
+    assert_eq!(sigptr(&sig, 3), "\"0\"");
+    assert_eq!(sigptr(&sig, 4), "\"?\"");
+    assert_eq!(sigptr(&sig, 5), "\\n");
+    assert_eq!(sigptr(&sig, 6), "\\r");
+    assert_eq!(sigptr(&sig, 7), "hello");
+    assert_eq!(sigptr(&sig, 99), "NONE(99)");
 }
 
 // print_sigma (static): writes "Sigma:" + the >2 symbols + "@"/"?" then a
@@ -1626,7 +1627,7 @@ fn print_sigma_static_formats_alphabet() {
     let opts = &FomaOptions::default();
     let net = fsm_parse_regex(opts, "a b", None, None).unwrap();
     let mut buf: Vec<u8> = Vec::new();
-    assert_eq!(print_sigma(net.sigma.as_deref(), &mut buf), 1);
+    assert_eq!(print_sigma(&net.sigma, &mut buf), 1);
     let s = String::from_utf8(buf).unwrap();
     assert!(s.starts_with("Sigma:"), "got {:?}", s);
     assert!(s.contains(" a"));

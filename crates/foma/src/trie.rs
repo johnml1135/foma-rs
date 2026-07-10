@@ -247,15 +247,10 @@ mod tests {
     }
 
     fn sigma_pairs(net: &Fsm) -> Vec<(i32, String)> {
-        let mut v = Vec::new();
-        let mut s = net.sigma.as_deref();
-        while let Some(sig) = s {
-            if let Some(sym) = sig.symbol.as_deref() {
-                v.push((sig.number, sym.to_string()));
-            }
-            s = sig.next.as_deref();
-        }
-        v
+        net.sigma
+            .iter()
+            .map(|sig| (sig.number, sig.symbol.clone()))
+            .collect()
     }
 
     // [spec:foma:sem:trie.fsm-trie-init-fn/test]

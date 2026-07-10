@@ -566,19 +566,13 @@ pub fn fsm_construct_add_arc_nums(
 // [spec:foma:sem:dynarray.fsm-construct-copy-sigma-fn+1]
 // [spec:foma:def:fomalib.fsm-construct-copy-sigma-fn]
 // [spec:foma:sem:fomalib.fsm-construct-copy-sigma-fn+1]
-pub fn fsm_construct_copy_sigma(handle: &mut FsmConstructHandle, sigma: Option<&Sigma>) {
-    let mut sigma = sigma;
-    while let Some(s) = sigma {
-        /* a node numbered -1 terminates the walk */
-        if s.number == -1 {
-            break;
-        }
+pub fn fsm_construct_copy_sigma(handle: &mut FsmConstructHandle, sigma: &[Sigma]) {
+    for s in sigma {
         let symnum = s.number;
         if symnum > handle.maxsigma {
             handle.maxsigma = symnum;
         }
-        /* C derefs sigma->symbol unconditionally (strdup(NULL) crashes) */
-        let symbol = s.symbol.as_deref().unwrap();
+        let symbol = s.symbol.as_str();
         if symnum >= handle.fsm_sigma_list_size {
             // [spec:foma:sem:dynarray.fsm-construct-copy-sigma-fn+1] grow until the
             // slot fits. C did a single doubling keyed on the current size, so a
@@ -613,7 +607,6 @@ pub fn fsm_construct_copy_sigma(handle: &mut FsmConstructHandle, sigma: Option<&
             });
             fh.next = Some(newfh);
         }
-        sigma = s.next.as_deref();
     }
 }
 
@@ -706,24 +699,20 @@ pub fn fsm_construct_check_symbol(handle: &FsmConstructHandle, symbol: &str) -> 
 
 // [spec:foma:def:dynarray.fsm-construct-convert-sigma-fn]
 // [spec:foma:sem:dynarray.fsm-construct-convert-sigma-fn]
-pub fn fsm_construct_convert_sigma(handle: &FsmConstructHandle) -> Option<Box<Sigma>> {
-    /* builds the list in ascending symbol-number order, appending at the
+pub fn fsm_construct_convert_sigma(handle: &FsmConstructHandle) -> Vec<Sigma> {
+    /* builds the alphabet in ascending symbol-number order, appending at the
     tail; NULL-symbol slots are skipped */
-    let mut sigma: Option<Box<Sigma>> = None;
-    let mut tail: &mut Option<Box<Sigma>> = &mut sigma;
+    let mut sigma: Vec<Sigma> = Vec::new();
     for i in 0..=handle.maxsigma {
-        if handle.fsm_sigma_list[i as usize].symbol.is_some() {
+        if let Some(symbol) = &handle.fsm_sigma_list[i as usize].symbol {
             /* C moves the char* out of fsm_sigma_list (no strdup) —
             ownership transfers to the sigma; cloned here since the handle
             is not mutable (observably equivalent: the handle's list is
             freed without freeing the strings) */
-            let newsigma = Box::new(Sigma {
+            sigma.push(Sigma {
                 number: i,
-                symbol: handle.fsm_sigma_list[i as usize].symbol.clone(),
-                next: None,
+                symbol: symbol.clone(),
             });
-            *tail = Some(newsigma);
-            tail = &mut tail.as_mut().unwrap().next;
         }
     }
     sigma
@@ -779,7 +768,7 @@ pub fn fsm_construct_done(handle: Box<FsmConstructHandle>) -> Box<Fsm> {
     let mut net = fsm_create("");
     net.name = format!("{:X}", lcg.rand());
     /* free(net->sigma) */
-    net.sigma = None;
+    net.sigma = Vec::new();
     fsm_state_close(&mut b, &mut net);
 
     net.sigma = fsm_construct_convert_sigma(&handle);
@@ -904,8 +893,8 @@ pub fn fsm_read_init(net: Box<Fsm>) -> Box<FsmReadHandle> {
     initials_head[j] = -1;
     finals_head[k] = -1;
 
-    let fsm_sigma_list = sigma_to_list(net.sigma.as_deref());
-    let sigma_list_size = sigma_max(net.sigma.as_deref()) + 1;
+    let fsm_sigma_list = sigma_to_list(&net.sigma);
+    let sigma_list_size = sigma_max(&net.sigma) + 1;
 
     /* handle = calloc(1, ...): all cursors NULL, current_state 0 */
     Box::new(FsmReadHandle {
@@ -1505,25 +1494,21 @@ mod tests {
     // [spec:foma:sem:fomalib.fsm-construct-copy-sigma-fn/test]
     #[test]
     fn fsm_construct_copy_sigma_bulk_loads() {
-        let sigma = Sigma {
-            number: 3,
-            symbol: Some("x".to_string()),
-            next: Some(Box::new(Sigma {
+        let sigma = vec![
+            Sigma {
+                number: 3,
+                symbol: "x".to_string(),
+            },
+            Sigma {
                 number: 5,
-                symbol: Some("y".to_string()),
-                next: Some(Box::new(Sigma {
-                    number: -1, /* terminates the walk */
-                    symbol: Some("z".to_string()),
-                    next: None,
-                })),
-            })),
-        };
+                symbol: "y".to_string(),
+            },
+        ];
         let mut h = fsm_construct_init("n");
-        fsm_construct_copy_sigma(&mut h, Some(&sigma));
+        fsm_construct_copy_sigma(&mut h, &sigma);
         assert_eq!(h.maxsigma, 5);
         assert_eq!(h.fsm_sigma_list[3].symbol.as_deref(), Some("x"));
         assert_eq!(h.fsm_sigma_list[5].symbol.as_deref(), Some("y"));
-        /* the -1 node was not copied */
         assert_eq!(fsm_construct_check_symbol(&h, "x"), 3);
         assert_eq!(fsm_construct_check_symbol(&h, "y"), 5);
         assert_eq!(fsm_construct_check_symbol(&h, "z"), -1);
@@ -1537,12 +1522,7 @@ mod tests {
         fsm_construct_add_symbol(&mut h, "cat"); /* 3 */
         fsm_construct_add_symbol(&mut h, "dog"); /* 4 */
         let sigma = fsm_construct_convert_sigma(&h);
-        let mut seen: Vec<(i32, String)> = Vec::new();
-        let mut cur = sigma.as_deref();
-        while let Some(s) = cur {
-            seen.push((s.number, s.symbol.clone().unwrap()));
-            cur = s.next.as_deref();
-        }
+        let seen: Vec<(i32, String)> = sigma.iter().map(|s| (s.number, s.symbol.clone())).collect();
         assert_eq!(
             seen,
             vec![
@@ -1577,10 +1557,9 @@ mod tests {
         assert_eq!(line(&net.states[1]), (1, -1, -1, -1, 1, 0));
         assert_eq!(line(&net.states[2]), (-1, -1, -1, -1, -1, -1));
         /* sigma survived (single symbol, number 3 after sigma_sort) */
-        let s = net.sigma.as_deref().unwrap();
-        assert_eq!(s.number, 3);
-        assert_eq!(s.symbol.as_deref(), Some("a"));
-        assert!(s.next.is_none());
+        assert_eq!(net.sigma.len(), 1);
+        assert_eq!(net.sigma[0].number, 3);
+        assert_eq!(net.sigma[0].symbol, "a");
     }
 
     // [spec:foma:sem:dynarray.fsm-construct-done-fn/test]
@@ -1650,17 +1629,18 @@ mod tests {
         fsm_state_set_current_state(&mut b, 2, 1, 0);
         fsm_state_end_state(&mut b);
         let mut net = fsm_create("read");
-        net.sigma = None;
+        net.sigma = Vec::new();
         fsm_state_close(&mut b, &mut net);
-        net.sigma = Some(Box::new(Sigma {
-            number: 3,
-            symbol: Some("a".to_string()),
-            next: Some(Box::new(Sigma {
+        net.sigma = vec![
+            Sigma {
+                number: 3,
+                symbol: "a".to_string(),
+            },
+            Sigma {
                 number: 4,
-                symbol: Some("b".to_string()),
-                next: None,
-            })),
-        }));
+                symbol: "b".to_string(),
+            },
+        ];
         net
     }
 
@@ -1704,13 +1684,12 @@ mod tests {
         fsm_state_add_arc(&mut b, 0, IDENTITY, IDENTITY, 0, 1, 1);
         fsm_state_end_state(&mut b);
         let mut net = fsm_create("id");
-        net.sigma = None;
+        net.sigma = Vec::new();
         fsm_state_close(&mut b, &mut net);
-        net.sigma = Some(Box::new(Sigma {
+        net.sigma = vec![Sigma {
             number: IDENTITY,
-            symbol: Some("@_IDENTITY_SYMBOL_@".to_string()),
-            next: None,
-        }));
+            symbol: "@_IDENTITY_SYMBOL_@".to_string(),
+        }];
         let h = fsm_read_init(net);
         assert_eq!(fsm_get_has_unknowns(&h), 1);
     }
@@ -1884,13 +1863,12 @@ mod tests {
         // Symbol number 3000 exceeds twice the initial fsm_sigma_list_size (1024),
         // so C's single-doubling growth left the slot out of range (OOB write in C,
         // index panic here). The growth loop must resize until the slot fits.
-        let sigma = Sigma {
+        let sigma = vec![Sigma {
             number: 3000,
-            symbol: Some("z".to_string()),
-            next: None,
-        };
+            symbol: "z".to_string(),
+        }];
         let mut h = fsm_construct_init("c");
-        fsm_construct_copy_sigma(&mut h, Some(&sigma));
+        fsm_construct_copy_sigma(&mut h, &sigma);
         assert!(h.fsm_sigma_list_size > 3000);
         assert_eq!(h.fsm_sigma_list[3000].symbol.as_deref(), Some("z"));
         assert!(h.maxsigma >= 3000);

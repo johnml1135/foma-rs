@@ -53,29 +53,23 @@ pub fn add_to_mergesigma<'a>(
     }
     /* C: msigma->symbol = sigma->symbol (aliased, no copy) — owned clone
     here, see the Mergesigma type comment */
-    msigma.symbol = sigma.symbol.clone();
+    msigma.symbol = Some(sigma.symbol.clone());
     msigma.presence = presence as u8;
     msigma
 }
 
 // [spec:foma:def:constructions.copy-mergesigma-fn]
 // [spec:foma:sem:constructions.copy-mergesigma-fn]
-pub fn copy_mergesigma(mergesigma: Option<&Mergesigma>) -> Option<Box<Sigma>> {
-    let mut new_sigma: Option<Box<Sigma>> = None;
-
-    /* C: tail-pointer append (sigma cursor trails the freshly malloc'd
-    node); a tail cursor into the owned chain here */
-    let mut tail: &mut Option<Box<Sigma>> = &mut new_sigma;
+pub fn copy_mergesigma(mergesigma: Option<&Mergesigma>) -> Vec<Sigma> {
+    /* append each mergesigma node in order; a NULL mergesigma symbol becomes
+    an empty string (the merge always fills symbols for well-formed nets) */
+    let mut new_sigma: Vec<Sigma> = Vec::new();
     let mut mergesigma = mergesigma;
     while let Some(m) = mergesigma {
-        *tail = Some(Box::new(Sigma {
+        new_sigma.push(Sigma {
             number: m.number,
-            /* sigma->symbol = NULL; if (mergesigma->symbol != NULL)
-            sigma->symbol = strdup(mergesigma->symbol); */
-            symbol: m.symbol.clone(),
-            next: None,
-        }));
-        tail = &mut tail.as_deref_mut().unwrap().next;
+            symbol: m.symbol.clone().unwrap_or_default(),
+        });
         mergesigma = m.next.as_deref();
     }
     new_sigma
@@ -94,19 +88,19 @@ pub fn fsm_merge_sigma(opts: &FomaOptions, net1: &mut Fsm, net2: &mut Fsm) {
     let mut net_unk = 0;
 
     if !opts.skip_word_boundary_marker {
-        let i = sigma_find(".#.", net1.sigma.as_deref());
-        let j = sigma_find(".#.", net2.sigma.as_deref());
+        let i = sigma_find(".#.", &net1.sigma);
+        let j = sigma_find(".#.", &net2.sigma);
         if i != -1 && j == -1 {
-            sigma_add(".#.", net2.sigma.as_deref_mut().unwrap());
+            sigma_add(".#.", &mut net2.sigma);
             sigma_sort(net2);
         }
         if j != -1 && i == -1 {
-            sigma_add(".#.", net1.sigma.as_deref_mut().unwrap());
+            sigma_add(".#.", &mut net1.sigma);
             sigma_sort(net1);
         }
     }
 
-    let sigmasizes = sigma_max(net1.sigma.as_deref()) + sigma_max(net2.sigma.as_deref()) + 3;
+    let sigmasizes = sigma_max(&net1.sigma) + sigma_max(&net2.sigma) + 3;
 
     /* C: malloc'd (uninitialized); zero-filled here — entries are always
     written before being read for well-formed nets */
@@ -122,16 +116,17 @@ pub fn fsm_merge_sigma(opts: &FomaOptions, net1: &mut Fsm, net2: &mut Fsm) {
         next: None,
     });
 
-    /* Loop over sigma 1, sigma 2 */
+    /* Loop over sigma 1, sigma 2 — index cursors over each alphabet Vec; the
+    cursor being past the end plays the role of C's NULL. */
     {
-        let mut sigma_1 = net1.sigma.as_deref();
-        let mut sigma_2 = net2.sigma.as_deref();
+        let mut i1 = 0usize;
+        let mut i2 = 0usize;
         let mut mergesigma: &mut Mergesigma = &mut start_mergesigma;
         loop {
-            if sigma_1.is_none() {
+            if i1 >= net1.sigma.len() {
                 end_1 = 1;
             }
-            if sigma_2.is_none() {
+            if i2 >= net2.sigma.len() {
                 end_2 = 1;
             }
             if end_1 != 0 && end_2 != 0 {
@@ -139,25 +134,25 @@ pub fn fsm_merge_sigma(opts: &FomaOptions, net1: &mut Fsm, net2: &mut Fsm) {
             }
             if end_2 != 0 {
                 /* Treating only 1 now */
-                let s1 = sigma_1.unwrap();
+                let s1 = &net1.sigma[i1];
                 mergesigma = add_to_mergesigma(mergesigma, s1, 1);
                 mapping_1[s1.number as usize] = mergesigma.number;
-                sigma_1 = s1.next.as_deref();
+                i1 += 1;
                 equal = 0;
                 continue;
             } else if end_1 != 0 {
                 /* Treating only 2 now */
-                let s2 = sigma_2.unwrap();
+                let s2 = &net2.sigma[i2];
                 mergesigma = add_to_mergesigma(mergesigma, s2, 2);
                 mapping_2[s2.number as usize] = mergesigma.number;
-                sigma_2 = s2.next.as_deref();
+                i2 += 1;
                 equal = 0;
                 continue;
             } else {
                 /* Both alive */
 
-                let s1 = sigma_1.unwrap();
-                let s2 = sigma_2.unwrap();
+                let s1 = &net1.sigma[i1];
+                let s2 = &net2.sigma[i2];
 
                 /* 1 or 2 contains special characters */
                 if s1.number <= IDENTITY || s2.number <= IDENTITY {
@@ -172,43 +167,39 @@ pub fn fsm_merge_sigma(opts: &FomaOptions, net1: &mut Fsm, net2: &mut Fsm) {
 
                     if s1.number == s2.number {
                         mergesigma = add_to_mergesigma(mergesigma, s1, 3);
-                        sigma_1 = s1.next.as_deref();
-                        sigma_2 = s2.next.as_deref();
+                        i1 += 1;
+                        i2 += 1;
                     } else if s1.number < s2.number {
                         mergesigma = add_to_mergesigma(mergesigma, s1, 1);
-                        sigma_1 = s1.next.as_deref();
+                        i1 += 1;
                         equal = 0;
                     } else {
                         mergesigma = add_to_mergesigma(mergesigma, s2, 2);
-                        sigma_2 = s2.next.as_deref();
+                        i2 += 1;
                         equal = 0;
                     }
                     continue;
                 }
                 /* Both contain non-special chars */
                 /* strcmp — Rust str comparison is bytewise, as strcmp */
-                let cmp = s1
-                    .symbol
-                    .as_deref()
-                    .unwrap()
-                    .cmp(s2.symbol.as_deref().unwrap());
+                let cmp = s1.symbol.cmp(&s2.symbol);
                 if cmp == std::cmp::Ordering::Equal {
                     mergesigma = add_to_mergesigma(mergesigma, s1, 3);
                     /* Add symbol numbers to mapping */
                     mapping_1[s1.number as usize] = mergesigma.number;
                     mapping_2[s2.number as usize] = mergesigma.number;
 
-                    sigma_1 = s1.next.as_deref();
-                    sigma_2 = s2.next.as_deref();
+                    i1 += 1;
+                    i2 += 1;
                 } else if cmp == std::cmp::Ordering::Less {
                     mergesigma = add_to_mergesigma(mergesigma, s1, 1);
                     mapping_1[s1.number as usize] = mergesigma.number;
-                    sigma_1 = s1.next.as_deref();
+                    i1 += 1;
                     equal = 0;
                 } else {
                     mergesigma = add_to_mergesigma(mergesigma, s2, 2);
                     mapping_2[s2.number as usize] = mergesigma.number;
-                    sigma_2 = s2.next.as_deref();
+                    i2 += 1;
                     equal = 0;
                 }
                 continue;
@@ -244,8 +235,8 @@ pub fn fsm_merge_sigma(opts: &FomaOptions, net1: &mut Fsm, net2: &mut Fsm) {
     let new_sigma_1 = copy_mergesigma(Some(&start_mergesigma));
     let new_sigma_2 = copy_mergesigma(Some(&start_mergesigma));
 
-    fsm_sigma_destroy(net1.sigma.take());
-    fsm_sigma_destroy(net2.sigma.take());
+    fsm_sigma_destroy(core::mem::take(&mut net1.sigma));
+    fsm_sigma_destroy(core::mem::take(&mut net2.sigma));
 
     net1.sigma = new_sigma_1;
     net2.sigma = new_sigma_2;

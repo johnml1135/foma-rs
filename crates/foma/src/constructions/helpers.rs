@@ -205,7 +205,7 @@ pub fn fsm_mark_fsm_tail(net: Box<Fsm>, marker: &Fsm) -> Box<Fsm> {
 
     let name = inh.net.as_ref().unwrap().name.clone();
     let mut outh = fsm_construct_init(&name);
-    fsm_construct_copy_sigma(&mut outh, inh.net.as_ref().unwrap().sigma.as_deref());
+    fsm_construct_copy_sigma(&mut outh, &inh.net.as_ref().unwrap().sigma);
 
     let statecount = inh.net.as_ref().unwrap().statecount;
     /* calloc — zeroed; 0 means "unset" (fresh numbers start at

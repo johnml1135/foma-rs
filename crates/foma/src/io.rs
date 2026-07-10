@@ -219,7 +219,7 @@ pub fn foma_write_prolog(net: &mut Fsm, filename: Option<&str>) -> i32 {
         }
     }
     fsm_count(net);
-    let maxsigma = sigma_max(net.sigma.as_deref());
+    let maxsigma = sigma_max(&net.sigma);
     /* calloc(maxsigma+1, sizeof(int)) */
     let mut used_symbols: Vec<i32> = vec![0; (maxsigma + 1) as usize];
     /* malloc(sizeof(int)*statecount) — indexed by state_no below.
@@ -256,7 +256,7 @@ pub fn foma_write_prolog(net: &mut Fsm, filename: Option<&str>) -> i32 {
     for k in 3..=maxsigma {
         if used_symbols[k as usize] == 0 {
             /* C derefs sigma_string unconditionally (NULL for a numbering gap) */
-            let mut instring = sigma_string(k, net.sigma.as_deref()).unwrap();
+            let mut instring = sigma_string(k, &net.sigma).unwrap();
             if instring == "0" {
                 instring = "%0";
             }
@@ -284,7 +284,7 @@ pub fn foma_write_prolog(net: &mut Fsm, filename: Option<&str>) -> i32 {
         } else if in_ == 2 {
             "?"
         } else {
-            sigma_string(in_, net.sigma.as_deref()).unwrap()
+            sigma_string(in_, &net.sigma).unwrap()
         };
         let mut outstring: &str = if out_ == 0 {
             "0"
@@ -293,7 +293,7 @@ pub fn foma_write_prolog(net: &mut Fsm, filename: Option<&str>) -> i32 {
         } else if out_ == 2 {
             "?"
         } else {
-            sigma_string(out_, net.sigma.as_deref()).unwrap()
+            sigma_string(out_, &net.sigma).unwrap()
         };
         if instring == "0" && in_ != 0 {
             instring = "%0";
@@ -1139,9 +1139,9 @@ pub fn io_net_read(iobh: &mut IoBufHandle) -> Option<(Box<Fsm>, String)> {
         let n = atoi(number_str);
         if new_symbol.is_empty() {
             /* a literal-newline symbol survives the line-oriented format */
-            sigma_add_number(net.sigma.as_deref_mut().unwrap(), "\n", n);
+            sigma_add_number(&mut net.sigma, "\n", n);
         } else {
-            sigma_add_number(net.sigma.as_deref_mut().unwrap(), new_symbol, n);
+            sigma_add_number(&mut net.sigma, new_symbol, n);
         }
     }
 
@@ -1309,19 +1309,10 @@ pub fn foma_net_print<W: std::io::Write + ?Sized>(net: &Fsm, outfile: &mut W) ->
 
     /* Sigma */
     let _ = outfile.write_all(b"##sigma##\n");
-    let mut sigma = net.sigma.as_deref();
-    while let Some(s) = sigma {
-        if s.number == -1 {
-            break;
-        }
-        /* gzprintf("%i %s\n", ...) — glibc %s prints "(null)" for a NULL symbol */
-        let _ = write!(
-            outfile,
-            "{} {}\n",
-            s.number,
-            s.symbol.as_deref().unwrap_or("(null)")
-        );
-        sigma = s.next.as_deref();
+    for s in &net.sigma {
+        /* gzprintf("%i %s\n", ...) — one "number symbol" line per entry, in
+        alphabet order */
+        let _ = write!(outfile, "{} {}\n", s.number, s.symbol);
     }
 
     /* State array */
@@ -1360,7 +1351,7 @@ pub fn foma_net_print<W: std::io::Write + ?Sized>(net: &Fsm, outfile: &mut W) ->
         /* C: net->medlookup->confusion_matrix != NULL — an empty Vec ↔ NULL */
         if !ml.confusion_matrix.is_empty() {
             let _ = outfile.write_all(b"##cmatrix##\n");
-            let maxsigma = sigma_max(net.sigma.as_deref()) + 1;
+            let maxsigma = sigma_max(&net.sigma) + 1;
             for k in 0..(maxsigma * maxsigma) {
                 let _ = write!(outfile, "{}\n", ml.confusion_matrix[k as usize]);
             }
@@ -1381,8 +1372,8 @@ pub fn net_print_att<W: std::io::Write + ?Sized>(
     net: &Fsm,
     outfile: &mut W,
 ) -> i32 {
-    let mut sl = sigma_to_list(net.sigma.as_deref());
-    if sigma_max(net.sigma.as_deref()) >= 0 {
+    let mut sl = sigma_to_list(&net.sigma);
+    if sigma_max(&net.sigma) >= 0 {
         /* (sl+0)->symbol = g_att_epsilon */
         sl[0].symbol = Some(opts.att_epsilon.clone());
     }
@@ -1660,16 +1651,10 @@ mod tests {
     }
 
     fn sigma_pairs(net: &Fsm) -> Vec<(i32, Option<String>)> {
-        let mut v = Vec::new();
-        let mut s = net.sigma.as_deref();
-        while let Some(x) = s {
-            if x.number == -1 {
-                break;
-            }
-            v.push((x.number, x.symbol.clone()));
-            s = x.next.as_deref();
-        }
-        v
+        net.sigma
+            .iter()
+            .map(|x| (x.number, Some(x.symbol.clone())))
+            .collect()
     }
 
     /* Transition table (state_no, in, out, target, final) up to the sentinel. */
@@ -1708,7 +1693,7 @@ mod tests {
 
     fn add_sig(net: &mut Fsm, syms: &[(i32, &str)]) {
         for (n, s) in syms {
-            sigma_add_number(net.sigma.as_deref_mut().unwrap(), s, *n);
+            sigma_add_number(&mut net.sigma, s, *n);
         }
     }
 

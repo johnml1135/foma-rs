@@ -507,7 +507,7 @@ pub fn apply_init(net: &Fsm) -> Box<ApplyHandle> {
         oldflagvalue: None,
         last_net: None,
         gstates: 0,
-        gsigma: None,
+        gsigma: Vec::new(),
         index_in: Vec::new(),
         index_out: Vec::new(),
         iptr: None,
@@ -1624,7 +1624,7 @@ pub fn apply_mark_flagstates(h: &mut ApplyHandle) {
 // [spec:foma:def:apply.apply-create-sigarray-fn]
 // [spec:foma:sem:apply.apply-create-sigarray-fn]
 pub fn apply_create_sigarray(h: &mut ApplyHandle, net: &Fsm) {
-    let maxsigma = sigma_max(net.sigma.as_deref());
+    let maxsigma = sigma_max(&net.sigma);
     h.sigma_size = maxsigma + 1;
     // Default size created at init, resized later if necessary.
     h.sigmatch_array = vec![
@@ -1660,17 +1660,11 @@ pub fn apply_create_sigarray(h: &mut ApplyHandle, net: &Fsm) {
     }));
 
     // Snapshot sigma (number, symbol) so we can mutate h while iterating.
-    let mut sig_entries: Vec<(i32, String)> = Vec::new();
-    {
-        let mut sig = h.gsigma.as_deref();
-        while let Some(s) = sig {
-            if s.number == -1 {
-                break;
-            }
-            sig_entries.push((s.number, s.symbol.as_deref().unwrap_or("").to_string()));
-            sig = s.next.as_deref();
-        }
-    }
+    let sig_entries: Vec<(i32, String)> = h
+        .gsigma
+        .iter()
+        .map(|s| (s.number, s.symbol.clone()))
+        .collect();
 
     for (number, symbol) in &sig_entries {
         if flag_check(symbol) {
@@ -1704,15 +1698,11 @@ pub fn apply_create_sigarray(h: &mut ApplyHandle, net: &Fsm) {
             };
             (maxsigma + 1) as usize
         ];
-        // C's second walk lacks the number != -1 guard; snapshot everything
-        // including a possible terminator (number == -1 would be OOB in C —
-        // in practice the sigma list has no such flag entry).
-        let mut sig = h.gsigma.as_deref();
-        let mut entries2: Vec<(i32, String)> = Vec::new();
-        while let Some(s) = sig {
-            entries2.push((s.number, s.symbol.as_deref().unwrap_or("").to_string()));
-            sig = s.next.as_deref();
-        }
+        let entries2: Vec<(i32, String)> = h
+            .gsigma
+            .iter()
+            .map(|s| (s.number, s.symbol.clone()))
+            .collect();
         for (number, symbol) in &entries2 {
             if flag_check(symbol) {
                 h.flag_lookup[*number as usize].r#type = flag_get_type(symbol);
@@ -2032,14 +2022,11 @@ mod tests {
     }
 
     fn signum(net: &Fsm, symbol: &str) -> i32 {
-        let mut s = net.sigma.as_deref();
-        while let Some(x) = s {
-            if x.symbol.as_deref() == Some(symbol) {
-                return x.number;
-            }
-            s = x.next.as_deref();
-        }
-        -1
+        net.sigma
+            .iter()
+            .find(|x| x.symbol == symbol)
+            .map(|x| x.number)
+            .unwrap_or(-1)
     }
 
     // [spec:foma:sem:apply.apply-init-fn/test]
