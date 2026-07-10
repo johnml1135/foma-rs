@@ -50,20 +50,27 @@ use crate::utf8::{utf8iscombining, utf8skip};
 
 /* (h->gstates + off) line accessors. gstates is the base index of
 last_net->states (always 0); off is a line offset (h->ptr / h->curr_ptr). */
+/// The net bound to this handle for the current apply (set by apply_reset_enumerator
+/// / the apply_* entry points before any of these accessors run).
+fn last_net(h: &ApplyHandle) -> &Fsm {
+    h.last_net
+        .as_ref()
+        .expect("last_net bound for the current apply")
+}
 fn l_state_no(h: &ApplyHandle, off: i32) -> i32 {
-    h.last_net.as_ref().unwrap().states[h.gstates + off as usize].state_no
+    last_net(h).states[h.gstates + off as usize].state_no
 }
 fn l_in(h: &ApplyHandle, off: i32) -> i32 {
-    h.last_net.as_ref().unwrap().states[h.gstates + off as usize].r#in as i32
+    last_net(h).states[h.gstates + off as usize].r#in as i32
 }
 fn l_out(h: &ApplyHandle, off: i32) -> i32 {
-    h.last_net.as_ref().unwrap().states[h.gstates + off as usize].out as i32
+    last_net(h).states[h.gstates + off as usize].out as i32
 }
 fn l_target(h: &ApplyHandle, off: i32) -> i32 {
-    h.last_net.as_ref().unwrap().states[h.gstates + off as usize].target
+    last_net(h).states[h.gstates + off as usize].target
 }
 fn l_final(h: &ApplyHandle, off: i32) -> i32 {
-    h.last_net.as_ref().unwrap().states[h.gstates + off as usize].final_state as i32
+    last_net(h).states[h.gstates + off as usize].final_state as i32
 }
 
 /* BITSLOT/BITMASK/BITTEST/BITSET/BITNSLOTS from apply.c */
@@ -97,14 +104,11 @@ fn flag_find_mut<'a>(
     name: &str,
 ) -> Option<&'a mut FlagList> {
     loop {
-        let is_match = match cur {
-            Some(n) => n.name.as_deref() == Some(name),
+        match cur {
             None => return None,
-        };
-        if is_match {
-            return cur.as_deref_mut();
+            Some(n) if n.name.as_deref() == Some(name) => return cur.as_deref_mut(),
+            Some(n) => cur = &mut n.next,
         }
-        cur = &mut cur.as_mut().unwrap().next;
     }
 }
 
@@ -152,9 +156,8 @@ pub fn apply_set_separator(h: &mut ApplyHandle, symbol: &str) {
 pub fn apply_set_epsilon(h: &mut ApplyHandle, symbol: &str) {
     // free(h->epsilon_symbol); strdup(symbol)
     h.epsilon_symbol = Some(symbol.to_string());
-    let s = h.epsilon_symbol.clone();
-    let len = s.as_deref().unwrap().len() as i32;
-    h.sigs[EPSILON as usize].symbol = s;
+    let len = symbol.len() as i32;
+    h.sigs[EPSILON as usize].symbol = h.epsilon_symbol.clone();
     h.sigs[EPSILON as usize].length = len;
 }
 
@@ -224,9 +227,8 @@ pub(crate) fn apply_stack_pop(h: &mut ApplyHandle) {
     let sn = l_state_no(h, h.ptr);
     h.marks[sn as usize] = ss.visitmark;
 
-    if h.has_flags != 0 && ss.flagname.is_some() {
+    if let (true, Some(name)) = (h.has_flags != 0, ss.flagname.as_deref()) {
         /* Restore flag */
-        let name = ss.flagname.as_deref().unwrap();
         match flag_find_mut(&mut h.flag_list, name) {
             Some(flist) => {
                 flist.value = ss.flagvalue.clone();
@@ -287,7 +289,7 @@ pub(crate) fn apply_stack_push(
 pub fn apply_enumerate(h: &mut ApplyHandle) -> Option<String> {
     let result: Option<String>;
 
-    if h.last_net.is_none() || h.last_net.as_ref().unwrap().finalcount == 0 {
+    if h.last_net.as_ref().is_none_or(|n| n.finalcount == 0) {
         return None;
     }
     h.binsearch = 0;
@@ -394,22 +396,25 @@ pub fn apply_clear(mut h: Box<ApplyHandle>) {
 pub fn apply_updown(h: &mut ApplyHandle, word: Option<&str>) -> Option<String> {
     let result: Option<String>;
 
-    if h.last_net.is_none() || h.last_net.as_ref().unwrap().finalcount == 0 {
+    if h.last_net.as_ref().is_none_or(|n| n.finalcount == 0) {
         return None;
     }
 
-    if word.is_none() {
-        h.iterate_old = 1;
-        result = apply_net(h);
-    } else {
-        h.iterate_old = 0;
-        // C borrows the caller's word pointer; owned copy of the bytes here.
-        h.instring = word.unwrap().to_owned();
-        apply_create_sigmatch(h);
+    match word {
+        None => {
+            h.iterate_old = 1;
+            result = apply_net(h);
+        }
+        Some(w) => {
+            h.iterate_old = 0;
+            // C borrows the caller's word pointer; owned copy of the bytes here.
+            h.instring = w.to_owned();
+            apply_create_sigmatch(h);
 
-        /* Remove old marks if necessary */
-        apply_force_clear_stack(h);
-        result = apply_net(h);
+            /* Remove old marks if necessary */
+            apply_force_clear_stack(h);
+            result = apply_net(h);
+        }
     }
     result
 }
@@ -426,7 +431,7 @@ pub fn apply_down(h: &mut ApplyHandle, word: Option<&str>) -> Option<String> {
         h.indexed = 0;
     }
     // C dereferences last_net before apply_updown's NULL guard.
-    h.binsearch = if h.last_net.as_ref().unwrap().arcs_sorted_in == 1 {
+    h.binsearch = if last_net(h).arcs_sorted_in == 1 {
         1
     } else {
         0
@@ -445,7 +450,7 @@ pub fn apply_up(h: &mut ApplyHandle, word: Option<&str>) -> Option<String> {
     } else {
         h.indexed = 0;
     }
-    h.binsearch = if h.last_net.as_ref().unwrap().arcs_sorted_out == 1 {
+    h.binsearch = if last_net(h).arcs_sorted_out == 1 {
         1
     } else {
         0
@@ -550,7 +555,7 @@ pub fn apply_init(net: &Fsm) -> Box<ApplyHandle> {
 // [spec:foma:def:fomalib.apply-reset-enumerator-fn]
 // [spec:foma:sem:fomalib.apply-reset-enumerator-fn]
 pub fn apply_reset_enumerator(h: &mut ApplyHandle) {
-    let statecount = h.last_net.as_ref().unwrap().statecount;
+    let statecount = last_net(h).statecount;
     for i in 0..statecount {
         h.marks[i as usize] = 0;
     }
@@ -668,7 +673,7 @@ pub fn apply_clear_index_list(h: &ApplyHandle, index: &mut [Option<Box<ApplyStat
     // C walks each state's sigma_size cell array freeing overflow nodes while
     // avoiding the shared EPSILON tail. Here each state's chain is a plain
     // owned list; dropping it frees everything. Kept for id fidelity.
-    let statecount = h.last_net.as_ref().unwrap().statecount;
+    let statecount = last_net(h).statecount;
     for i in 0..statecount as usize {
         if i < index.len() {
             index[i] = None;
@@ -705,7 +710,7 @@ pub fn apply_index(
     if flags_only != 0 && h.has_flags == 0 {
         return;
     }
-    let net = h.last_net.as_ref().unwrap();
+    let net = last_net(h);
     let statecount = net.statecount;
     let states = net.states.clone();
 
@@ -948,8 +953,7 @@ pub fn apply_follow_next_arc(h: &mut ApplyHandle) -> bool {
     let mut marktarget: i32;
 
     if h.state_has_index != 0 {
-        while h.iptr.is_some() && h.iptr.as_ref().unwrap().fsmptr != -1 {
-            let fsmptr = h.iptr.as_ref().unwrap().fsmptr;
+        while let Some(fsmptr) = h.iptr.as_deref().map(|i| i.fsmptr).filter(|&f| f != -1) {
             h.ptr = fsmptr;
             h.curr_ptr = fsmptr;
             if (h.mode & DOWN) == DOWN {
@@ -994,7 +998,7 @@ pub fn apply_follow_next_arc(h: &mut ApplyHandle) -> bool {
                     return true;
                 }
             }
-            h.iptr = h.iptr.as_ref().unwrap().next.clone();
+            h.iptr = h.iptr.as_deref().and_then(|i| i.next.clone());
         }
         return false;
     } else if (h.binsearch != 0 && h.has_flags == 0)
@@ -1159,9 +1163,11 @@ pub fn apply_mark_state(h: &mut ApplyHandle) {
 // [spec:foma:def:apply.apply-skip-this-arc-fn]
 // [spec:foma:sem:apply.apply-skip-this-arc-fn]
 pub fn apply_skip_this_arc(h: &mut ApplyHandle) {
-    if h.iptr.is_some() {
-        h.ptr = h.iptr.as_ref().unwrap().fsmptr;
-        h.iptr = h.iptr.as_ref().unwrap().next.clone();
+    if let Some(iptr) = h.iptr.as_deref() {
+        let fsmptr = iptr.fsmptr;
+        let next = iptr.next.clone();
+        h.ptr = fsmptr;
+        h.iptr = next;
     } else {
         h.ptr += 1;
     }
@@ -1173,8 +1179,11 @@ pub fn apply_at_last_arc(h: &ApplyHandle) -> bool {
     let seeksym: i32;
     let nextsym: i32;
     if h.state_has_index != 0 {
-        let iptr = h.iptr.as_ref().unwrap();
-        if iptr.next.is_none() || iptr.next.as_ref().unwrap().fsmptr == -1 {
+        let iptr = h
+            .iptr
+            .as_deref()
+            .expect("state index active implies iptr present");
+        if iptr.next.as_deref().is_none_or(|n| n.fsmptr == -1) {
             return true;
         }
     } else if (h.binsearch != 0 && h.has_flags == 0)
@@ -1235,11 +1244,10 @@ pub fn apply_set_iptr(h: &mut ApplyHandle) {
     } else {
         h.index_out[stateno as usize].clone()
     };
-    if chain.is_none() {
+    let Some(c) = chain else {
         return;
-    }
+    };
     h.state_has_index = 1;
-    let c = chain.unwrap();
     if c.fsmptr == -1 {
         // A state that is indexed but has no candidate arcs.
         h.iptr = None;
@@ -1574,7 +1582,9 @@ pub fn apply_add_sigma_trie(h: &mut ApplyHandle, number: i32, symbol: &str, len:
         let cell = base + bytes[i] as usize;
         if i == (len as usize - 1) {
             h.sigma_trie[cell].signum = number;
-        } else if h.sigma_trie[cell].next.is_none() {
+        } else if let Some(next) = h.sigma_trie[cell].next.as_ref() {
+            base = next.signum as usize;
+        } else {
             let child_base = h.sigma_trie.len();
             h.sigma_trie.resize(
                 child_base + 256,
@@ -1588,8 +1598,6 @@ pub fn apply_add_sigma_trie(h: &mut ApplyHandle, number: i32, symbol: &str, len:
                 next: None,
             }));
             base = child_base;
-        } else {
-            base = h.sigma_trie[cell].next.as_ref().unwrap().signum as usize;
         }
     }
 }
@@ -1602,9 +1610,9 @@ pub fn apply_mark_flagstates(h: &mut ApplyHandle) {
     }
     // free previous
     h.flagstates = Vec::new();
-    let statecount = h.last_net.as_ref().unwrap().statecount;
+    let statecount = last_net(h).statecount;
     let mut fs = vec![0u8; bitnslots(statecount)];
-    let net = h.last_net.as_ref().unwrap();
+    let net = last_net(h);
     let mut i = 0usize;
     while net.states[i].state_no != -1 {
         let ln = &net.states[i];
@@ -1806,8 +1814,7 @@ pub fn apply_add_flag(h: &mut ApplyHandle, name: Option<String>) {
     // Walk to the tail; if a node's name matches, return unchanged.
     let nm = name.as_deref();
     let mut cur = h.flag_list.as_deref_mut();
-    loop {
-        let node = cur.unwrap();
+    while let Some(node) = cur {
         if node.name.as_deref() == nm {
             return;
         }
@@ -1855,7 +1862,7 @@ pub fn apply_check_flag(
     }
 
     if r#type == FLAG_UNIFY {
-        let flist = flag_find_mut(&mut h.flag_list, name).unwrap();
+        let flist = flag_find_mut(&mut h.flag_list, name).expect("flag not registered");
         if flist.value.is_none() {
             flist.value = value.map(|s| s.to_string());
             return SUCCEED;
@@ -1870,14 +1877,14 @@ pub fn apply_check_flag(
     }
 
     if r#type == FLAG_CLEAR {
-        let flist = flag_find_mut(&mut h.flag_list, name).unwrap();
+        let flist = flag_find_mut(&mut h.flag_list, name).expect("flag not registered");
         flist.value = None;
         flist.neg = 0;
         return SUCCEED;
     }
 
     if r#type == FLAG_DISALLOW {
-        let flist = flag_find_mut(&mut h.flag_list, name).unwrap();
+        let flist = flag_find_mut(&mut h.flag_list, name).expect("flag not registered");
         if flist.value.is_none() {
             return SUCCEED;
         }
@@ -1897,21 +1904,21 @@ pub fn apply_check_flag(
     }
 
     if r#type == FLAG_NEGATIVE {
-        let flist = flag_find_mut(&mut h.flag_list, name).unwrap();
+        let flist = flag_find_mut(&mut h.flag_list, name).expect("flag not registered");
         flist.value = value.map(|s| s.to_string());
         flist.neg = 1;
         return SUCCEED;
     }
 
     if r#type == FLAG_POSITIVE {
-        let flist = flag_find_mut(&mut h.flag_list, name).unwrap();
+        let flist = flag_find_mut(&mut h.flag_list, name).expect("flag not registered");
         flist.value = value.map(|s| s.to_string());
         flist.neg = 0;
         return SUCCEED;
     }
 
     if r#type == FLAG_REQUIRE {
-        let flist = flag_find_mut(&mut h.flag_list, name).unwrap();
+        let flist = flag_find_mut(&mut h.flag_list, name).expect("flag not registered");
         if value.is_none() {
             if flist.value.is_none() {
                 return FAIL;
@@ -1942,7 +1949,7 @@ pub fn apply_check_flag(
                 None => (false, None, 0),
             }
         };
-        let flist = flag_find_immut(&h.flag_list, name).unwrap();
+        let flist = flag_find_immut(&h.flag_list, name).expect("flag not registered");
         let f1_value = flist.value.clone();
         let f1_neg = flist.neg;
 
