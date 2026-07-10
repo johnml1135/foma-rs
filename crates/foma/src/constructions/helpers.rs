@@ -203,11 +203,26 @@ pub fn fsm_mark_fsm_tail(net: Box<Fsm>, marker: &Fsm) -> Box<Fsm> {
     read-only, observably equivalent */
     let mut minh = fsm_read_init(Box::new(marker.clone()));
 
-    let name = inh.net.as_ref().unwrap().name.clone();
+    let name = inh
+        .net
+        .as_ref()
+        .expect("net present until fsm_read_done")
+        .name
+        .clone();
     let mut outh = fsm_construct_init(&name);
-    fsm_construct_copy_sigma(&mut outh, &inh.net.as_ref().unwrap().sigma);
+    fsm_construct_copy_sigma(
+        &mut outh,
+        &inh.net
+            .as_ref()
+            .expect("net present until fsm_read_done")
+            .sigma,
+    );
 
-    let statecount = inh.net.as_ref().unwrap().statecount;
+    let statecount = inh
+        .net
+        .as_ref()
+        .expect("net present until fsm_read_done")
+        .statecount;
     /* calloc — zeroed; 0 means "unset" (fresh numbers start at
     statecount >= 1) */
     let mut mappings: Vec<i32> = vec![0; statecount as usize];
@@ -222,8 +237,12 @@ pub fn fsm_mark_fsm_tail(net: Box<Fsm>, marker: &Fsm) -> Box<Fsm> {
                 mappings[target as usize] = newtarget;
                 fsm_read_reset(Some(&mut minh));
                 while fsm_get_next_arc(&mut minh) != 0 {
-                    let min_in = fsm_get_arc_in(&minh).unwrap().to_string();
-                    let min_out = fsm_get_arc_out(&minh).unwrap().to_string();
+                    let min_in = fsm_get_arc_in(&minh)
+                        .expect("arc label present on the positioned cursor")
+                        .to_string();
+                    let min_out = fsm_get_arc_out(&minh)
+                        .expect("arc label present on the positioned cursor")
+                        .to_string();
                     fsm_construct_add_arc(&mut outh, newtarget, target, &min_in, &min_out);
                 }
                 maxstate += 1;

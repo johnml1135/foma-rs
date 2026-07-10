@@ -31,16 +31,15 @@ pub fn add_to_mergesigma<'a>(
         number = 2;
         msigma
     } else {
-        msigma.next = Some(Box::new(Mergesigma {
+        number = msigma.number;
+        let msigma = msigma.next.insert(Box::new(Mergesigma {
             symbol: None,
             presence: 0,
             number: 0,
             next: None,
         }));
-        number = msigma.number;
-        let msigma = msigma.next.as_deref_mut().unwrap();
         msigma.next = None;
-        msigma
+        msigma.as_mut()
     };
 
     if sigma.number < 3 {

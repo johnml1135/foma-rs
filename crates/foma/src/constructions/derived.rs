@@ -35,8 +35,12 @@ pub fn fsm_letter_machine(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
     let mut outh = fsm_construct_init("name");
 
     while fsm_get_next_arc(&mut inh) != 0 {
-        let in_full = fsm_get_arc_in(&inh).unwrap().to_string();
-        let out_full = fsm_get_arc_out(&inh).unwrap().to_string();
+        let in_full = fsm_get_arc_in(&inh)
+            .expect("arc label present on the positioned cursor")
+            .to_string();
+        let out_full = fsm_get_arc_out(&inh)
+            .expect("arc label present on the positioned cursor")
+            .to_string();
         let innum = fsm_get_arc_num_in(&inh);
         let outnum = fsm_get_arc_num_out(&inh);
         let mut source = fsm_get_arc_source(&inh);
@@ -295,8 +299,12 @@ pub fn fsm_substitute_label(
             while fsm_get_next_arc(&mut subh) != 0 {
                 source = fsm_get_arc_source(&subh);
                 target = fsm_get_arc_target(&subh);
-                let subin = fsm_get_arc_in(&subh).unwrap().to_string();
-                let subout = fsm_get_arc_out(&subh).unwrap().to_string();
+                let subin = fsm_get_arc_in(&subh)
+                    .expect("arc label present on the positioned cursor")
+                    .to_string();
+                let subout = fsm_get_arc_out(&subh)
+                    .expect("arc label present on the positioned cursor")
+                    .to_string();
                 fsm_construct_add_arc(
                     &mut outh,
                     source + addstate1,
@@ -317,13 +325,17 @@ pub fn fsm_substitute_label(
             /* One-sided replace, splice in repsym .x. sub or sub .x. repsym */
         } else if r#in == repsym || out == repsym {
             let subnet2 = if r#in == repsym {
-                let outlabel = fsm_get_arc_out(&inh).unwrap().to_string();
+                let outlabel = fsm_get_arc_out(&inh)
+                    .expect("arc label present on the positioned cursor")
+                    .to_string();
                 fsm_minimize(
                     opts,
                     fsm_cross_product(opts, fsm_copy(substitute), fsm_symbol(&outlabel)),
                 )
             } else {
-                let inlabel = fsm_get_arc_in(&inh).unwrap().to_string();
+                let inlabel = fsm_get_arc_in(&inh)
+                    .expect("arc label present on the positioned cursor")
+                    .to_string();
                 fsm_minimize(
                     opts,
                     fsm_cross_product(opts, fsm_symbol(&inlabel), fsm_copy(substitute)),
@@ -334,8 +346,12 @@ pub fn fsm_substitute_label(
             while fsm_get_next_arc(&mut subh2) != 0 {
                 source = fsm_get_arc_source(&subh2);
                 target = fsm_get_arc_target(&subh2);
-                let subin = fsm_get_arc_in(&subh2).unwrap().to_string();
-                let subout = fsm_get_arc_out(&subh2).unwrap().to_string();
+                let subin = fsm_get_arc_in(&subh2)
+                    .expect("arc label present on the positioned cursor")
+                    .to_string();
+                let subout = fsm_get_arc_out(&subh2)
+                    .expect("arc label present on the positioned cursor")
+                    .to_string();
                 fsm_construct_add_arc(
                     &mut outh,
                     source + addstate1,
@@ -1886,10 +1902,26 @@ pub fn fsm_left_rewr(opts: &FomaOptions, net: Box<Fsm>, rewr: Box<Fsm>) -> Box<F
 
     let mut inh = fsm_read_init(net);
     let sinkstate = fsm_get_num_states(&inh);
-    let name = inh.net.as_ref().unwrap().name.clone();
+    let name = inh
+        .net
+        .as_ref()
+        .expect("net present until fsm_read_done")
+        .name
+        .clone();
     let mut outh = fsm_construct_init(&name);
-    fsm_construct_copy_sigma(&mut outh, &inh.net.as_ref().unwrap().sigma);
-    let mut maxsigma = sigma_max(&inh.net.as_ref().unwrap().sigma);
+    fsm_construct_copy_sigma(
+        &mut outh,
+        &inh.net
+            .as_ref()
+            .expect("net present until fsm_read_done")
+            .sigma,
+    );
+    let mut maxsigma = sigma_max(
+        &inh.net
+            .as_ref()
+            .expect("net present until fsm_read_done")
+            .sigma,
+    );
     maxsigma += 1;
     /* C: malloc'd (uninitialized); initialized to -1 just below */
     let mut sigmatable: Vec<i32> = vec![0; maxsigma as usize];
@@ -1956,10 +1988,26 @@ pub fn fsm_left_rewr(opts: &FomaOptions, net: Box<Fsm>, rewr: Box<Fsm>) -> Box<F
 pub fn fsm_add_sink(net: Box<Fsm>, r#final: i32) -> Box<Fsm> {
     let mut inh = fsm_read_init(net);
     let sinkstate = fsm_get_num_states(&inh);
-    let name = inh.net.as_ref().unwrap().name.clone();
+    let name = inh
+        .net
+        .as_ref()
+        .expect("net present until fsm_read_done")
+        .name
+        .clone();
     let mut outh = fsm_construct_init(&name);
-    fsm_construct_copy_sigma(&mut outh, &inh.net.as_ref().unwrap().sigma);
-    let mut maxsigma = sigma_max(&inh.net.as_ref().unwrap().sigma);
+    fsm_construct_copy_sigma(
+        &mut outh,
+        &inh.net
+            .as_ref()
+            .expect("net present until fsm_read_done")
+            .sigma,
+    );
+    let mut maxsigma = sigma_max(
+        &inh.net
+            .as_ref()
+            .expect("net present until fsm_read_done")
+            .sigma,
+    );
     maxsigma += 1;
     /* C: malloc'd (uninitialized); initialized to -1 just below */
     let mut sigmatable: Vec<i32> = vec![0; maxsigma as usize];
@@ -2024,9 +2072,20 @@ pub fn fsm_add_loop(net: Box<Fsm>, marker: &Fsm, finals: i32) -> Box<Fsm> {
     Rust handle owns a deep copy — read-only, observably equivalent */
     let mut minh = fsm_read_init(Box::new(marker.clone()));
 
-    let name = inh.net.as_ref().unwrap().name.clone();
+    let name = inh
+        .net
+        .as_ref()
+        .expect("net present until fsm_read_done")
+        .name
+        .clone();
     let mut outh = fsm_construct_init(&name);
-    fsm_construct_copy_sigma(&mut outh, &inh.net.as_ref().unwrap().sigma);
+    fsm_construct_copy_sigma(
+        &mut outh,
+        &inh.net
+            .as_ref()
+            .expect("net present until fsm_read_done")
+            .sigma,
+    );
 
     while fsm_get_next_arc(&mut inh) != 0 {
         let (source, target, num_in, num_out) = (
@@ -2047,19 +2106,31 @@ pub fn fsm_add_loop(net: Box<Fsm>, marker: &Fsm, finals: i32) -> Box<Fsm> {
             fsm_construct_set_final(&mut outh, i);
             fsm_read_reset(Some(&mut minh));
             while fsm_get_next_arc(&mut minh) != 0 {
-                let min_in = fsm_get_arc_in(&minh).unwrap().to_string();
-                let min_out = fsm_get_arc_out(&minh).unwrap().to_string();
+                let min_in = fsm_get_arc_in(&minh)
+                    .expect("arc label present on the positioned cursor")
+                    .to_string();
+                let min_out = fsm_get_arc_out(&minh)
+                    .expect("arc label present on the positioned cursor")
+                    .to_string();
                 fsm_construct_add_arc(&mut outh, i, i, &min_in, &min_out);
             }
         }
     } else if finals == 0 || finals == 2 {
-        let statecount = inh.net.as_ref().unwrap().statecount;
+        let statecount = inh
+            .net
+            .as_ref()
+            .expect("net present until fsm_read_done")
+            .statecount;
         for i in 0..statecount {
             if finals == 2 || !fsm_read_is_final(&inh, i) {
                 fsm_read_reset(Some(&mut minh));
                 while fsm_get_next_arc(&mut minh) != 0 {
-                    let min_in = fsm_get_arc_in(&minh).unwrap().to_string();
-                    let min_out = fsm_get_arc_out(&minh).unwrap().to_string();
+                    let min_in = fsm_get_arc_in(&minh)
+                        .expect("arc label present on the positioned cursor")
+                        .to_string();
+                    let min_out = fsm_get_arc_out(&minh)
+                        .expect("arc label present on the positioned cursor")
+                        .to_string();
                     fsm_construct_add_arc(&mut outh, i, i, &min_in, &min_out);
                 }
             }
@@ -2112,21 +2183,19 @@ pub fn fsm_context_restrict(
     /* Also, if any L or R is undeclared we add 0 */
     let mut pairs = lr.as_deref_mut();
     while let Some(p) = pairs {
-        if p.left.is_none() {
-            p.left = Some(fsm_empty_string());
-        } else {
-            let left = p.left.as_deref_mut().unwrap();
+        if let Some(left) = p.left.as_deref_mut() {
             sigma_add("@VARX@", &mut left.sigma);
             sigma_substitute(".#.", "@#@", &mut left.sigma);
             sigma_sort(left);
-        }
-        if p.right.is_none() {
-            p.right = Some(fsm_empty_string());
         } else {
-            let right = p.right.as_deref_mut().unwrap();
+            p.left = Some(fsm_empty_string());
+        }
+        if let Some(right) = p.right.as_deref_mut() {
             sigma_add("@VARX@", &mut right.sigma);
             sigma_substitute(".#.", "@#@", &mut right.sigma);
             sigma_sort(right);
+        } else {
+            p.right = Some(fsm_empty_string());
         }
         pairs = p.next.as_deref_mut();
     }
@@ -2143,7 +2212,11 @@ pub fn fsm_context_restrict(
                     opts,
                     fsm_concat(
                         opts,
-                        fsm_copy(p.left.as_deref_mut().unwrap()),
+                        fsm_copy(
+                            p.left
+                                .as_deref_mut()
+                                .expect("left filled by the preceding pass"),
+                        ),
                         fsm_concat(
                             opts,
                             fsm_copy(&mut var),
@@ -2153,7 +2226,11 @@ pub fn fsm_context_restrict(
                                 fsm_concat(
                                     opts,
                                     fsm_copy(&mut var),
-                                    fsm_copy(p.right.as_deref_mut().unwrap()),
+                                    fsm_copy(
+                                        p.right
+                                            .as_deref_mut()
+                                            .expect("right filled by the preceding pass"),
+                                    ),
                                 ),
                             ),
                         ),
@@ -2255,22 +2332,43 @@ pub fn fsm_flatten(opts: &FomaOptions, net: Box<Fsm>, epsilon: Box<Fsm>) -> Opti
         return None;
     }
     /* strdup(fsm_get_arc_in(eps)) */
-    let epssym = fsm_get_arc_in(&eps).unwrap().to_string();
+    let epssym = fsm_get_arc_in(&eps)
+        .expect("arc label present on the positioned cursor")
+        .to_string();
     let epsilon = fsm_read_done(eps);
 
-    let name = inh.net.as_ref().unwrap().name.clone();
+    let name = inh
+        .net
+        .as_ref()
+        .expect("net present until fsm_read_done")
+        .name
+        .clone();
     let mut outh = fsm_construct_init(&name);
-    let mut maxstate = inh.net.as_ref().unwrap().statecount;
+    let mut maxstate = inh
+        .net
+        .as_ref()
+        .expect("net present until fsm_read_done")
+        .statecount;
 
-    fsm_construct_copy_sigma(&mut outh, &inh.net.as_ref().unwrap().sigma);
+    fsm_construct_copy_sigma(
+        &mut outh,
+        &inh.net
+            .as_ref()
+            .expect("net present until fsm_read_done")
+            .sigma,
+    );
 
     while fsm_get_next_arc(&mut inh) != 0 {
         let target = fsm_get_arc_target(&inh);
         let r#in = fsm_get_arc_num_in(&inh);
         let out = fsm_get_arc_num_out(&inh);
         if r#in == EPSILON || out == EPSILON {
-            let mut instring = fsm_get_arc_in(&inh).unwrap().to_string();
-            let mut outstring = fsm_get_arc_out(&inh).unwrap().to_string();
+            let mut instring = fsm_get_arc_in(&inh)
+                .expect("arc label present on the positioned cursor")
+                .to_string();
+            let mut outstring = fsm_get_arc_out(&inh)
+                .expect("arc label present on the positioned cursor")
+                .to_string();
             if r#in == EPSILON {
                 instring = epssym.clone();
             }
@@ -2319,9 +2417,20 @@ pub fn fsm_flatten(opts: &FomaOptions, net: Box<Fsm>, epsilon: Box<Fsm>) -> Opti
 // [spec:foma:sem:fomalib.fsm-close-sigma-fn]
 pub fn fsm_close_sigma(opts: &FomaOptions, net: Box<Fsm>, mode: i32) -> Box<Fsm> {
     let mut inh = fsm_read_init(net);
-    let name = inh.net.as_ref().unwrap().name.clone();
+    let name = inh
+        .net
+        .as_ref()
+        .expect("net present until fsm_read_done")
+        .name
+        .clone();
     let mut newh = fsm_construct_init(&name);
-    fsm_construct_copy_sigma(&mut newh, &inh.net.as_ref().unwrap().sigma);
+    fsm_construct_copy_sigma(
+        &mut newh,
+        &inh.net
+            .as_ref()
+            .expect("net present until fsm_read_done")
+            .sigma,
+    );
 
     while fsm_get_next_arc(&mut inh) != 0 {
         let num_in = fsm_get_arc_num_in(&inh);
