@@ -19,10 +19,10 @@ pub(crate) use crate::dynarray::{
     fsm_construct_add_arc, fsm_construct_add_arc_nums, fsm_construct_copy_sigma,
     fsm_construct_done, fsm_construct_init, fsm_construct_set_final, fsm_construct_set_initial,
     fsm_get_arc_in, fsm_get_arc_num_in, fsm_get_arc_num_out, fsm_get_arc_out, fsm_get_arc_source,
-    fsm_get_arc_target, fsm_get_next_arc, fsm_get_next_final, fsm_get_next_initial,
-    fsm_get_next_state, fsm_get_next_state_arc, fsm_get_num_states, fsm_get_symbol_number,
-    fsm_read_done, fsm_read_init, fsm_read_is_final, fsm_read_reset, fsm_state_add_arc,
-    fsm_state_close, fsm_state_end_state, fsm_state_init, fsm_state_set_current_state,
+    fsm_get_arc_target, fsm_get_next_arc, fsm_get_next_final, fsm_get_next_state,
+    fsm_get_next_state_arc, fsm_get_num_states, fsm_get_symbol_number, fsm_read_done,
+    fsm_read_init, fsm_read_is_final, fsm_read_reset, fsm_state_add_arc, fsm_state_close,
+    fsm_state_end_state, fsm_state_init, fsm_state_set_current_state,
 };
 pub(crate) use crate::extract::{fsm_lower, fsm_upper};
 pub(crate) use crate::flags::flag_check;

@@ -1157,6 +1157,58 @@ pub fn fsm_get_next_final(handle: &mut FsmReadHandle) -> i32 {
     handle.finals_head[cursor]
 }
 
+/* ------------------------------------------------------------------ */
+/* Idiomatic iterator front-ends (additive sugar)                     */
+/* ------------------------------------------------------------------ */
+
+/* Which -1-terminated cursor family a ReadIter drives. */
+#[derive(Clone, Copy)]
+enum ReadWhich {
+    Finals,
+    Initials,
+}
+
+/// Lazy iterator over a read handle's final (or initial) state numbers.
+/// Each `next()` drives the existing C-shaped `fsm_get_next_final` /
+/// `fsm_get_next_initial` cursor protocol, yielding state numbers until the
+/// underlying function returns the `-1` terminator. Pure sugar over the
+/// cursor walk — it adds no new traversal behaviour, so
+/// `for s in handle.finals() { ... }` is exactly the `loop { let s =
+/// fsm_get_next_final(h); if s == -1 { break } ... }` idiom.
+pub struct ReadIter<'a> {
+    handle: &'a mut FsmReadHandle,
+    which: ReadWhich,
+}
+
+impl Iterator for ReadIter<'_> {
+    type Item = i32;
+    fn next(&mut self) -> Option<i32> {
+        let s = match self.which {
+            ReadWhich::Finals => fsm_get_next_final(self.handle),
+            ReadWhich::Initials => fsm_get_next_initial(self.handle),
+        };
+        if s == -1 { None } else { Some(s) }
+    }
+}
+
+impl FsmReadHandle {
+    /// Yield each final state number (drives `fsm_get_next_final`).
+    pub fn finals(&mut self) -> ReadIter<'_> {
+        ReadIter {
+            handle: self,
+            which: ReadWhich::Finals,
+        }
+    }
+
+    /// Yield each initial state number (drives `fsm_get_next_initial`).
+    pub fn initials(&mut self) -> ReadIter<'_> {
+        ReadIter {
+            handle: self,
+            which: ReadWhich::Initials,
+        }
+    }
+}
+
 // [spec:foma:def:dynarray.fsm-get-num-states-fn]
 // [spec:foma:sem:dynarray.fsm-get-num-states-fn]
 // [spec:foma:def:fomalib.fsm-get-num-states-fn]

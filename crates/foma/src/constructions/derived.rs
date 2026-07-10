@@ -137,18 +137,10 @@ pub fn fsm_letter_machine(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
             fsm_construct_add_arc(&mut outh, source, target, &in_full, &out_full);
         }
     }
-    loop {
-        let i = fsm_get_next_final(&mut inh);
-        if i == -1 {
-            break;
-        }
+    for i in inh.finals() {
         fsm_construct_set_final(&mut outh, i);
     }
-    loop {
-        let i = fsm_get_next_initial(&mut inh);
-        if i == -1 {
-            break;
-        }
+    for i in inh.initials() {
         fsm_construct_set_initial(&mut outh, i);
     }
     drop(fsm_read_done(inh));
@@ -377,18 +369,10 @@ pub fn fsm_substitute_label(
         }
     }
 
-    loop {
-        let i = fsm_get_next_final(&mut inh);
-        if i == -1 {
-            break;
-        }
+    for i in inh.finals() {
         fsm_construct_set_final(&mut outh, i);
     }
-    loop {
-        let i = fsm_get_next_initial(&mut inh);
-        if i == -1 {
-            break;
-        }
+    for i in inh.initials() {
         fsm_construct_set_initial(&mut outh, i);
     }
     let _ = fsm_read_done(inh);
@@ -2039,11 +2023,7 @@ pub fn fsm_add_sink(net: Box<Fsm>, r#final: i32) -> Box<Fsm> {
         fsm_construct_add_arc_nums(&mut outh, sinkstate, sinkstate, i, i);
     }
 
-    loop {
-        let i = fsm_get_next_final(&mut inh);
-        if i == -1 {
-            break;
-        }
+    for i in inh.finals() {
         fsm_construct_set_final(&mut outh, i);
     }
     if r#final == 1 {
@@ -2136,11 +2116,7 @@ pub fn fsm_add_loop(net: Box<Fsm>, marker: &Fsm, finals: i32) -> Box<Fsm> {
             }
         }
     }
-    loop {
-        let i = fsm_get_next_final(&mut inh);
-        if i == -1 {
-            break;
-        }
+    for i in inh.finals() {
         fsm_construct_set_final(&mut outh, i);
     }
     fsm_construct_set_initial(&mut outh, 0);
@@ -2386,18 +2362,10 @@ pub fn fsm_flatten(opts: &FomaOptions, net: Box<Fsm>, epsilon: Box<Fsm>) -> Opti
         }
         maxstate += 1;
     }
-    loop {
-        let i = fsm_get_next_final(&mut inh);
-        if i == -1 {
-            break;
-        }
+    for i in inh.finals() {
         fsm_construct_set_final(&mut outh, i);
     }
-    loop {
-        let i = fsm_get_next_initial(&mut inh);
-        if i == -1 {
-            break;
-        }
+    for i in inh.initials() {
         fsm_construct_set_initial(&mut outh, i);
     }
 
@@ -2442,18 +2410,10 @@ pub fn fsm_close_sigma(opts: &FomaOptions, net: Box<Fsm>, mode: i32) -> Box<Fsm>
             fsm_construct_add_arc_nums(&mut newh, source, target, num_in, num_out);
         }
     }
-    loop {
-        let i = fsm_get_next_final(&mut inh);
-        if i == -1 {
-            break;
-        }
+    for i in inh.finals() {
         fsm_construct_set_final(&mut newh, i);
     }
-    loop {
-        let i = fsm_get_next_initial(&mut inh);
-        if i == -1 {
-            break;
-        }
+    for i in inh.initials() {
         fsm_construct_set_initial(&mut newh, i);
     }
     let net = fsm_read_done(inh);

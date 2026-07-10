@@ -11,8 +11,7 @@
 use crate::dynarray::{
     fsm_construct_add_arc_nums, fsm_construct_copy_sigma, fsm_construct_done, fsm_construct_init,
     fsm_construct_set_final, fsm_construct_set_initial, fsm_get_arc_num_in, fsm_get_arc_num_out,
-    fsm_get_arc_source, fsm_get_arc_target, fsm_get_next_arc, fsm_get_next_final,
-    fsm_get_next_initial, fsm_read_done, fsm_read_init,
+    fsm_get_arc_source, fsm_get_arc_target, fsm_get_next_arc, fsm_read_done, fsm_read_init,
 };
 #[cfg(test)]
 use crate::options::FomaOptions;
@@ -49,19 +48,10 @@ pub fn fsm_reverse(net: Box<Fsm>) -> Box<Fsm> {
         fsm_construct_add_arc_nums(&mut revh, target + 1, source + 1, num_in, num_out);
     }
 
-    let mut i;
-    loop {
-        i = fsm_get_next_final(&mut inh);
-        if i == -1 {
-            break;
-        }
+    for i in inh.finals() {
         fsm_construct_add_arc_nums(&mut revh, 0, i + 1, EPSILON, EPSILON);
     }
-    loop {
-        i = fsm_get_next_initial(&mut inh);
-        if i == -1 {
-            break;
-        }
+    for i in inh.initials() {
         fsm_construct_set_final(&mut revh, i + 1);
     }
     fsm_construct_set_initial(&mut revh, 0);
