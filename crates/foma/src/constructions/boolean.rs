@@ -464,6 +464,7 @@ pub fn fsm_complement(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
 // [spec:foma:def:fomalib.fsm-minus-fn]
 // [spec:foma:sem:fomalib.fsm-minus-fn]
 pub fn fsm_minus(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm> {
+    let mut int_stack = IntStack::new();
     let mut statecount = 0;
 
     let mut net1 = fsm_minimize(opts, net1);
@@ -476,10 +477,10 @@ pub fn fsm_minus(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm>
 
     /* new state 0 = {1,1} */
 
-    int_stack_clear();
+    int_stack.clear();
     /* STACK_2_PUSH(1,1) */
-    int_stack_push(1);
-    int_stack_push(1);
+    int_stack.push(1);
+    int_stack.push(1);
 
     let mut th = triplet_hash_init();
     triplet_hash_insert(&mut th, 1, 1, 0);
@@ -487,14 +488,14 @@ pub fn fsm_minus(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm>
     let point_a = init_state_pointers(&net1.states);
     let point_b = init_state_pointers(&net2.states);
 
-    fsm_state_init(sigma_max(net1.sigma.as_deref()));
+    let mut builder = fsm_state_init(sigma_max(net1.sigma.as_deref()));
 
-    while int_stack_isempty() == 0 {
+    while !int_stack.is_empty() {
         statecount += 1;
         /* Get a pair of states to examine */
 
-        let mut a = int_stack_pop();
-        let mut b = int_stack_pop();
+        let mut a = int_stack.pop();
+        let mut b = int_stack.pop();
 
         let current_state = triplet_hash_find(&th, a, b, 0);
         a -= 1;
@@ -514,7 +515,7 @@ pub fn fsm_minus(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm>
             };
         }
 
-        fsm_state_set_current_state(current_state, current_final, current_start);
+        fsm_state_set_current_state(&mut builder, current_state, current_final, current_start);
 
         let mut ai = point_a[a as usize].transitions;
         while net1.states[ai].state_no == a {
@@ -528,8 +529,8 @@ pub fn fsm_minus(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm>
                 let found = triplet_hash_find(&th, atarget + 1, 0, 0);
                 if found == -1 {
                     /* STACK_2_PUSH(0, (machine_a->target)+1) */
-                    int_stack_push(0);
-                    int_stack_push(atarget + 1);
+                    int_stack.push(0);
+                    int_stack.push(atarget + 1);
                     target_number = triplet_hash_insert(&mut th, atarget + 1, 0, 0);
                 } else {
                     target_number = found;
@@ -554,8 +555,8 @@ pub fn fsm_minus(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm>
                     let found = triplet_hash_find(&th, atarget + 1, btarget + 1, 0);
                     if found == -1 {
                         /* STACK_2_PUSH(btarget+1, (machine_a->target)+1) */
-                        int_stack_push(btarget + 1);
-                        int_stack_push(atarget + 1);
+                        int_stack.push(btarget + 1);
+                        int_stack.push(atarget + 1);
                         /* C inserts (machine_b->target)+1, which equals
                         btarget+1 (the scan broke at the matching line) */
                         let mbtarget = net2.states[bi].target;
@@ -569,8 +570,8 @@ pub fn fsm_minus(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm>
                     let found = triplet_hash_find(&th, atarget + 1, 0, 0);
                     if found == -1 {
                         /* STACK_2_PUSH(0, (machine_a->target)+1) */
-                        int_stack_push(0);
-                        int_stack_push(atarget + 1);
+                        int_stack.push(0);
+                        int_stack.push(atarget + 1);
                         target_number = triplet_hash_insert(&mut th, atarget + 1, 0, 0);
                     } else {
                         target_number = found;
@@ -579,6 +580,7 @@ pub fn fsm_minus(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm>
             }
             let (line_in, line_out) = (net1.states[ai].r#in as i32, net1.states[ai].out as i32);
             fsm_state_add_arc(
+                &mut builder,
                 current_state,
                 line_in,
                 line_out,
@@ -588,13 +590,13 @@ pub fn fsm_minus(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm>
             );
             ai += 1;
         }
-        fsm_state_end_state();
+        fsm_state_end_state(&mut builder);
     }
 
     let _ = statecount;
     /* free(net1->states) */
     net1.states = Vec::new();
-    fsm_state_close(&mut net1);
+    fsm_state_close(&mut builder, &mut net1);
     /* free(point_a); free(point_b) */
     drop(point_a);
     drop(point_b);

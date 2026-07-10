@@ -628,6 +628,10 @@ pub struct ApplyHandle {
 
     /// C: malloc'd array of apply_stack_top entries
     pub searchstack: Vec<Searchstack>,
+
+    /// C read the process-global libc `rand()` state, which `apply_init`
+    /// seeds with `srand(time(NULL))`; the handle owns that LCG here.
+    pub lcg: crate::dynarray::Lcg,
 }
 
 /* ------------------------------------------------------------------ */

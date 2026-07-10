@@ -10,7 +10,6 @@
 //! each `+1`-bumped) and pruned obsolete memory-hazard DEVIATION notes.
 
 use crate::options::FomaOptions;
-use std::cell::RefCell;
 
 use crate::constructions::{
     add_fsm_arc, fsm_compact, fsm_complement, fsm_compose, fsm_concat, fsm_contains, fsm_count,
@@ -22,7 +21,7 @@ use crate::dynarray::{
     fsm_state_set_current_state,
 };
 use crate::extract::fsm_upper;
-use crate::int_stack::{ptr_stack_clear, ptr_stack_isempty, ptr_stack_pop, ptr_stack_push};
+use crate::int_stack::PtrStack;
 use crate::minimize::fsm_minimize;
 use crate::sigma::{
     sigma_add, sigma_cleanup, sigma_copy, sigma_create, sigma_max, sigma_remove, sigma_size,
@@ -34,9 +33,13 @@ use crate::types::{
     MINOR_VERSION, NO, OP_IGNORE_ALL, STATUS_VERSION, Sigma, StateArray, UNKNOWN, YES,
 };
 
-thread_local! {
-    // C: static struct defined_quantifiers *quantifiers;
-    static QUANTIFIERS: RefCell<Option<Box<DefinedQuantifiers>>> = const { RefCell::new(None) };
+/// The parse-scoped quantifier symbol table C kept in the file-static
+/// `struct defined_quantifiers *quantifiers`. In C the lexer's `∀`/`∃`
+/// productions populate it during a parse and regex.y clears it per parse;
+/// the caller owns one and threads it through the quantifier functions.
+#[derive(Debug, Default)]
+pub struct Quantifiers {
+    head: Option<Box<DefinedQuantifiers>>,
 }
 // C: struct _fsm_options fsm_options; — the non-static zero-initialized global
 // (extern'd via foma.h) is a FomaOptions field now (skip_word_boundary_marker).
@@ -197,23 +200,23 @@ pub fn fsm_sigma_net(net: Box<Fsm>) -> Box<Fsm> {
         return fsm_empty_set();
     }
 
-    fsm_state_init(sigma_max(net.sigma.as_deref()));
-    fsm_state_set_current_state(0, 0, 1);
+    let mut builder = fsm_state_init(sigma_max(net.sigma.as_deref()));
+    fsm_state_set_current_state(&mut builder, 0, 0, 1);
     let mut pathcount: i32 = 0;
     let mut sig = net.sigma.as_deref();
     while let Some(s) = sig {
         if s.number >= 3 || s.number == IDENTITY {
             pathcount += 1;
-            fsm_state_add_arc(0, s.number, s.number, 1, 0, 1);
+            fsm_state_add_arc(&mut builder, 0, s.number, s.number, 1, 0, 1);
         }
         sig = s.next.as_deref();
     }
-    fsm_state_end_state();
-    fsm_state_set_current_state(1, 1, 0);
-    fsm_state_end_state();
+    fsm_state_end_state(&mut builder);
+    fsm_state_set_current_state(&mut builder, 1, 1, 0);
+    fsm_state_end_state(&mut builder);
     /* free(net->states) */
     net.states = Vec::new();
-    fsm_state_close(&mut net);
+    fsm_state_close(&mut builder, &mut net);
     net.is_minimized = YES;
     net.is_loop_free = YES;
     net.pathcount = pathcount as i64;
@@ -233,8 +236,8 @@ pub fn fsm_sigma_pairs_net(net: Box<Fsm>) -> Box<Fsm> {
     /* calloc(smax*smax, sizeof(char)) */
     let mut pairs: Vec<i8> = vec![0; (smax * smax) as usize];
 
-    fsm_state_init(sigma_max(net.sigma.as_deref()));
-    fsm_state_set_current_state(0, 0, 1);
+    let mut builder = fsm_state_init(sigma_max(net.sigma.as_deref()));
+    fsm_state_set_current_state(&mut builder, 0, 0, 1);
     let mut pathcount: i32 = 0;
     let mut i: usize = 0;
     while net.states[i].state_no != -1 {
@@ -245,21 +248,21 @@ pub fn fsm_sigma_pairs_net(net: Box<Fsm>) -> Box<Fsm> {
         let r#in: i16 = net.states[i].r#in;
         let out: i16 = net.states[i].out;
         if pairs[(smax * r#in as i32 + out as i32) as usize] == 0 {
-            fsm_state_add_arc(0, r#in as i32, out as i32, 1, 0, 1);
+            fsm_state_add_arc(&mut builder, 0, r#in as i32, out as i32, 1, 0, 1);
             pairs[(smax * r#in as i32 + out as i32) as usize] = 1;
             pathcount += 1;
         }
         i += 1;
     }
-    fsm_state_end_state();
-    fsm_state_set_current_state(1, 1, 0);
-    fsm_state_end_state();
+    fsm_state_end_state(&mut builder);
+    fsm_state_set_current_state(&mut builder, 1, 1, 0);
+    fsm_state_end_state(&mut builder);
 
     /* free(pairs); free(net->states) */
     drop(pairs);
     net.states = Vec::new();
 
-    fsm_state_close(&mut net);
+    fsm_state_close(&mut builder, &mut net);
     if pathcount == 0 {
         fsm_destroy(net);
         return fsm_empty_set();
@@ -686,8 +689,10 @@ pub fn fsm_isidentity(opts: &FomaOptions, net: &mut Fsm) -> i32 {
         num_states as usize
     ];
     let state_array = map_firstlines(&tmp);
-    ptr_stack_clear();
-    ptr_stack_push(state_array[0].transitions);
+    /* C: ptr_stack_clear() to reset the shared stack — a fresh owned stack is
+    already empty */
+    let mut ptr_stack = PtrStack::new();
+    ptr_stack.push(state_array[0].transitions);
 
     /* C function-scope locals (factor/newlength keep their values across
     iterations; startfrom is always assigned before use) */
@@ -696,8 +701,8 @@ pub fn fsm_isidentity(opts: &FomaOptions, net: &mut Fsm) -> i32 {
     let mut startfrom: i32 = 0;
     let mut failed = false;
 
-    'stack_loop: while ptr_stack_isempty() == 0 {
-        let mut curr_ptr = ptr_stack_pop();
+    'stack_loop: while !ptr_stack.is_empty() {
+        let mut curr_ptr = ptr_stack.pop();
 
         'nopop: loop {
             let v = tmp.states[curr_ptr].state_no; /* source state number */
@@ -813,7 +818,7 @@ pub fn fsm_isidentity(opts: &FomaOptions, net: &mut Fsm) -> i32 {
                 break 'stack_loop;
             }
             if tmp.states[curr_ptr].state_no == tmp.states[curr_ptr + 1].state_no {
-                ptr_stack_push(curr_ptr + 1);
+                ptr_stack.push(curr_ptr + 1);
             }
             if discrepancy[vp as usize].visited {
                 /* C: //free(newstring); (commented out upstream) */
@@ -844,7 +849,7 @@ pub fn fsm_isidentity(opts: &FomaOptions, net: &mut Fsm) -> i32 {
     /* success/fail epilogues: free(state_array); free(discrepancy);
     fsm_destroy(tmp); (C also freed the last newstring) — all drops here */
     if failed {
-        ptr_stack_clear();
+        ptr_stack.clear();
         fsm_destroy(tmp);
         return 0;
     }
@@ -1014,8 +1019,9 @@ pub fn fsm_extract_nonidentity(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
         num_states as usize
     ];
     let state_array = map_firstlines(&net);
-    /* no ptr_stack_clear() beforehand, unlike fsm_isidentity */
-    ptr_stack_push(state_array[0].transitions);
+    /* no ptr_stack.clear() beforehand, unlike fsm_isidentity */
+    let mut ptr_stack = PtrStack::new();
+    ptr_stack.push(state_array[0].transitions);
 
     /* C function-scope locals (factor/newlength keep their values across
     iterations; startfrom is always assigned before use) */
@@ -1023,8 +1029,8 @@ pub fn fsm_extract_nonidentity(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
     let mut newlength: i32 = 1;
     let mut startfrom: i32 = 0;
 
-    while ptr_stack_isempty() == 0 {
-        let mut curr_ptr = ptr_stack_pop();
+    while !ptr_stack.is_empty() {
+        let mut curr_ptr = ptr_stack.pop();
 
         'nopop: loop {
             let failed = 'body: {
@@ -1131,7 +1137,7 @@ pub fn fsm_extract_nonidentity(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
                     break 'body true;
                 }
                 if net.states[curr_ptr].state_no == net.states[curr_ptr + 1].state_no {
-                    ptr_stack_push(curr_ptr + 1);
+                    ptr_stack.push(curr_ptr + 1);
                 }
 
                 if discrepancy[vp as usize].visited {
@@ -1164,13 +1170,13 @@ pub fn fsm_extract_nonidentity(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
                 is a redundant re-traversal, as in C) */
                 net.states[curr_ptr].out = killnum as i16;
                 if net.states[curr_ptr].state_no == net.states[curr_ptr + 1].state_no {
-                    ptr_stack_push(curr_ptr + 1);
+                    ptr_stack.push(curr_ptr + 1);
                 }
             }
             break 'nopop;
         }
     }
-    ptr_stack_clear();
+    ptr_stack.clear();
     sigma_sort(&mut net);
     let mut net2 = fsm_upper(fsm_compose(
         opts,
@@ -1258,61 +1264,55 @@ pub fn find_arccount(fsm: &[FsmState]) -> i32 {
 // [spec:foma:sem:structures.clear-quantifiers-fn]
 // [spec:foma:def:foma.clear-quantifiers-fn]
 // [spec:foma:sem:foma.clear-quantifiers-fn]
-pub fn clear_quantifiers() {
+pub fn clear_quantifiers(quantifiers: &mut Quantifiers) {
     /* C sets the head to NULL without freeing the nodes (deliberate leak);
     the owned list here is dropped — observably equivalent */
-    QUANTIFIERS.with(|qs| *qs.borrow_mut() = None);
+    quantifiers.head = None;
 }
 
 // [spec:foma:def:structures.count-quantifiers-fn]
 // [spec:foma:sem:structures.count-quantifiers-fn]
 // [spec:foma:def:foma.count-quantifiers-fn]
 // [spec:foma:sem:foma.count-quantifiers-fn]
-pub fn count_quantifiers() -> i32 {
-    QUANTIFIERS.with(|qs| {
-        let qs = qs.borrow();
-        let mut i: i32 = 0;
-        let mut q = qs.as_deref();
-        while let Some(node) = q {
-            i += 1;
-            q = node.next.as_deref();
-        }
-        i
-    })
+pub fn count_quantifiers(quantifiers: &Quantifiers) -> i32 {
+    let mut i: i32 = 0;
+    let mut q = quantifiers.head.as_deref();
+    while let Some(node) = q {
+        i += 1;
+        q = node.next.as_deref();
+    }
+    i
 }
 
 // [spec:foma:def:structures.add-quantifier-fn]
 // [spec:foma:sem:structures.add-quantifier-fn]
 // [spec:foma:def:foma.add-quantifier-fn]
 // [spec:foma:sem:foma.add-quantifier-fn]
-pub fn add_quantifier(string: &str) {
+pub fn add_quantifier(quantifiers: &mut Quantifiers, string: &str) {
     /* no duplicate check: adding the same name twice creates two nodes */
-    QUANTIFIERS.with(|qs| {
-        let mut qs = qs.borrow_mut();
-        if qs.is_none() {
-            *qs = Some(Box::new(DefinedQuantifiers {
-                name: Some(string.to_string()),
-                next: None,
-            }));
-        } else {
-            /* walk to the tail node (next == NULL) */
-            let mut q = qs.as_deref_mut().unwrap();
-            while q.next.is_some() {
-                q = q.next.as_deref_mut().unwrap();
-            }
-            q.next = Some(Box::new(DefinedQuantifiers {
-                name: Some(string.to_string()),
-                next: None,
-            }));
+    if quantifiers.head.is_none() {
+        quantifiers.head = Some(Box::new(DefinedQuantifiers {
+            name: Some(string.to_string()),
+            next: None,
+        }));
+    } else {
+        /* walk to the tail node (next == NULL) */
+        let mut q = quantifiers.head.as_deref_mut().unwrap();
+        while q.next.is_some() {
+            q = q.next.as_deref_mut().unwrap();
         }
-    });
+        q.next = Some(Box::new(DefinedQuantifiers {
+            name: Some(string.to_string()),
+            next: None,
+        }));
+    }
 }
 
 // [spec:foma:def:structures.union-quantifiers-fn]
 // [spec:foma:sem:structures.union-quantifiers-fn+1]
 // [spec:foma:def:foma.union-quantifiers-fn]
 // [spec:foma:sem:foma.union-quantifiers-fn+1]
-pub fn union_quantifiers() -> Box<Fsm> {
+pub fn union_quantifiers(quantifiers: &Quantifiers) -> Box<Fsm> {
     /*     We create a FSM that simply accepts the union of all */
     /*     quantifier symbols */
 
@@ -1321,21 +1321,18 @@ pub fn union_quantifiers() -> Box<Fsm> {
 
     let mut syms: i32 = 0;
     let mut symlo: i32 = 0;
-    QUANTIFIERS.with(|qs| {
-        let qs = qs.borrow();
-        let mut q = qs.as_deref();
-        while let Some(node) = q {
-            let s = sigma_add(
-                node.name.as_deref().unwrap(),
-                net.sigma.as_deref_mut().unwrap(),
-            );
-            if symlo == 0 {
-                symlo = s;
-            }
-            syms += 1;
-            q = node.next.as_deref();
+    let mut q = quantifiers.head.as_deref();
+    while let Some(node) = q {
+        let s = sigma_add(
+            node.name.as_deref().unwrap(),
+            net.sigma.as_deref_mut().unwrap(),
+        );
+        if symlo == 0 {
+            symlo = s;
         }
-    });
+        syms += 1;
+        q = node.next.as_deref();
+    }
     /* C: malloc((syms+1) lines), uninitialized; written below */
     net.states = vec![
         FsmState {
@@ -1369,50 +1366,43 @@ pub fn union_quantifiers() -> Box<Fsm> {
 // [spec:foma:sem:structures.find-quantifier-fn]
 // [spec:foma:def:foma.find-quantifier-fn]
 // [spec:foma:sem:foma.find-quantifier-fn]
-pub fn find_quantifier(string: &str) -> Option<String> {
-    QUANTIFIERS.with(|qs| {
-        let qs = qs.borrow();
-        let mut q = qs.as_deref();
-        while let Some(node) = q {
-            if string == node.name.as_deref().unwrap() {
-                /* C returns the node's own name pointer (the caller must
-                not free or mutate it); the thread_local list cannot be
-                borrowed out of the closure, so an owned clone is returned
-                (observably equivalent) */
-                return node.name.clone();
-            }
-            q = node.next.as_deref();
+pub fn find_quantifier(quantifiers: &Quantifiers, string: &str) -> Option<String> {
+    let mut q = quantifiers.head.as_deref();
+    while let Some(node) = q {
+        if string == node.name.as_deref().unwrap() {
+            /* C returns the node's own name pointer (the caller must not free
+            or mutate it); an owned clone is returned here (observably
+            equivalent) */
+            return node.name.clone();
         }
-        None
-    })
+        q = node.next.as_deref();
+    }
+    None
 }
 
 // [spec:foma:def:structures.purge-quantifier-fn]
 // [spec:foma:sem:structures.purge-quantifier-fn+1]
 // [spec:foma:def:foma.purge-quantifier-fn]
 // [spec:foma:sem:foma.purge-quantifier-fn+1]
-pub fn purge_quantifier(string: &str) {
+pub fn purge_quantifier(quantifiers: &mut Quantifiers, string: &str) {
     /* Wave 4 fix: the C walked with a trailing q_prev pointer that advanced
     onto the node it had just unlinked, so of two CONSECUTIVE matching nodes
     only the first left the live list (the second unlink wrote into the
     already-removed node). This removes EVERY matching node — the evident
     intent. (C leaked the removed nodes and their names; dropped here.) */
-    QUANTIFIERS.with(|qs| {
-        let mut qs = qs.borrow_mut();
-        let mut q: &mut Option<Box<DefinedQuantifiers>> = &mut qs;
-        loop {
-            let matched = match q.as_deref() {
-                None => break,
-                Some(node) => string == node.name.as_deref().unwrap(),
-            };
-            if matched {
-                let node = q.take().unwrap();
-                *q = node.next;
-            } else {
-                q = &mut q.as_deref_mut().unwrap().next;
-            }
+    let mut q: &mut Option<Box<DefinedQuantifiers>> = &mut quantifiers.head;
+    loop {
+        let matched = match q.as_deref() {
+            None => break,
+            Some(node) => string == node.name.as_deref().unwrap(),
+        };
+        if matched {
+            let node = q.take().unwrap();
+            *q = node.next;
+        } else {
+            q = &mut q.as_deref_mut().unwrap().next;
         }
-    });
+    }
 }
 
 // [spec:foma:def:structures.fsm-quantifier-fn]
@@ -1444,7 +1434,12 @@ pub fn fsm_quantifier(opts: &FomaOptions, string: &str) -> Box<Fsm> {
 // [spec:foma:sem:structures.fsm-logical-precedence-fn]
 // [spec:foma:def:fomalib.fsm-logical-precedence-fn]
 // [spec:foma:sem:fomalib.fsm-logical-precedence-fn]
-pub fn fsm_logical_precedence(opts: &FomaOptions, string1: &str, string2: &str) -> Box<Fsm> {
+pub fn fsm_logical_precedence(
+    opts: &FomaOptions,
+    quantifiers: &Quantifiers,
+    string1: &str,
+    string2: &str,
+) -> Box<Fsm> {
     /* x < y = \y* x \y* [x | y Q* x] ?* */
     /*          1  2  3        4           5 */
 
@@ -1465,7 +1460,7 @@ pub fn fsm_logical_precedence(opts: &FomaOptions, string1: &str, string2: &str) 
                         fsm_concat(
                             opts,
                             fsm_symbol(string2),
-                            fsm_concat(opts, union_quantifiers(), fsm_symbol(string1)),
+                            fsm_concat(opts, union_quantifiers(quantifiers), fsm_symbol(string1)),
                         ),
                     ),
                     fsm_universal(),
@@ -1486,7 +1481,12 @@ pub fn fsm_logical_precedence(opts: &FomaOptions, string1: &str, string2: &str) 
 // [spec:foma:sem:structures.fsm-logical-eq-fn]
 // [spec:foma:def:fomalib.fsm-logical-eq-fn]
 // [spec:foma:sem:fomalib.fsm-logical-eq-fn]
-pub fn fsm_logical_eq(opts: &FomaOptions, string1: &str, string2: &str) -> Box<Fsm> {
+pub fn fsm_logical_eq(
+    opts: &FomaOptions,
+    quantifiers: &Quantifiers,
+    string1: &str,
+    string2: &str,
+) -> Box<Fsm> {
     fsm_concat(
         opts,
         fsm_universal(),
@@ -1499,7 +1499,7 @@ pub fn fsm_logical_eq(opts: &FomaOptions, string1: &str, string2: &str) -> Box<F
                     fsm_concat(opts, fsm_symbol(string1), fsm_symbol(string2)),
                     fsm_concat(opts, fsm_symbol(string2), fsm_symbol(string1)),
                 ),
-                union_quantifiers(),
+                union_quantifiers(quantifiers),
                 OP_IGNORE_ALL,
             ),
             fsm_concat(
@@ -1514,7 +1514,7 @@ pub fn fsm_logical_eq(opts: &FomaOptions, string1: &str, string2: &str) -> Box<F
                             fsm_concat(opts, fsm_symbol(string1), fsm_symbol(string2)),
                             fsm_concat(opts, fsm_symbol(string2), fsm_symbol(string1)),
                         ),
-                        union_quantifiers(),
+                        union_quantifiers(quantifiers),
                         OP_IGNORE_ALL,
                     ),
                     fsm_universal(),
@@ -2075,58 +2075,57 @@ mod tests {
     // [spec:foma:sem:foma.find-quantifier-fn/test]
     #[test]
     fn quantifier_list_add_count_find_clear() {
-        clear_quantifiers();
-        assert_eq!(count_quantifiers(), 0);
-        add_quantifier("x");
-        add_quantifier("y");
-        assert_eq!(count_quantifiers(), 2);
-        assert_eq!(find_quantifier("x").as_deref(), Some("x"));
-        assert_eq!(find_quantifier("y").as_deref(), Some("y"));
-        assert_eq!(find_quantifier("z"), None);
+        let mut q = Quantifiers::default();
+        assert_eq!(count_quantifiers(&q), 0);
+        add_quantifier(&mut q, "x");
+        add_quantifier(&mut q, "y");
+        assert_eq!(count_quantifiers(&q), 2);
+        assert_eq!(find_quantifier(&q, "x").as_deref(), Some("x"));
+        assert_eq!(find_quantifier(&q, "y").as_deref(), Some("y"));
+        assert_eq!(find_quantifier(&q, "z"), None);
         // no duplicate check: adding "x" again makes a second node
-        add_quantifier("x");
-        assert_eq!(count_quantifiers(), 3);
+        add_quantifier(&mut q, "x");
+        assert_eq!(count_quantifiers(&q), 3);
         // clear drops the whole list
-        clear_quantifiers();
-        assert_eq!(count_quantifiers(), 0);
-        assert_eq!(find_quantifier("x"), None);
+        clear_quantifiers(&mut q);
+        assert_eq!(count_quantifiers(&q), 0);
+        assert_eq!(find_quantifier(&q, "x"), None);
     }
 
     // [spec:foma:sem:structures.purge-quantifier-fn+1/test]
     // [spec:foma:sem:foma.purge-quantifier-fn+1/test]
     #[test]
     fn purge_quantifier_removes_all_matches() {
-        clear_quantifiers();
+        let mut q = Quantifiers::default();
         // Wave 4 fix: two CONSECUTIVE matches then a non-match — BOTH matches
         // are now unlinked (the C left the second linked)
-        add_quantifier("a");
-        add_quantifier("a");
-        add_quantifier("b");
-        purge_quantifier("a");
-        assert_eq!(count_quantifiers(), 1); // only "b" remains
-        assert_eq!(find_quantifier("a"), None);
-        assert_eq!(find_quantifier("b").as_deref(), Some("b"));
+        add_quantifier(&mut q, "a");
+        add_quantifier(&mut q, "a");
+        add_quantifier(&mut q, "b");
+        purge_quantifier(&mut q, "a");
+        assert_eq!(count_quantifiers(&q), 1); // only "b" remains
+        assert_eq!(find_quantifier(&q, "a"), None);
+        assert_eq!(find_quantifier(&q, "b").as_deref(), Some("b"));
 
         // non-consecutive matches are also both removed
-        clear_quantifiers();
-        add_quantifier("a");
-        add_quantifier("b");
-        add_quantifier("a");
-        purge_quantifier("a");
-        assert_eq!(count_quantifiers(), 1);
-        assert_eq!(find_quantifier("a"), None);
-        assert_eq!(find_quantifier("b").as_deref(), Some("b"));
-        clear_quantifiers();
+        clear_quantifiers(&mut q);
+        add_quantifier(&mut q, "a");
+        add_quantifier(&mut q, "b");
+        add_quantifier(&mut q, "a");
+        purge_quantifier(&mut q, "a");
+        assert_eq!(count_quantifiers(&q), 1);
+        assert_eq!(find_quantifier(&q, "a"), None);
+        assert_eq!(find_quantifier(&q, "b").as_deref(), Some("b"));
     }
 
     // [spec:foma:sem:structures.union-quantifiers-fn+1/test]
     // [spec:foma:sem:foma.union-quantifiers-fn+1/test]
     #[test]
     fn union_quantifiers_shape_and_linecount() {
-        clear_quantifiers();
-        add_quantifier("x");
-        add_quantifier("y");
-        let net = union_quantifiers();
+        let mut q = Quantifiers::default();
+        add_quantifier(&mut q, "x");
+        add_quantifier(&mut q, "y");
+        let net = union_quantifiers(&q);
         // syms == 2: table has syms+1 = 3 lines; Wave 4 linecount INCLUDES sentinel
         assert_eq!(net.states.len(), 3);
         assert_eq!(net.linecount, 3);
@@ -2144,13 +2143,12 @@ mod tests {
 
         // empty list: table is just the sentinel (no state 0); linecount 1
         // (the sentinel), per the Wave 4 convention fix
-        clear_quantifiers();
-        let empty = union_quantifiers();
+        clear_quantifiers(&mut q);
+        let empty = union_quantifiers(&q);
         assert_eq!(empty.states.len(), 1);
         assert_eq!(empty.states[0].state_no, -1);
         assert_eq!(empty.linecount, 1);
         assert_eq!(empty.arccount, 0);
-        clear_quantifiers();
     }
 
     // [spec:foma:sem:structures.fsm-sigma-net-fn/test]
@@ -2205,13 +2203,12 @@ mod tests {
     #[test]
     fn logical_precedence_builds_net() {
         let opts = &FomaOptions::default();
-        clear_quantifiers();
-        add_quantifier("Q");
-        let mut net = fsm_logical_precedence(opts, "x", "y");
+        let mut q = Quantifiers::default();
+        add_quantifier(&mut q, "Q");
+        let mut net = fsm_logical_precedence(opts, &q, "x", "y");
         fsm_count(&mut net);
         assert!(net.statecount >= 1);
         assert!(!net.states.is_empty());
-        clear_quantifiers();
     }
 
     // [spec:foma:sem:structures.fsm-logical-eq-fn/test]
@@ -2219,13 +2216,12 @@ mod tests {
     #[test]
     fn logical_eq_builds_net() {
         let opts = &FomaOptions::default();
-        clear_quantifiers();
-        add_quantifier("Q");
-        let mut net = fsm_logical_eq(opts, "x", "y");
+        let mut q = Quantifiers::default();
+        add_quantifier(&mut q, "Q");
+        let mut net = fsm_logical_eq(opts, &q, "x", "y");
         fsm_count(&mut net);
         assert!(net.statecount >= 1);
         assert!(!net.states.is_empty());
-        clear_quantifiers();
     }
 
     // [spec:foma:sem:fomalib.fsm-find-ambiguous-fn/test]

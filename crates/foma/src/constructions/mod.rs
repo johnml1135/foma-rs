@@ -26,9 +26,7 @@ pub(crate) use crate::dynarray::{
 };
 pub(crate) use crate::extract::{fsm_lower, fsm_upper};
 pub(crate) use crate::flags::flag_check;
-pub(crate) use crate::int_stack::{
-    int_stack_clear, int_stack_isempty, int_stack_pop, int_stack_push,
-};
+pub(crate) use crate::int_stack::IntStack;
 pub(crate) use crate::minimize::fsm_minimize;
 pub(crate) use crate::options::FomaOptions;
 pub(crate) use crate::rewrite::fsm_clear_contexts;

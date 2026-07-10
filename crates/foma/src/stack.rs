@@ -29,7 +29,6 @@
 
 use crate::apply::{apply_clear, apply_init};
 use crate::constructions::fsm_count;
-use crate::dynarray::rand;
 use crate::iface::print_stats;
 use crate::options::FomaOptions;
 use crate::session::Session;
@@ -246,7 +245,7 @@ impl Session {
         if fsm.name == "" {
             // sprintf(fsm->name, "%X", rand()) — uppercase hex of rand() into the
             // fixed 40-byte name buffer (%X of a 32-bit value is <= 8 chars).
-            fsm.name = format!("{:X}", rand() as u32);
+            fsm.name = format!("{:X}", self.lcg.rand() as u32);
         }
         let mut stack_ptr = self.main_stack();
         while self.e_number(stack_ptr) != -1 {

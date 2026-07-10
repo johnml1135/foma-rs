@@ -24,15 +24,16 @@ use crate::types::{Fsm, IDENTITY, NO, UNK, UNKNOWN};
 pub fn fsm_lower(net: Box<Fsm>) -> Box<Fsm> {
     let mut net = net;
     /* C: fsm = net->states — reads below index net.states directly */
-    fsm_state_init(sigma_max(net.sigma.as_deref()));
+    let mut builder = fsm_state_init(sigma_max(net.sigma.as_deref()));
     let mut prevstate = -1;
     let mut i: i32 = 0;
     while net.states[i as usize].state_no != -1 {
         if prevstate != -1 && prevstate != net.states[i as usize].state_no {
-            fsm_state_end_state();
+            fsm_state_end_state(&mut builder);
         }
         if prevstate != net.states[i as usize].state_no {
             fsm_state_set_current_state(
+                &mut builder,
                 net.states[i as usize].state_no,
                 net.states[i as usize].final_state as i32,
                 net.states[i as usize].start_state as i32,
@@ -45,6 +46,7 @@ pub fn fsm_lower(net: Box<Fsm>) -> Box<Fsm> {
                 net.states[i as usize].out as i32
             };
             fsm_state_add_arc(
+                &mut builder,
                 net.states[i as usize].state_no,
                 out,
                 out,
@@ -57,10 +59,10 @@ pub fn fsm_lower(net: Box<Fsm>) -> Box<Fsm> {
         prevstate = net.states[i as usize].state_no;
         i += 1;
     }
-    fsm_state_end_state();
+    fsm_state_end_state(&mut builder);
     /* drop the old line table; fsm_state_close installs the rebuilt one */
     net.states = Vec::new();
-    fsm_state_close(&mut net);
+    fsm_state_close(&mut builder, &mut net);
     fsm_update_flags(&mut net, NO, NO, NO, UNK, UNK, UNK);
     sigma_cleanup(&mut net, 0);
     net
@@ -73,15 +75,16 @@ pub fn fsm_lower(net: Box<Fsm>) -> Box<Fsm> {
 pub fn fsm_upper(net: Box<Fsm>) -> Box<Fsm> {
     let mut net = net;
     /* C: fsm = net->states — reads below index net.states directly */
-    fsm_state_init(sigma_max(net.sigma.as_deref()));
+    let mut builder = fsm_state_init(sigma_max(net.sigma.as_deref()));
     let mut prevstate = -1;
     let mut i: i32 = 0;
     while net.states[i as usize].state_no != -1 {
         if prevstate != -1 && prevstate != net.states[i as usize].state_no {
-            fsm_state_end_state();
+            fsm_state_end_state(&mut builder);
         }
         if prevstate != net.states[i as usize].state_no {
             fsm_state_set_current_state(
+                &mut builder,
                 net.states[i as usize].state_no,
                 net.states[i as usize].final_state as i32,
                 net.states[i as usize].start_state as i32,
@@ -94,6 +97,7 @@ pub fn fsm_upper(net: Box<Fsm>) -> Box<Fsm> {
                 net.states[i as usize].r#in as i32
             };
             fsm_state_add_arc(
+                &mut builder,
                 net.states[i as usize].state_no,
                 r#in,
                 r#in,
@@ -106,10 +110,10 @@ pub fn fsm_upper(net: Box<Fsm>) -> Box<Fsm> {
         prevstate = net.states[i as usize].state_no;
         i += 1;
     }
-    fsm_state_end_state();
+    fsm_state_end_state(&mut builder);
     /* drop the old line table; fsm_state_close installs the rebuilt one */
     net.states = Vec::new();
-    fsm_state_close(&mut net);
+    fsm_state_close(&mut builder, &mut net);
     fsm_update_flags(&mut net, NO, NO, NO, UNK, UNK, UNK);
     sigma_cleanup(&mut net, 0);
     net

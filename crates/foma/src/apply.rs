@@ -30,7 +30,7 @@
 //!    pruning optimisation). The densest-first / mem-limit decision of which
 //!    states get an index is reproduced.
 
-use crate::dynarray::{rand, srand};
+use crate::dynarray::Lcg;
 use crate::flags::{flag_check, flag_get_name, flag_get_type, flag_get_value};
 use crate::mem::round_up_to_power_of_two;
 #[cfg(test)]
@@ -461,13 +461,14 @@ pub fn apply_up(h: &mut ApplyHandle, word: Option<&str>) -> Option<String> {
 // [spec:foma:def:fomalib.apply-init-fn]
 // [spec:foma:sem:fomalib.apply-init-fn]
 pub fn apply_init(net: &Fsm) -> Box<ApplyHandle> {
-    // C: srand((unsigned int) time(NULL)); reseeds the shared LCG.
+    // C: srand((unsigned int) time(NULL)); seeds the handle's LCG.
     // DEVIATION from C (SystemTime seconds stand in for time(NULL)).
     let seed = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0) as u32;
-    srand(seed);
+    let mut lcg = Lcg::new();
+    lcg.srand(seed);
 
     // calloc(1, sizeof(struct apply_handle)) — zeroed handle.
     let mut h = Box::new(ApplyHandle {
@@ -516,6 +517,7 @@ pub fn apply_init(net: &Fsm) -> Box<ApplyHandle> {
         flag_list: None,
         flag_lookup: Vec::new(),
         searchstack: Vec::new(),
+        lcg,
     });
 
     /* Init */
@@ -1064,7 +1066,7 @@ pub fn apply_follow_next_arc(h: &mut ApplyHandle) -> i32 {
                 }
                 vcount = vc;
                 if vcount > 0 {
-                    h.curr_ptr = h.ptr + (rand() % vcount);
+                    h.curr_ptr = h.ptr + (h.lcg.rand() % vcount);
                 } else {
                     h.curr_ptr = h.ptr;
                 }
@@ -1132,7 +1134,7 @@ pub fn apply_return_string(h: &mut ApplyHandle) -> Option<String> {
     h.outstring.truncate(h.opos as usize);
     if (h.mode & RANDOM) == RANDOM {
         /* To end or not to end */
-        if rand() % 2 == 0 {
+        if h.lcg.rand() % 2 == 0 {
             apply_stack_clear(h);
             h.iterator = 0;
             h.iterate_old = 0;

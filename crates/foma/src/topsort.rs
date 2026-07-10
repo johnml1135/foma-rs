@@ -10,7 +10,7 @@
 //! cyclic (a genuine C-compatible quirk, kept).
 
 use crate::constructions::{add_fsm_arc, fsm_count};
-use crate::int_stack::{int_stack_clear, int_stack_isempty, int_stack_pop, int_stack_push};
+use crate::int_stack::IntStack;
 #[cfg(test)]
 use crate::options::FomaOptions;
 use crate::types::{Fsm, FsmState, PATHCOUNT_CYCLIC, PATHCOUNT_OVERFLOW};
@@ -20,6 +20,7 @@ use crate::types::{Fsm, FsmState, PATHCOUNT_CYCLIC, PATHCOUNT_OVERFLOW};
 // [spec:foma:def:fomalib.fsm-topsort-fn]
 // [spec:foma:sem:fomalib.fsm-topsort-fn+1]
 pub fn fsm_topsort(net: Box<Fsm>) -> Box<Fsm> {
+    let mut int_stack = IntStack::new();
     /* We topologically sort the network by looking for a state          */
     /* with inverse count 0. We then examine all the arcs from that      */
     /* state, and decrease the target invcounts. If we find a new        */
@@ -80,17 +81,17 @@ pub fn fsm_topsort(net: Box<Fsm>) -> Box<Fsm> {
         }
 
         let mut treatcount = net.statecount;
-        int_stack_clear();
-        int_stack_push(0);
+        int_stack.clear();
+        int_stack.push(0);
         let mut grand_pathcount: i64 = 0;
 
         pathcount[0] = 1;
 
         let mut overflow: u8 = 0;
         let mut i: i32 = 0;
-        while int_stack_isempty() == 0 {
+        while !int_stack.is_empty() {
             /* Treat a state */
-            let curr_state = int_stack_pop();
+            let curr_state = int_stack.pop();
             treated[curr_state as usize] = 1;
             order[i as usize] = curr_state;
             newnum[curr_state as usize] = i;
@@ -120,7 +121,7 @@ pub fn fsm_topsort(net: Box<Fsm>) -> Box<Fsm> {
                         break 'cyclic;
                     }
                     if invcount[target as usize] == 0 {
-                        int_stack_push(target);
+                        int_stack.push(target);
                     }
                 }
                 curr_fsm += 1;
@@ -209,7 +210,7 @@ pub fn fsm_topsort(net: Box<Fsm>) -> Box<Fsm> {
 
     /* cyclic: free(statemap/order/pathcount/newnum/invcount/treated) —
     dropped on return */
-    int_stack_clear();
+    int_stack.clear();
     net
 }
 

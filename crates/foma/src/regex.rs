@@ -16,7 +16,6 @@
 //! reach us as AST nodes (they lex/parse to something else or error out).
 
 use crate::options::FomaOptions;
-use std::cell::Cell;
 
 use nfst_xre::{
     BinaryOp, ContextMark, MappingKind, MappingPair, MappingSide, ReadKind, ReplaceArrow,
@@ -47,18 +46,29 @@ use crate::types::{
 };
 use crate::utf8::streqrep;
 
-/* C: file-static `unsigned int g_internal_sym = 23482342;` in regex.y — the
-running counter used to synthesize unique temporary symbol names when applying
-a defined function. */
-thread_local! {
-    static G_INTERNAL_SYM: Cell<u32> = const { Cell::new(23482342) };
+/* C: `#define MAX_PARSE_DEPTH 100` — the self-recursion guard for my_yyparse. */
+const MAX_PARSE_DEPTH: i32 = 100;
+
+/// The parse-scoped state that C kept in the file-static `g_parse_depth`
+/// (regex.l, the self-recursion guard) and `g_internal_sym` (regex.y, the
+/// running counter for the unique temporary symbol names function application
+/// synthesizes). Both survive the nested `my_yyparse` reparse a function
+/// application triggers, so one `&mut ParseState` is threaded through the whole
+/// recursive walk. A fresh `ParseState` is created for each top-level parse.
+struct ParseState {
+    /* C: `int g_parse_depth = 0;` */
+    depth: i32,
+    /* C: `unsigned int g_internal_sym = 23482342;` */
+    internal_sym: u32,
 }
 
-/* C: `int g_parse_depth = 0;` in regex.l plus `#define MAX_PARSE_DEPTH 100` —
-the self-recursion guard for my_yyparse. */
-const MAX_PARSE_DEPTH: i32 = 100;
-thread_local! {
-    static G_PARSE_DEPTH: Cell<i32> = const { Cell::new(0) };
+impl ParseState {
+    fn new() -> ParseState {
+        ParseState {
+            depth: 0,
+            internal_sym: 23482342,
+        }
+    }
 }
 
 // [spec:foma:def:fomalib.fsm-parse-regex-fn]
@@ -72,7 +82,8 @@ pub fn fsm_parse_regex(
     /* C: strcpy a copy of `regex` with ";" appended, my_yyparse it at line 1,
     and on success return fsm_minimize(opts, current_parse). nfst-xre tolerates the
     optional trailing ";" itself, so no copy is needed. */
-    let current_parse = my_yyparse(opts, regex, defined_nets, defined_funcs)?;
+    let mut ps = ParseState::new();
+    let current_parse = my_yyparse(opts, &mut ps, regex, defined_nets, defined_funcs)?;
     Some(fsm_minimize(opts, current_parse))
 }
 
@@ -80,6 +91,7 @@ pub fn fsm_parse_regex(
 // [spec:foma:sem:foma.my-yyparse-fn]
 fn my_yyparse(
     opts: &FomaOptions,
+    ps: &mut ParseState,
     regex: &str,
     defined_nets: Option<&mut DefinedNetworks>,
     defined_funcs: Option<&mut DefinedFunctions>,
@@ -89,19 +101,19 @@ fn my_yyparse(
     yyparse; this port builds those structures locally on the stack, so only
     the depth guard is observable. Returns the net the parse deposits in
     current_parse (unminimized — fsm_parse_regex/@re do the minimize). */
-    let depth = G_PARSE_DEPTH.with(|c| c.get());
-    if depth >= MAX_PARSE_DEPTH {
+    if ps.depth >= MAX_PARSE_DEPTH {
         eprintln!("Exceeded parser stack depth.  Self-recursive call?");
         return None;
     }
-    G_PARSE_DEPTH.with(|c| c.set(depth + 1));
-    let result = my_yyparse_inner(opts, regex, defined_nets, defined_funcs);
-    G_PARSE_DEPTH.with(|c| c.set(depth));
+    ps.depth += 1;
+    let result = my_yyparse_inner(opts, ps, regex, defined_nets, defined_funcs);
+    ps.depth -= 1;
     result
 }
 
 fn my_yyparse_inner(
     opts: &FomaOptions,
+    ps: &mut ParseState,
     regex: &str,
     defined_nets: Option<&mut DefinedNetworks>,
     defined_funcs: Option<&mut DefinedFunctions>,
@@ -130,13 +142,14 @@ fn my_yyparse_inner(
             return None;
         }
     };
-    build_net(opts, &last.value, defined_nets, defined_funcs)
+    build_net(opts, ps, &last.value, defined_nets, defined_funcs)
 }
 
 /// Walk one AST node to a network, mirroring the regex.y semantic action for
 /// the corresponding production.
 fn build_net(
     opts: &FomaOptions,
+    ps: &mut ParseState,
     expr: &XreExpr,
     mut nets: Option<&mut DefinedNetworks>,
     mut funcs: Option<&mut DefinedFunctions>,
@@ -170,12 +183,14 @@ fn build_net(
             /* `:` HIGH_CROSS_PRODUCT: fsm_cross_product(upper, lower). */
             let u = build_net(
                 opts,
+                ps,
                 &upper.value,
                 nets.as_deref_mut(),
                 funcs.as_deref_mut(),
             )?;
             let l = build_net(
                 opts,
+                ps,
                 &lower.value,
                 nets.as_deref_mut(),
                 funcs.as_deref_mut(),
@@ -191,16 +206,16 @@ fn build_net(
             None
         }
 
-        XreExpr::ReadFile { kind, path } => build_read_file(opts, *kind, path, nets, funcs),
+        XreExpr::ReadFile { kind, path } => build_read_file(opts, ps, *kind, path, nets, funcs),
 
-        XreExpr::FunctionCall { name, args } => function_apply(opts, name, args, nets, funcs),
+        XreExpr::FunctionCall { name, args } => function_apply(opts, ps, name, args, nets, funcs),
 
         // ──────────────── grouping ────────────────
-        XreExpr::Group(inner) => build_net(opts, &inner.value, nets, funcs),
+        XreExpr::Group(inner) => build_net(opts, ps, &inner.value, nets, funcs),
         XreExpr::Optional(inner) => {
             /* regex.y LPAREN network RPAREN: fsm_optionality (no quantifier can
             reach us, so count_quantifiers() is always 0 here). */
-            let n = build_net(opts, &inner.value, nets, funcs)?;
+            let n = build_net(opts, ps, &inner.value, nets, funcs)?;
             Some(fsm_optionality(opts, n))
         }
         XreExpr::BracketedDotted(_) => {
@@ -211,20 +226,20 @@ fn build_net(
         }
 
         // ──────────────── unary ────────────────
-        XreExpr::Unary(op, inner) => build_unary(opts, *op, &inner.value, nets, funcs),
+        XreExpr::Unary(op, inner) => build_unary(opts, ps, *op, &inner.value, nets, funcs),
 
         // ──────────────── binary ────────────────
-        XreExpr::Binary(op, l, r) => build_binary(opts, *op, &l.value, &r.value, nets, funcs),
+        XreExpr::Binary(op, l, r) => build_binary(opts, ps, *op, &l.value, &r.value, nets, funcs),
 
         // ──────────────── iteration ────────────────
         XreExpr::RepeatN(inner, n) => {
             /* NCONCAT: fsm_concat_n(net, n). */
-            let net = build_net(opts, &inner.value, nets, funcs)?;
+            let net = build_net(opts, ps, &inner.value, nets, funcs)?;
             Some(fsm_concat_n(opts, net, *n as i32))
         }
         XreExpr::RepeatNPlus(inner, n) => {
             /* MORENCONCAT (`^>N`): concat(concat_n(copy,n), kleene_plus(copy)). */
-            let mut net = build_net(opts, &inner.value, nets, funcs)?;
+            let mut net = build_net(opts, ps, &inner.value, nets, funcs)?;
             let res = fsm_concat(
                 opts,
                 fsm_concat_n(opts, fsm_copy(&mut net), *n as i32),
@@ -235,34 +250,35 @@ fn build_net(
         }
         XreExpr::RepeatNMinus(inner, n) => {
             /* LESSNCONCAT (`^<N`): fsm_concat_m_n(net, 0, n-1). */
-            let net = build_net(opts, &inner.value, nets, funcs)?;
+            let net = build_net(opts, ps, &inner.value, nets, funcs)?;
             Some(fsm_concat_m_n(opts, net, 0, *n as i32 - 1))
         }
         XreExpr::RepeatNToK(inner, n, k) => {
             /* MNCONCAT (`^N,K`): fsm_concat_m_n(net, n, k). */
-            let net = build_net(opts, &inner.value, nets, funcs)?;
+            let net = build_net(opts, ps, &inner.value, nets, funcs)?;
             Some(fsm_concat_m_n(opts, net, *n as i32, *k as i32))
         }
 
         // ──────────────── replace / restriction / substitute ────────────────
-        XreExpr::Replace { arrow, rules } => build_replace(opts, *arrow, rules, nets, funcs),
+        XreExpr::Replace { arrow, rules } => build_replace(opts, ps, *arrow, rules, nets, funcs),
         XreExpr::Restriction { body, contexts } => {
-            build_restriction(opts, &body.value, contexts, nets, funcs)
+            build_restriction(opts, ps, &body.value, contexts, nets, funcs)
         }
         XreExpr::Substitute { haystack, what } => {
-            build_substitute(opts, &haystack.value, what, nets, funcs)
+            build_substitute(opts, ps, &haystack.value, what, nets, funcs)
         }
     }
 }
 
 fn build_unary(
     opts: &FomaOptions,
+    ps: &mut ParseState,
     op: UnaryOp,
     inner: &XreExpr,
     nets: Option<&mut DefinedNetworks>,
     funcs: Option<&mut DefinedFunctions>,
 ) -> Option<Box<Fsm>> {
-    let net = build_net(opts, inner, nets, funcs)?;
+    let net = build_net(opts, ps, inner, nets, funcs)?;
     Some(match op {
         /* network9 KLEENE_STAR: fsm_kleene_star(fsm_minimize(net)) */
         UnaryOp::Star => fsm_kleene_star(opts, fsm_minimize(opts, net)),
@@ -282,14 +298,15 @@ fn build_unary(
 
 fn build_binary(
     opts: &FomaOptions,
+    ps: &mut ParseState,
     op: BinaryOp,
     left: &XreExpr,
     right: &XreExpr,
     mut nets: Option<&mut DefinedNetworks>,
     mut funcs: Option<&mut DefinedFunctions>,
 ) -> Option<Box<Fsm>> {
-    let l = build_net(opts, left, nets.as_deref_mut(), funcs.as_deref_mut())?;
-    let r = build_net(opts, right, nets.as_deref_mut(), funcs.as_deref_mut())?;
+    let l = build_net(opts, ps, left, nets.as_deref_mut(), funcs.as_deref_mut())?;
+    let r = build_net(opts, ps, right, nets.as_deref_mut(), funcs.as_deref_mut())?;
     match op {
         BinaryOp::Concatenate => Some(fsm_concat(opts, l, r)),
         BinaryOp::Compose => Some(fsm_compose(opts, l, r)),
@@ -337,6 +354,7 @@ fn build_binary(
 
 fn build_read_file(
     opts: &FomaOptions,
+    ps: &mut ParseState,
     kind: ReadKind,
     path: &str,
     nets: Option<&mut DefinedNetworks>,
@@ -382,7 +400,7 @@ fn build_read_file(
                     return None;
                 }
             };
-            Some(fsm_minimize(opts, my_yyparse(opts, &s, nets, funcs)?))
+            Some(fsm_minimize(opts, my_yyparse(opts, ps, &s, nets, funcs)?))
         }
         ReadKind::Prolog => {
             eprintln!("*** Syntax error: @pl\"…\" prolog files are not supported");
@@ -399,6 +417,7 @@ fn build_read_file(
 /// then remove the temporaries.
 fn function_apply(
     opts: &FomaOptions,
+    ps: &mut ParseState,
     name: &str,
     args: &[SpannedXre],
     mut nets: Option<&mut DefinedNetworks>,
@@ -425,6 +444,7 @@ fn function_apply(
     for a in args {
         arg_nets.push(build_net(
             opts,
+            ps,
             &a.value,
             nets.as_deref_mut(),
             funcs.as_deref_mut(),
@@ -434,7 +454,7 @@ fn function_apply(
     let mut regex_bytes = body.into_bytes();
     let mut created: Vec<String> = Vec::new();
     for (i, argnet) in arg_nets.into_iter().enumerate() {
-        let gsym = G_INTERNAL_SYM.with(|c| c.get());
+        let gsym = ps.internal_sym;
         /* C: sprintf(repstr, "%012X", g_internal_sym);
               sprintf(oldstr, "@ARGUMENT%02i@", i+1); — both 12 bytes wide, so
         streqrep's equal-length in-place replacement is valid. */
@@ -452,7 +472,7 @@ fn function_apply(
             }
         }
         created.push(repstr);
-        G_INTERNAL_SYM.with(|c| c.set(gsym.wrapping_add(1)));
+        ps.internal_sym = gsym.wrapping_add(1);
     }
 
     let regex_str = match String::from_utf8(regex_bytes) {
@@ -468,7 +488,13 @@ fn function_apply(
         }
     };
 
-    let result = my_yyparse(opts, &regex_str, nets.as_deref_mut(), funcs.as_deref_mut());
+    let result = my_yyparse(
+        opts,
+        ps,
+        &regex_str,
+        nets.as_deref_mut(),
+        funcs.as_deref_mut(),
+    );
 
     if let Some(n) = nets.as_deref_mut() {
         for r in &created {
@@ -506,6 +532,7 @@ fn mark_to_dir(mark: ContextMark) -> i32 {
 
 fn build_replace(
     opts: &FomaOptions,
+    ps: &mut ParseState,
     arrow: ReplaceArrow,
     rules: &[ReplaceRule],
     mut nets: Option<&mut DefinedNetworks>,
@@ -524,6 +551,7 @@ fn build_replace(
         for mapping in &rule.mappings {
             build_mapping(
                 opts,
+                ps,
                 mapping,
                 arrow_type,
                 &mut rule_nodes,
@@ -539,15 +567,23 @@ fn build_replace(
                     /* regex.y add_context_pair: a missing side stores
                     fsm_empty_string() (never NULL). */
                     let left = match &item.left {
-                        Some(e) => {
-                            build_net(opts, &e.value, nets.as_deref_mut(), funcs.as_deref_mut())?
-                        }
+                        Some(e) => build_net(
+                            opts,
+                            ps,
+                            &e.value,
+                            nets.as_deref_mut(),
+                            funcs.as_deref_mut(),
+                        )?,
                         None => fsm_empty_string(),
                     };
                     let right = match &item.right {
-                        Some(e) => {
-                            build_net(opts, &e.value, nets.as_deref_mut(), funcs.as_deref_mut())?
-                        }
+                        Some(e) => build_net(
+                            opts,
+                            ps,
+                            &e.value,
+                            nets.as_deref_mut(),
+                            funcs.as_deref_mut(),
+                        )?,
                         None => fsm_empty_string(),
                     };
                     ctx_nodes.push(Box::new(Fsmcontexts {
@@ -580,21 +616,34 @@ fn build_replace(
 
 fn build_restriction(
     opts: &FomaOptions,
+    ps: &mut ParseState,
     body: &XreExpr,
     contexts: &[RestrContext],
     mut nets: Option<&mut DefinedNetworks>,
     mut funcs: Option<&mut DefinedFunctions>,
 ) -> Option<Box<Fsm>> {
     /* n0 CRESTRICT n0: fsm_context_restrict(body, contexts). */
-    let x = build_net(opts, body, nets.as_deref_mut(), funcs.as_deref_mut())?;
+    let x = build_net(opts, ps, body, nets.as_deref_mut(), funcs.as_deref_mut())?;
     let mut ctx_nodes: Vec<Box<Fsmcontexts>> = Vec::new();
     for item in contexts {
         let left = match &item.left {
-            Some(e) => build_net(opts, &e.value, nets.as_deref_mut(), funcs.as_deref_mut())?,
+            Some(e) => build_net(
+                opts,
+                ps,
+                &e.value,
+                nets.as_deref_mut(),
+                funcs.as_deref_mut(),
+            )?,
             None => fsm_empty_string(),
         };
         let right = match &item.right {
-            Some(e) => build_net(opts, &e.value, nets.as_deref_mut(), funcs.as_deref_mut())?,
+            Some(e) => build_net(
+                opts,
+                ps,
+                &e.value,
+                nets.as_deref_mut(),
+                funcs.as_deref_mut(),
+            )?,
             None => fsm_empty_string(),
         };
         ctx_nodes.push(Box::new(Fsmcontexts {
@@ -610,12 +659,19 @@ fn build_restriction(
 
 fn build_substitute(
     opts: &FomaOptions,
+    ps: &mut ParseState,
     haystack: &XreExpr,
     what: &SubstituteWhat,
     mut nets: Option<&mut DefinedNetworks>,
     mut funcs: Option<&mut DefinedFunctions>,
 ) -> Option<Box<Fsm>> {
-    let net = build_net(opts, haystack, nets.as_deref_mut(), funcs.as_deref_mut())?;
+    let net = build_net(
+        opts,
+        ps,
+        haystack,
+        nets.as_deref_mut(),
+        funcs.as_deref_mut(),
+    )?;
     match what {
         /* sub1 sub2: fsm_substitute_symbol(net, subval1, subval2) — exactly one
         symbol to one symbol. */
@@ -642,6 +698,7 @@ fn build_substitute(
 
 fn build_mapping(
     opts: &FomaOptions,
+    ps: &mut ParseState,
     m: &MappingPair,
     arrow_type: i32,
     out: &mut Vec<Box<Fsmrules>>,
@@ -650,19 +707,31 @@ fn build_mapping(
 ) -> Option<()> {
     match &m.upper {
         MappingSide::Expr(e) => {
-            let upper = build_net(opts, &e.value, nets.as_deref_mut(), funcs.as_deref_mut())?;
-            let (r, r2) = build_rhs(opts, &m.kind, nets.as_deref_mut(), funcs.as_deref_mut())?;
+            let upper = build_net(
+                opts,
+                ps,
+                &e.value,
+                nets.as_deref_mut(),
+                funcs.as_deref_mut(),
+            )?;
+            let (r, r2) = build_rhs(opts, ps, &m.kind, nets.as_deref_mut(), funcs.as_deref_mut())?;
             add_rule(opts, out, upper, r, r2, arrow_type);
         }
         MappingSide::Dotted(Some(e)) => {
             /* LDOT n0 RDOT ARROW ...: add_rule with ARROW_DOTTED. */
-            let upper = build_net(opts, &e.value, nets.as_deref_mut(), funcs.as_deref_mut())?;
-            let (r, r2) = build_rhs(opts, &m.kind, nets.as_deref_mut(), funcs.as_deref_mut())?;
+            let upper = build_net(
+                opts,
+                ps,
+                &e.value,
+                nets.as_deref_mut(),
+                funcs.as_deref_mut(),
+            )?;
+            let (r, r2) = build_rhs(opts, ps, &m.kind, nets.as_deref_mut(), funcs.as_deref_mut())?;
             add_rule(opts, out, upper, r, r2, arrow_type | ARROW_DOTTED);
         }
         MappingSide::Dotted(None) => {
             /* LDOT RDOT ARROW n0: add_eprule with ARROW_DOTTED. */
-            let (r, r2) = build_rhs(opts, &m.kind, nets.as_deref_mut(), funcs.as_deref_mut())?;
+            let (r, r2) = build_rhs(opts, ps, &m.kind, nets.as_deref_mut(), funcs.as_deref_mut())?;
             add_eprule(out, r, r2, arrow_type | ARROW_DOTTED);
         }
     }
@@ -671,23 +740,24 @@ fn build_mapping(
 
 fn build_rhs(
     opts: &FomaOptions,
+    ps: &mut ParseState,
     kind: &MappingKind,
     mut nets: Option<&mut DefinedNetworks>,
     mut funcs: Option<&mut DefinedFunctions>,
 ) -> Option<(Option<Box<Fsm>>, Option<Box<Fsm>>)> {
     match kind {
         MappingKind::Plain { lower } => {
-            let r = build_side(opts, lower, nets.as_deref_mut(), funcs.as_deref_mut())?;
+            let r = build_side(opts, ps, lower, nets.as_deref_mut(), funcs.as_deref_mut())?;
             Some((Some(r), None))
         }
         MappingKind::Markup { pre, post } => {
             /* n0 ARROW [n0] TRIPLE_DOT [n0]: right = pre|0, right2 = post|0. */
             let r = match pre {
-                Some(s) => build_side(opts, s, nets.as_deref_mut(), funcs.as_deref_mut())?,
+                Some(s) => build_side(opts, ps, s, nets.as_deref_mut(), funcs.as_deref_mut())?,
                 None => fsm_empty_string(),
             };
             let r2 = match post {
-                Some(s) => build_side(opts, s, nets.as_deref_mut(), funcs.as_deref_mut())?,
+                Some(s) => build_side(opts, ps, s, nets.as_deref_mut(), funcs.as_deref_mut())?,
                 None => fsm_empty_string(),
             };
             Some((Some(r), Some(r2)))
@@ -697,13 +767,14 @@ fn build_rhs(
 
 fn build_side(
     opts: &FomaOptions,
+    ps: &mut ParseState,
     s: &MappingSide,
     nets: Option<&mut DefinedNetworks>,
     funcs: Option<&mut DefinedFunctions>,
 ) -> Option<Box<Fsm>> {
     match s {
-        MappingSide::Expr(e) => build_net(opts, &e.value, nets, funcs),
-        MappingSide::Dotted(Some(e)) => build_net(opts, &e.value, nets, funcs),
+        MappingSide::Expr(e) => build_net(opts, ps, &e.value, nets, funcs),
+        MappingSide::Dotted(Some(e)) => build_net(opts, ps, &e.value, nets, funcs),
         MappingSide::Dotted(None) => Some(fsm_empty_string()),
     }
 }
@@ -998,9 +1069,8 @@ mod tests {
         // define F(X) F(X); — every application reparses another F(...) call.
         add_defined_function(opts, &mut funcs, "F", "F(@ARGUMENT01@)", 1);
         assert!(super::fsm_parse_regex(opts, "F(a)", Some(&mut nets), Some(&mut funcs)).is_none());
-        // The guard restores g_parse_depth on the way out, so the parser
-        // still works afterwards.
-        assert_eq!(super::G_PARSE_DEPTH.with(|c| c.get()), 0);
+        // Each top-level parse gets a fresh depth counter, so the parser still
+        // works after the guard trips.
         assert!(super::fsm_parse_regex(opts, "a", None, None).is_some());
     }
 }

@@ -17,21 +17,18 @@
 //! - trans_array/trans_list: per-state interior pointers into the shared
 //!   entry pool → base offsets (usize).
 //!
-//! Wave 4: the C's file-static scratch (subset-construction pools, nhash
-//! table, sigma maps, the numss/mainloop counters, …) is owned by a per-call
-//! `Subset` struct — nothing survives a call. The shared `int_stack`/
-//! `ptr_stack` and the `fsm_state_*` line-array builder remain module-level
-//! (they belong to other concerns); this module keeps no state of its own.
+//! The C's file-static scratch (subset-construction pools, nhash table, sigma
+//! maps, the numss/mainloop counters, the int/ptr worklist stacks, …) is owned
+//! by a per-call `Subset` struct — nothing survives a call. The `fsm_state_*`
+//! line-array build is a `FsmBuilder` threaded through the call; this module
+//! keeps no state of its own.
 
 use crate::constructions::fsm_count;
 use crate::dynarray::{
     fsm_state_add_arc, fsm_state_close, fsm_state_end_state, fsm_state_init,
     fsm_state_set_current_state,
 };
-use crate::int_stack::{
-    int_stack_clear, int_stack_isempty, int_stack_pop, int_stack_push, ptr_stack_isempty,
-    ptr_stack_pop, ptr_stack_push,
-};
+use crate::int_stack::{IntStack, PtrStack};
 use crate::mem::next_power_of_two;
 use crate::sigma::sigma_max;
 use crate::types::{EPSILON, Fsm, FsmState, UNKNOWN, YES};
@@ -162,6 +159,12 @@ pub(crate) struct Subset {
     set_table_offset: u32,
     // C: static struct nhash_list *table;
     table: Vec<NhashList>,
+
+    // C used the shared int_stack/ptr_stack scratch; the subset build owns
+    // its own here (worklist agenda of subset numbers; DFS stack of
+    // e_closure_memo pool indices).
+    int_stack: IntStack,
+    ptr_stack: PtrStack,
 }
 
 // [spec:foma:def:determinize.add-fsm-arc-fn]
@@ -213,7 +216,7 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
 
     T = initial_e_closure(&mut s, &net);
 
-    int_stack_clear();
+    s.int_stack.clear();
 
     /* numss is a C _Bool holding the truncated last-seen start state number,
     so numss == 0 really means "the single start state is state 0". Benign
@@ -234,17 +237,19 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
         return net;
     }
 
-    if operation == SUBSET_TEST_STAR_FREE {
+    let mut builder = if operation == SUBSET_TEST_STAR_FREE {
         let sm = sigma_max(net.sigma.as_deref());
-        fsm_state_init(sm + 1);
+        let builder = fsm_state_init(sm + 1);
         s.star_free_mark = 0;
+        builder
     } else {
         let sm = sigma_max(net.sigma.as_deref());
-        fsm_state_init(sm);
+        let builder = fsm_state_init(sm);
         /* consume the old line table; fsm_state_close installs the rebuilt
         one at the end */
         net.states = Vec::new();
-    }
+        builder
+    };
 
     /* init */
 
@@ -254,7 +259,12 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
             let mut symbol_out: i32 = 0;
 
             let finalstart = s.t_ptr[T as usize].finalstart;
-            fsm_state_set_current_state(T, finalstart as i32, if T == 0 { 1 } else { 0 });
+            fsm_state_set_current_state(
+                &mut builder,
+                T,
+                finalstart as i32,
+                if T == 0 { 1 } else { 0 },
+            );
 
             /* Prepare set */
             let setsize = s.t_ptr[T as usize].size as i32;
@@ -278,7 +288,7 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
             }
             if has_trans == 0 {
                 /* close state */
-                fsm_state_end_state();
+                fsm_state_end_state(&mut builder);
                 break 'stateloop; /* continue */
             }
 
@@ -321,6 +331,7 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
                                     );
                                     let fs = s.t_ptr[T as usize].finalstart;
                                     fsm_state_add_arc(
+                                        &mut builder,
                                         T,
                                         symbol_in,
                                         symbol_out,
@@ -353,6 +364,7 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
                         single_symbol_to_symbol_pair(&s, minsym, &mut symbol_in, &mut symbol_out);
                         let fs = s.t_ptr[T as usize].finalstart;
                         fsm_state_add_arc(
+                            &mut builder,
                             T,
                             symbol_in,
                             symbol_out,
@@ -369,6 +381,7 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
                         single_symbol_to_symbol_pair(&s, minsym, &mut symbol_in, &mut symbol_out);
                         let fs = s.t_ptr[T as usize].finalstart;
                         fsm_state_add_arc(
+                            &mut builder,
                             T,
                             symbol_in,
                             symbol_out,
@@ -386,9 +399,9 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
                 next_minsym = i32::MAX;
             }
             /* end state */
-            fsm_state_end_state();
+            fsm_state_end_state(&mut builder);
         }
-        T = next_unmarked();
+        T = next_unmarked(&mut s);
         if T == -1 {
             break;
         }
@@ -400,7 +413,7 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
     if s.epsilon_symbol != -1 {
         e_closure_free(&mut s);
     }
-    fsm_state_close(&mut net);
+    fsm_state_close(&mut builder, &mut net);
     net
 }
 
@@ -559,10 +572,10 @@ pub(crate) fn e_closure(s: &mut Subset, states: i32) -> i32 {
         if s.e_closure_memo[ptr].target.is_none() {
             continue;
         }
-        ptr_stack_push(ptr);
+        s.ptr_stack.push(ptr);
 
-        while ptr_stack_isempty() == 0 {
-            ptr = ptr_stack_pop();
+        while !s.ptr_stack.is_empty() {
+            ptr = s.ptr_stack.pop();
             let state = s.e_closure_memo[ptr].state as usize;
             /* Don't follow if already seen */
             if s.marktable[state] == mainloop {
@@ -590,7 +603,7 @@ pub(crate) fn e_closure(s: &mut Subset, states: i32) -> i32 {
                 if s.e_closure_memo[tgt].mark != mainloop {
                     /* Push */
                     s.e_closure_memo[tgt].mark = mainloop;
-                    ptr_stack_push(tgt);
+                    s.ptr_stack.push(tgt);
                 }
                 p = s.e_closure_memo[pi].next;
             }
@@ -634,7 +647,7 @@ pub(crate) fn add_T_ptr(s: &mut Subset, setnum: i32, setsize: i32, theset: u32, 
     s.t_ptr[setnum as usize].set_offset = theset;
     /* int → unsigned char truncation */
     s.t_ptr[setnum as usize].finalstart = fs as u8;
-    int_stack_push(setnum);
+    s.int_stack.push(setnum);
 }
 
 // [spec:foma:def:determinize.initial-e-closure-fn]
@@ -700,20 +713,20 @@ pub(crate) fn memoize_e_closure(s: &mut Subset, fsm: &[FsmState]) {
         let state = fsm[i].state_no;
 
         if state != laststate {
-            if int_stack_isempty() == 0 {
+            if !s.int_stack.is_empty() {
                 s.deterministic = false;
                 /* ptr = e_closure_memo+laststate; */
                 let mut ptr = laststate as usize;
-                /* ptr->target = e_closure_memo+int_stack_pop(); — target
+                /* ptr->target = e_closure_memo+s.int_stack.pop(); — target
                 indices are head-node indices (state numbers) */
-                s.e_closure_memo[ptr].target = Some(int_stack_pop() as usize);
-                while int_stack_isempty() == 0 {
+                s.e_closure_memo[ptr].target = Some(s.int_stack.pop() as usize);
+                while !s.int_stack.is_empty() {
                     /* append a chain node to the pool (its mark is never read
                     on chain nodes; 0 here) */
                     s.e_closure_memo.push(EClosureMemo {
                         state: laststate,
                         mark: 0,
-                        target: Some(int_stack_pop() as usize),
+                        target: Some(s.int_stack.pop() as usize),
                         next: None,
                     });
                     let ni = s.e_closure_memo.len() - 1;
@@ -733,7 +746,7 @@ pub(crate) fn memoize_e_closure(s: &mut Subset, fsm: &[FsmState]) {
         if fsm[i].r#in as i32 == EPSILON && fsm[i].out as i32 == EPSILON {
             if redcheck[fsm[i].target as usize] != fsm[i].state_no {
                 if fsm[i].target != fsm[i].state_no {
-                    int_stack_push(fsm[i].target);
+                    s.int_stack.push(fsm[i].target);
                     redcheck[fsm[i].target as usize] = fsm[i].state_no;
                 }
             }
@@ -746,11 +759,11 @@ pub(crate) fn memoize_e_closure(s: &mut Subset, fsm: &[FsmState]) {
 
 // [spec:foma:def:determinize.next-unmarked-fn]
 // [spec:foma:sem:determinize.next-unmarked-fn]
-pub(crate) fn next_unmarked() -> i32 {
-    if int_stack_isempty() != 0 {
+pub(crate) fn next_unmarked(s: &mut Subset) -> i32 {
+    if s.int_stack.is_empty() {
         return -1;
     }
-    int_stack_pop()
+    s.int_stack.pop()
 
     /* Everything after the return in the C (a sequential T_last_unmarked
     scan terminating on T_limit or a zero-size T_ptr entry) is unreachable
@@ -1335,7 +1348,6 @@ mod tests {
         s.t_limit = 8;
         s.t_ptr = vec![TMemo::default(); 8];
         s.op = SUBSET_DETERMINIZE;
-        crate::int_stack::int_stack_clear();
         nhash_init(&mut s, 6);
 
         /* first insert of {2,0,1} -> subset 0, members copied to set_table */
@@ -1360,21 +1372,21 @@ mod tests {
         assert_eq!(s.set_table_offset, 5);
 
         /* both subsets were pushed on the agenda by add_T_ptr (LIFO) */
-        assert_eq!(next_unmarked(), 1);
-        assert_eq!(next_unmarked(), 0);
-        assert_eq!(next_unmarked(), -1);
+        assert_eq!(next_unmarked(&mut s), 1);
+        assert_eq!(next_unmarked(&mut s), 0);
+        assert_eq!(next_unmarked(&mut s), -1);
     }
 
     // next_unmarked pops the agenda LIFO, -1 when empty.
     // [spec:foma:sem:determinize.next-unmarked-fn/test]
     #[test]
     fn next_unmarked_pops_lifo() {
-        crate::int_stack::int_stack_clear();
-        crate::int_stack::int_stack_push(3);
-        crate::int_stack::int_stack_push(7);
-        assert_eq!(next_unmarked(), 7);
-        assert_eq!(next_unmarked(), 3);
-        assert_eq!(next_unmarked(), -1);
+        let mut s = Subset::default();
+        s.int_stack.push(3);
+        s.int_stack.push(7);
+        assert_eq!(next_unmarked(&mut s), 7);
+        assert_eq!(next_unmarked(&mut s), 3);
+        assert_eq!(next_unmarked(&mut s), -1);
     }
 
     // sigma_to_pairs builds the (in,out)<->composite bijection, flags a
@@ -1419,7 +1431,6 @@ mod tests {
     // [spec:foma:sem:determinize.memoize-e-closure-fn/test]
     #[test]
     fn memoize_e_closure_builds_epsilon_graph() {
-        crate::int_stack::int_stack_clear();
         let mut s = Subset::default();
         s.num_states = 3;
         let e = EPSILON as i16;

@@ -19,7 +19,7 @@
 //!   re-reads of line i observe the remapped values, as in C.
 
 use crate::constructions::add_fsm_arc;
-use crate::int_stack::{int_stack_clear, int_stack_isempty, int_stack_pop, int_stack_push};
+use crate::int_stack::IntStack;
 #[cfg(test)]
 use crate::options::FomaOptions;
 use crate::sigma::sigma_create;
@@ -37,6 +37,7 @@ pub struct Invtable {
 // [spec:foma:def:fomalib.fsm-coaccessible-fn]
 // [spec:foma:sem:fomalib.fsm-coaccessible-fn+2]
 pub fn fsm_coaccessible(net: Box<Fsm>) -> Box<Fsm> {
+    let mut int_stack = IntStack::new();
     let mut net = net;
 
     /* C: fsm = net->states — reads/writes below index net.states directly */
@@ -86,7 +87,7 @@ pub fn fsm_coaccessible(net: Box<Fsm>) -> Box<Fsm> {
         if net.states[i as usize].final_state != 0
             && coacc[net.states[i as usize].state_no as usize] == 0
         {
-            int_stack_push(net.states[i as usize].state_no);
+            int_stack.push(net.states[i as usize].state_no);
             coacc[net.states[i as usize].state_no as usize] = 1;
             markcount += 1;
         }
@@ -94,8 +95,8 @@ pub fn fsm_coaccessible(net: Box<Fsm>) -> Box<Fsm> {
     }
 
     let mut terminate = 0;
-    while int_stack_isempty() == 0 {
-        let current_state = int_stack_pop();
+    while !int_stack.is_empty() {
+        let current_state = int_stack.pop();
         /* current_ptr = inverses+current_state; the array-resident head,
         then its malloc'd chain */
         let mut current_ptr: Option<&Invtable> = Some(&inverses[current_state as usize]);
@@ -105,7 +106,7 @@ pub fn fsm_coaccessible(net: Box<Fsm>) -> Box<Fsm> {
             }
             if coacc[p.state as usize] == 0 {
                 coacc[p.state as usize] = 1;
-                int_stack_push(p.state);
+                int_stack.push(p.state);
                 markcount += 1;
             }
             current_ptr = p.next.as_deref();
@@ -113,7 +114,7 @@ pub fn fsm_coaccessible(net: Box<Fsm>) -> Box<Fsm> {
         if markcount >= net.statecount {
             /* printf("Already coacc\n");  */
             terminate = 1;
-            int_stack_clear();
+            int_stack.clear();
             break;
         }
     }

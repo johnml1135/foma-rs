@@ -3,11 +3,11 @@
 //! (per-file ids) plus the fomalib.h / fomalibconf.h prototype ids.
 //!
 //! Two facilities live here:
-//! - the fsm_state_* dynamic line-array builder. Wave 4 folds the C's family
-//!   of file-static globals into one owned `FsmBuilder` struct (methods take
-//!   `&mut self`); the free `fsm_state_*` functions are thin veneers over a
-//!   single thread-local `Option<FsmBuilder>`, so existing callers keep their
-//!   exact C signatures. Non-reentrancy is unchanged from C;
+//! - the fsm_state_* dynamic line-array builder. The C's family of file-static
+//!   globals is folded into one owned `FsmBuilder` struct (methods take
+//!   `&mut self`); the free `fsm_state_*` functions delegate to it. `fsm_state_init`
+//!   returns the builder and the later `fsm_state_*` calls take `&mut FsmBuilder`,
+//!   so each build is a self-contained handle threaded by its caller;
 //! - the fsm_construct_* / fsm_read_* handle families for building and
 //!   iterating networks.
 //!
@@ -17,8 +17,6 @@
 //! state's first line (C: a pointer one element before the array position —
 //! UB but works); here that park position is `index.wrapping_sub(1)` and
 //! fsm_get_next_state_arc's pre-increment wraps it back.
-
-use std::cell::{Cell, RefCell};
 
 use crate::mem::next_power_of_two;
 use crate::sigma::{sigma_max, sigma_sort, sigma_to_list};
@@ -75,11 +73,10 @@ pub struct SigmaLookup {
 
 /// Owns one in-progress `fsm_state_*` line-array build. The C kept a family
 /// of file-static globals (`current_fsm_head`, `current_fsm_linecount`,
-/// `slookup`, the arity/count/flag scratch, `mainloop`, ...); Wave 4 folds
-/// them into this struct with `&mut self` methods. The free `fsm_state_*`
-/// functions are thin veneers over one thread-local `Option<FsmBuilder>`
-/// (see `BUILDER`) so existing callers keep their exact C signatures;
-/// non-reentrancy is unchanged from C.
+/// `slookup`, the arity/count/flag scratch, `mainloop`, ...); these are folded
+/// into this struct with `&mut self` methods. The free `fsm_state_*` functions
+/// delegate to it: `fsm_state_init` returns the builder and the rest take
+/// `&mut FsmBuilder`, so each build is a self-contained handle.
 #[derive(Debug)]
 pub struct FsmBuilder {
     current_fsm_size: usize,
@@ -257,41 +254,40 @@ impl FsmBuilder {
     }
 }
 
-thread_local! {
-    /// The single active line-array build shared by the free `fsm_state_*`
-    /// veneers (was: a dozen file-static globals in C).
-    static BUILDER: RefCell<Option<FsmBuilder>> = const { RefCell::new(None) };
-
-    // libc rand() state stand-in: the C calls the C library's rand()
-    // (seeded elsewhere with srand(time(NULL))); the port has no libc
-    // dependency, so the ISO C sample LCG is used. Only affects the
-    // random hex names given to constructed nets.
-    static RAND_NEXT: Cell<u64> = const { Cell::new(1) };
+/// The C library `rand()`/`srand()` state (the ISO C sample LCG). C foma
+/// relied on the single process-global libc state, seeded once by
+/// `apply_init` with `srand(time(NULL))` and otherwise left at the ISO C
+/// default of 1; the port has no libc dependency, so each owner (an
+/// `ApplyHandle`, a `Session`, or a one-shot `fsm_construct_done` build)
+/// carries its own `Lcg`. Only affects random enumeration order and the
+/// random hex names given to unnamed constructed nets.
+#[derive(Debug, Clone)]
+pub struct Lcg {
+    next: u64,
 }
 
-/// Run `f` against the active thread-local build (panics if no build is in
-/// progress — the C read uninitialized statics, callers always init first).
-fn with_builder<R>(f: impl FnOnce(&mut FsmBuilder) -> R) -> R {
-    BUILDER.with(|b| {
-        f(b.borrow_mut()
-            .as_mut()
-            .expect("fsm_state build not initialized"))
-    })
+impl Lcg {
+    /// ISO C default seed (equivalent to a program that never calls srand).
+    pub fn new() -> Lcg {
+        Lcg { next: 1 }
+    }
+
+    /// C library `srand`: reseed the LCG (`next = seed`).
+    pub fn srand(&mut self, seed: u32) {
+        self.next = seed as u64;
+    }
+
+    /// C library `rand` (ISO C sample implementation).
+    pub fn rand(&mut self) -> i32 {
+        self.next = self.next.wrapping_mul(1103515245).wrapping_add(12345);
+        ((self.next / 65536) % 32768) as i32
+    }
 }
 
-/* C library srand() twin: reseeds the shared LCG state used by rand().
-apply_init calls this; the ISO C sample sets `next = seed`. */
-pub(crate) fn srand(seed: u32) {
-    RAND_NEXT.with(|n| n.set(seed as u64));
-}
-
-/* C library rand() twin (ISO C sample implementation; see RAND_NEXT) */
-pub(crate) fn rand() -> i32 {
-    RAND_NEXT.with(|n| {
-        let next = n.get().wrapping_mul(1103515245).wrapping_add(12345);
-        n.set(next);
-        ((next / 65536) % 32768) as i32
-    })
+impl Default for Lcg {
+    fn default() -> Self {
+        Lcg::new()
+    }
 }
 
 /* Functions for directly building a fsm_state structure */
@@ -299,7 +295,7 @@ pub(crate) fn rand() -> i32 {
 
 /* fsm_state_init() is called when a new machine is constructed */
 
-/* fsm_state_add_arc() adds an arc and possibly reallocs the array */
+/* fsm_state_add_arc(&mut b, ) adds an arc and possibly reallocs the array */
 
 /* fsm_state_close() adds the sentinel entry and clears values */
 
@@ -307,18 +303,24 @@ pub(crate) fn rand() -> i32 {
 // [spec:foma:sem:dynarray.fsm-state-init-fn]
 // [spec:foma:def:fomalibconf.fsm-state-init-fn]
 // [spec:foma:sem:fomalibconf.fsm-state-init-fn]
-pub fn fsm_state_init(sigma_size: i32) {
-    // C returned the malloc'd array pointer (also retained in the static);
-    // every foma caller ignores it, so the veneer returns ().
-    BUILDER.with(|b| *b.borrow_mut() = Some(FsmBuilder::new(sigma_size)));
+pub fn fsm_state_init(sigma_size: i32) -> FsmBuilder {
+    // C returned the malloc'd array pointer (also retained in a family of
+    // file-static globals); the port hands the caller the owned builder that
+    // the subsequent fsm_state_* calls thread as `&mut`.
+    FsmBuilder::new(sigma_size)
 }
 
 // [spec:foma:def:dynarray.fsm-state-set-current-state-fn]
 // [spec:foma:sem:dynarray.fsm-state-set-current-state-fn]
 // [spec:foma:def:fomalibconf.fsm-state-set-current-state-fn]
 // [spec:foma:sem:fomalibconf.fsm-state-set-current-state-fn]
-pub fn fsm_state_set_current_state(state_no: i32, final_state: i32, start_state: i32) {
-    with_builder(|b| b.set_current_state(state_no, final_state, start_state));
+pub fn fsm_state_set_current_state(
+    b: &mut FsmBuilder,
+    state_no: i32,
+    final_state: i32,
+    start_state: i32,
+) {
+    b.set_current_state(state_no, final_state, start_state);
 }
 
 /* Add sentinel if needed */
@@ -326,8 +328,8 @@ pub fn fsm_state_set_current_state(state_no: i32, final_state: i32, start_state:
 // [spec:foma:sem:dynarray.fsm-state-end-state-fn]
 // [spec:foma:def:fomalibconf.fsm-state-end-state-fn]
 // [spec:foma:sem:fomalibconf.fsm-state-end-state-fn]
-pub fn fsm_state_end_state() {
-    with_builder(|b| b.end_state());
+pub fn fsm_state_end_state(b: &mut FsmBuilder) {
+    b.end_state();
 }
 
 // [spec:foma:def:dynarray.fsm-state-add-arc-fn]
@@ -335,6 +337,7 @@ pub fn fsm_state_end_state() {
 // [spec:foma:def:fomalibconf.fsm-state-add-arc-fn]
 // [spec:foma:sem:fomalibconf.fsm-state-add-arc-fn]
 pub fn fsm_state_add_arc(
+    b: &mut FsmBuilder,
     state_no: i32,
     r#in: i32,
     out: i32,
@@ -342,15 +345,15 @@ pub fn fsm_state_add_arc(
     final_state: i32,
     start_state: i32,
 ) {
-    with_builder(|b| b.add_arc(state_no, r#in, out, target, final_state, start_state));
+    b.add_arc(state_no, r#in, out, target, final_state, start_state);
 }
 
 // [spec:foma:def:dynarray.fsm-state-close-fn]
 // [spec:foma:sem:dynarray.fsm-state-close-fn]
 // [spec:foma:def:fomalibconf.fsm-state-close-fn]
 // [spec:foma:sem:fomalibconf.fsm-state-close-fn]
-pub fn fsm_state_close(net: &mut Fsm) {
-    with_builder(|b| b.close(net));
+pub fn fsm_state_close(b: &mut FsmBuilder, net: &mut Fsm) {
+    b.close(net);
 }
 
 /* Construction functions */
@@ -737,14 +740,19 @@ pub fn fsm_construct_done(handle: Box<FsmConstructHandle>) -> Box<Fsm> {
         // Rust drops them.
         return fsm_empty_set();
     }
-    fsm_state_init(handle.maxsigma + 1);
+    let mut b = fsm_state_init(handle.maxsigma + 1);
+
+    /* C read the process-global libc rand() state here (seeded only if an
+    apply_init ran earlier). A one-shot LCG at the ISO C default stands in;
+    the value it names is always overwritten below by handle->name. */
+    let mut lcg = Lcg::new();
 
     /* emptyfsm tracks whether the FSM has (a) something outgoing from an
     initial state, or (b) an initial state that is final */
     let mut emptyfsm = 1;
     for i in 0..=handle.maxstate {
         let sl = &handle.fsm_state_list[i as usize];
-        fsm_state_set_current_state(i, sl.is_final as i32, sl.is_initial as i32);
+        fsm_state_set_current_state(&mut b, i, sl.is_final as i32, sl.is_initial as i32);
         if sl.is_initial && sl.is_final {
             emptyfsm = 0;
         }
@@ -756,6 +764,7 @@ pub fn fsm_construct_done(handle: Box<FsmConstructHandle>) -> Box<Fsm> {
             }
             /* short→int promotion on in/out */
             fsm_state_add_arc(
+                &mut b,
                 i,
                 t.r#in as i32,
                 t.out as i32,
@@ -765,13 +774,13 @@ pub fn fsm_construct_done(handle: Box<FsmConstructHandle>) -> Box<Fsm> {
             );
             trans = t.next.as_deref();
         }
-        fsm_state_end_state();
+        fsm_state_end_state(&mut b);
     }
     let mut net = fsm_create("");
-    net.name = format!("{:X}", rand());
+    net.name = format!("{:X}", lcg.rand());
     /* free(net->sigma) */
     net.sigma = None;
-    fsm_state_close(&mut net);
+    fsm_state_close(&mut b, &mut net);
 
     net.sigma = fsm_construct_convert_sigma(&handle);
     if let Some(name) = handle.name.take() {
@@ -789,7 +798,7 @@ pub fn fsm_construct_done(handle: Box<FsmConstructHandle>) -> Box<Fsm> {
         }
         /* free(handle->name) — dropped with the take() above */
     } else {
-        net.name = format!("{:X}", rand());
+        net.name = format!("{:X}", lcg.rand());
     }
 
     /* Free transitions (all fsm_state_list_size slots), the sigma-hash
@@ -1196,13 +1205,7 @@ mod tests {
         )
     }
 
-    /* Wave 4: the builder statics became fields of the thread-local
-    FsmBuilder; peek reads them for the white-box assertions below. */
-    fn peek<R>(f: impl FnOnce(&super::FsmBuilder) -> R) -> R {
-        super::BUILDER.with(|b| f(b.borrow().as_ref().unwrap()))
-    }
-
-    /* ---- module-static builder family ------------------------------- */
+    /* ---- builder family --------------------------------------------- */
 
     // [spec:foma:sem:dynarray.fsm-state-init-fn/test]
     // [spec:foma:sem:fomalibconf.fsm-state-init-fn/test]
@@ -1217,15 +1220,15 @@ mod tests {
     #[test]
     fn fsm_state_build_line_table_and_sentinel() {
         /* state 0: initial, one arc 0 -3:3-> 1; state 1: final, no arcs. */
-        fsm_state_init(4);
-        fsm_state_set_current_state(0, 0, 1);
-        fsm_state_add_arc(0, 3, 3, 1, 0, 1);
-        fsm_state_end_state();
-        fsm_state_set_current_state(1, 1, 0);
+        let mut b = fsm_state_init(4);
+        fsm_state_set_current_state(&mut b, 0, 0, 1);
+        fsm_state_add_arc(&mut b, 0, 3, 3, 1, 0, 1);
+        fsm_state_end_state(&mut b);
+        fsm_state_set_current_state(&mut b, 1, 1, 0);
         /* no arc emitted -> end_state must synthesize a placeholder line */
-        fsm_state_end_state();
+        fsm_state_end_state(&mut b);
         let mut net = fsm_create("");
-        fsm_state_close(&mut net);
+        fsm_state_close(&mut b, &mut net);
 
         /* exact line table incl. the sentinel terminator */
         assert_eq!(net.states.len(), 3);
@@ -1253,90 +1256,90 @@ mod tests {
     // [spec:foma:sem:dynarray.fsm-state-set-current-state-fn/test]
     #[test]
     fn fsm_state_set_current_state_counts_only_exact_one() {
-        fsm_state_init(4);
+        let mut b = fsm_state_init(4);
         /* final/start flags of 2 and 5 are nonzero but not exactly 1 */
-        fsm_state_set_current_state(0, 2, 5);
-        assert_eq!(peek(|b| b.num_finals), 0);
-        assert_eq!(peek(|b| b.num_initials), 0);
-        fsm_state_set_current_state(1, 1, 1);
-        assert_eq!(peek(|b| b.num_finals), 1);
-        assert_eq!(peek(|b| b.num_initials), 1);
+        fsm_state_set_current_state(&mut b, 0, 2, 5);
+        assert_eq!(b.num_finals, 0);
+        assert_eq!(b.num_initials, 0);
+        fsm_state_set_current_state(&mut b, 1, 1, 1);
+        assert_eq!(b.num_finals, 1);
+        assert_eq!(b.num_initials, 1);
     }
 
     // [spec:foma:sem:dynarray.fsm-state-add-arc-fn/test]
     #[test]
     fn fsm_state_add_arc_sets_arity_on_asymmetric_label() {
-        fsm_state_init(4);
-        fsm_state_set_current_state(0, 0, 1);
-        assert_eq!(peek(|b| b.arity), 1);
-        fsm_state_add_arc(0, 3, 4, 1, 0, 1); /* in != out */
-        assert_eq!(peek(|b| b.arity), 2);
+        let mut b = fsm_state_init(4);
+        fsm_state_set_current_state(&mut b, 0, 0, 1);
+        assert_eq!(b.arity, 1);
+        fsm_state_add_arc(&mut b, 0, 3, 4, 1, 0, 1); /* in != out */
+        assert_eq!(b.arity, 2);
     }
 
     // [spec:foma:sem:dynarray.fsm-state-add-arc-fn/test]
     #[test]
     fn fsm_state_add_arc_epsilon_self_loop_dropped() {
-        fsm_state_init(4);
-        fsm_state_set_current_state(0, 0, 1);
+        let mut b = fsm_state_init(4);
+        fsm_state_set_current_state(&mut b, 0, 0, 1);
         /* EPSILON:EPSILON self-loop -> nothing appended, flags untouched */
-        fsm_state_add_arc(0, EPSILON, EPSILON, 0, 0, 1);
-        assert_eq!(peek(|b| b.current_fsm_linecount), 0);
-        assert!(peek(|b| b.is_epsilon_free));
-        assert!(peek(|b| b.is_deterministic));
+        fsm_state_add_arc(&mut b, 0, EPSILON, EPSILON, 0, 0, 1);
+        assert_eq!(b.current_fsm_linecount, 0);
+        assert!(b.is_epsilon_free);
+        assert!(b.is_deterministic);
         /* EPSILON:EPSILON to a different target -> emitted, clears both flags */
-        fsm_state_add_arc(0, EPSILON, EPSILON, 1, 0, 1);
-        assert_eq!(peek(|b| b.current_fsm_linecount), 1);
-        assert!(!peek(|b| b.is_epsilon_free));
-        assert!(!peek(|b| b.is_deterministic));
+        fsm_state_add_arc(&mut b, 0, EPSILON, EPSILON, 1, 0, 1);
+        assert_eq!(b.current_fsm_linecount, 1);
+        assert!(!b.is_epsilon_free);
+        assert!(!b.is_deterministic);
     }
 
     // [spec:foma:sem:dynarray.fsm-state-add-arc-fn/test]
     // [spec:foma:sem:dynarray.fsm-state-end-state-fn/test]
     #[test]
     fn fsm_state_add_arc_slookup_dedup_quirks() {
-        fsm_state_init(4);
-        fsm_state_set_current_state(0, 0, 1);
+        let mut b = fsm_state_init(4);
+        fsm_state_set_current_state(&mut b, 0, 0, 1);
         /* 1: first (3,3)->1 emitted */
-        fsm_state_add_arc(0, 3, 3, 1, 0, 1);
+        fsm_state_add_arc(&mut b, 0, 3, 3, 1, 0, 1);
         /* 2: exact duplicate (3,3)->1 silently dropped */
-        fsm_state_add_arc(0, 3, 3, 1, 0, 1);
-        assert_eq!(peek(|b| b.current_fsm_linecount), 1);
-        assert_eq!(peek(|b| b.arccount), 1);
-        assert!(peek(|b| b.is_deterministic));
+        fsm_state_add_arc(&mut b, 0, 3, 3, 1, 0, 1);
+        assert_eq!(b.current_fsm_linecount, 1);
+        assert_eq!(b.arccount, 1);
+        assert!(b.is_deterministic);
         /* 3: same label, different target -> emitted, clears determinism,
         overwrites the cell's recorded target to 2 */
-        fsm_state_add_arc(0, 3, 3, 2, 0, 1);
-        assert!(!peek(|b| b.is_deterministic));
+        fsm_state_add_arc(&mut b, 0, 3, 3, 2, 0, 1);
+        assert!(!b.is_deterministic);
         /* 4: repeats the FIRST target (1); the cell now records 2, so this is
         no longer seen as a duplicate and is emitted a second time (the quirk) */
-        fsm_state_add_arc(0, 3, 3, 1, 0, 1);
+        fsm_state_add_arc(&mut b, 0, 3, 3, 1, 0, 1);
 
-        assert_eq!(peek(|b| b.current_fsm_linecount), 3);
-        assert_eq!(peek(|b| b.arccount), 3);
-        let targets: Vec<i32> = peek(|b| b.current_fsm_head.iter().map(|l| l.target).collect());
+        assert_eq!(b.current_fsm_linecount, 3);
+        assert_eq!(b.arccount, 3);
+        let targets: Vec<i32> = b.current_fsm_head.iter().map(|l| l.target).collect();
         assert_eq!(targets, vec![1, 2, 1]);
 
         /* end_state bumps mainloop, invalidating the stamps for the next state */
-        let before = peek(|b| b.mainloop);
-        fsm_state_end_state();
-        assert_eq!(peek(|b| b.mainloop), before + 1);
-        assert_eq!(peek(|b| b.statecount), 1);
+        let before = b.mainloop;
+        fsm_state_end_state(&mut b);
+        assert_eq!(b.mainloop, before + 1);
+        assert_eq!(b.statecount, 1);
     }
 
     // [spec:foma:sem:dynarray.fsm-state-close-fn/test]
     #[test]
     fn fsm_state_close_multiple_initials_clears_determinism() {
-        fsm_state_init(4);
-        fsm_state_set_current_state(0, 0, 1);
-        fsm_state_end_state();
-        fsm_state_set_current_state(1, 1, 1); /* second initial state */
-        fsm_state_end_state();
+        let mut b = fsm_state_init(4);
+        fsm_state_set_current_state(&mut b, 0, 0, 1);
+        fsm_state_end_state(&mut b);
+        fsm_state_set_current_state(&mut b, 1, 1, 1); /* second initial state */
+        fsm_state_end_state(&mut b);
         let mut net = fsm_create("");
-        fsm_state_close(&mut net);
+        fsm_state_close(&mut b, &mut net);
         /* num_initials > 1 forces is_deterministic = 0 even with no dup arcs */
         assert_eq!(net.is_deterministic, 0);
         /* and slookup is freed */
-        assert!(peek(|b| b.slookup.is_empty()));
+        assert!(b.slookup.is_empty());
     }
 
     /* ---- construction family ---------------------------------------- */
@@ -1642,18 +1645,18 @@ mod tests {
     /* Builds a 3-state net directly: state 0 initial with arcs 0-3:3->1 and
     0-4:4->2; states 1 and 2 final. sigma: 3="a", 4="b". */
     fn build_read_net() -> Box<Fsm> {
-        fsm_state_init(4);
-        fsm_state_set_current_state(0, 0, 1);
-        fsm_state_add_arc(0, 3, 3, 1, 0, 1);
-        fsm_state_add_arc(0, 4, 4, 2, 0, 1);
-        fsm_state_end_state();
-        fsm_state_set_current_state(1, 1, 0);
-        fsm_state_end_state();
-        fsm_state_set_current_state(2, 1, 0);
-        fsm_state_end_state();
+        let mut b = fsm_state_init(4);
+        fsm_state_set_current_state(&mut b, 0, 0, 1);
+        fsm_state_add_arc(&mut b, 0, 3, 3, 1, 0, 1);
+        fsm_state_add_arc(&mut b, 0, 4, 4, 2, 0, 1);
+        fsm_state_end_state(&mut b);
+        fsm_state_set_current_state(&mut b, 1, 1, 0);
+        fsm_state_end_state(&mut b);
+        fsm_state_set_current_state(&mut b, 2, 1, 0);
+        fsm_state_end_state(&mut b);
         let mut net = fsm_create("read");
         net.sigma = None;
-        fsm_state_close(&mut net);
+        fsm_state_close(&mut b, &mut net);
         net.sigma = Some(Box::new(Sigma {
             number: 3,
             symbol: Some("a".to_string()),
@@ -1703,13 +1706,13 @@ mod tests {
     // [spec:foma:sem:fomalib.fsm-get-has-unknowns-fn/test]
     #[test]
     fn fsm_read_detects_identity_label_as_unknown() {
-        fsm_state_init(4);
-        fsm_state_set_current_state(0, 1, 1);
-        fsm_state_add_arc(0, IDENTITY, IDENTITY, 0, 1, 1);
-        fsm_state_end_state();
+        let mut b = fsm_state_init(4);
+        fsm_state_set_current_state(&mut b, 0, 1, 1);
+        fsm_state_add_arc(&mut b, 0, IDENTITY, IDENTITY, 0, 1, 1);
+        fsm_state_end_state(&mut b);
         let mut net = fsm_create("id");
         net.sigma = None;
-        fsm_state_close(&mut net);
+        fsm_state_close(&mut b, &mut net);
         net.sigma = Some(Box::new(Sigma {
             number: IDENTITY,
             symbol: Some("@_IDENTITY_SYMBOL_@".to_string()),
@@ -1874,13 +1877,11 @@ mod tests {
     // [spec:foma:def:dynarray.sigma-lookup/test]
     #[test]
     fn sigma_lookup_zeroed_by_init() {
-        fsm_state_init(2);
+        let b = fsm_state_init(2);
         /* fsm_state_init callocs ssize*ssize zeroed sigma_lookup cells */
-        peek(|b| {
-            assert_eq!(b.slookup.len(), 9); /* ssize = sigma_size+1 = 3; 3*3 */
-            assert_eq!(b.slookup[0].target, 0);
-            assert_eq!(b.slookup[0].mainloop, 0);
-        });
+        assert_eq!(b.slookup.len(), 9); /* ssize = sigma_size+1 = 3; 3*3 */
+        assert_eq!(b.slookup[0].target, 0);
+        assert_eq!(b.slookup[0].mainloop, 0);
     }
 
     // [spec:foma:sem:dynarray.fsm-construct-copy-sigma-fn+1/test]

@@ -8,6 +8,7 @@
 //! coexist on one thread (embeddable) with nothing hidden shared between them.
 //!
 use crate::define::{defined_functions_init, defined_networks_init};
+use crate::dynarray::Lcg;
 use crate::options::FomaOptions;
 use crate::types::{DefinedFunctions, DefinedNetworks, StackEntry};
 
@@ -26,6 +27,10 @@ pub struct Session {
     pub defines: Box<DefinedNetworks>,
     /// The defined-functions registry (C: `g_defines_f`), same lifecycle.
     pub defines_f: Box<DefinedFunctions>,
+    /// The C library `rand()` state that `stack_add` reads to name unnamed
+    /// nets. C used the process-global libc state (default-seeded unless an
+    /// apply_init had run); the session owns its own here.
+    pub(crate) lcg: Lcg,
 }
 
 impl Session {
@@ -38,6 +43,7 @@ impl Session {
             opts: FomaOptions::default(),
             defines: defined_networks_init(),
             defines_f: defined_functions_init(),
+            lcg: Lcg::new(),
         };
         session.stack_init();
         session

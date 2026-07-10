@@ -99,4 +99,5 @@ assertions (
     {id w8-stack, kind @complete, author "brendan@necessary.nu", at 2026-07-08T17:54:26.850046Z}
     {id w8-options, kind @complete, author "brendan@necessary.nu", at 2026-07-09T15:15:35.564304Z}
     {id w8-defines, kind @complete, author "brendan@necessary.nu", at 2026-07-09T15:15:38.151188Z}
+    {id w9-state, kind @doing, author "brendan@necessary.nu", at 2026-07-10T14:06:41.548547Z}
 )

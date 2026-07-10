@@ -9,10 +9,7 @@
 //! agenda is append-only and addressed by index; astarnode "pointers" become
 //! agenda indices so the parent-chain walk in print_match survives reallocs.
 
-use crate::int_stack::{
-    int_stack_clear, int_stack_isempty, int_stack_pop, int_stack_push, ptr_stack_isempty,
-    ptr_stack_pop, ptr_stack_push,
-};
+use crate::int_stack::{IntStack, PtrStack};
 #[cfg(test)]
 use crate::options::FomaOptions;
 use crate::sigma::{sigma_find, sigma_max, sigma_string};
@@ -158,7 +155,7 @@ pub fn apply_med_clear(medh: Option<Box<ApplyMedHandle>>) {
 // [spec:foma:def:spelling.print-match-fn]
 // [spec:foma:sem:spelling.print-match-fn+1]
 fn print_match(medh: &mut ApplyMedHandle, node: usize, sigma: Option<&Sigma>, word: &str) {
-    int_stack_clear();
+    let mut int_stack = IntStack::new();
     let wordlen = medh.wordlen;
     /* Pass 1: walk the parent chain pushing each n->in, terminating at the root.
     [spec:foma:sem:spelling.print-match-fn+1] the root is the sole node with
@@ -169,13 +166,13 @@ fn print_match(medh: &mut ApplyMedHandle, node: usize, sigma: Option<&Sigma>, wo
         if medh.agenda[n].parent == -1 {
             break;
         }
-        int_stack_push(medh.agenda[n].r#in);
+        int_stack.push(medh.agenda[n].r#in);
         n = medh.agenda[n].parent as usize;
     }
     /* Each pass rebuilds the buffer from scratch (C reset printptr to 0). */
     medh.outstring.clear();
-    while int_stack_isempty() == 0 {
-        let s = int_stack_pop();
+    while !int_stack.is_empty() {
+        let s = int_stack.pop();
         if s > 2 {
             medh.outstring.push_str(&print_sym(s, sigma).unwrap());
         }
@@ -194,13 +191,13 @@ fn print_match(medh: &mut ApplyMedHandle, node: usize, sigma: Option<&Sigma>, wo
         if medh.agenda[n].parent == -1 {
             break;
         }
-        int_stack_push(medh.agenda[n].out);
+        int_stack.push(medh.agenda[n].out);
         n = medh.agenda[n].parent as usize;
     }
     medh.instring.clear();
     let mut i: usize = 0; // byte offset into `word`
-    while int_stack_isempty() == 0 {
-        let sym = int_stack_pop();
+    while !int_stack.is_empty() {
+        let sym = int_stack.pop();
         if sym > 2 {
             medh.instring.push_str(&print_sym(sym, sigma).unwrap());
             i += word[i..].chars().next().map_or(0, |c| c.len_utf8());
@@ -437,6 +434,8 @@ enum Pc {
 // [spec:foma:def:fomalib.fsm-create-letter-lookup-fn]
 // [spec:foma:sem:fomalib.fsm-create-letter-lookup-fn]
 pub fn fsm_create_letter_lookup(medh: &mut ApplyMedHandle, net: &Fsm) {
+    let mut int_stack = IntStack::new();
+    let mut ptr_stack = PtrStack::new();
     let num_states: i32;
     let num_symbols: i32;
     let mut index: i32;
@@ -476,10 +475,10 @@ pub fn fsm_create_letter_lookup(medh: &mut ApplyMedHandle, net: &Fsm) {
     loop {
         match pc {
             Pc::Loop => {
-                if ptr_stack_isempty() != 0 {
+                if ptr_stack.is_empty() {
                     break;
                 }
-                curr_ptr = ptr_stack_pop();
+                curr_ptr = ptr_stack.pop();
                 v = ls_state_no(net, curr_ptr); /* source state number */
                 vp = ls_target(net, curr_ptr); /* target state number */
 
@@ -504,7 +503,7 @@ pub fn fsm_create_letter_lookup(medh: &mut ApplyMedHandle, net: &Fsm) {
                 sccinfo[v as usize].index = index;
                 sccinfo[v as usize].lowlink = index;
                 index += 1;
-                int_stack_push(v);
+                int_stack.push(v);
                 sccinfo[v as usize].on_t_stack = 1;
 
                 if vp == -1 {
@@ -517,7 +516,7 @@ pub fn fsm_create_letter_lookup(medh: &mut ApplyMedHandle, net: &Fsm) {
                 letterbits_add(v, ls_in(net, curr_ptr) as i32, &mut medh.letterbits, bpla);
                 if sccinfo[vp as usize].index == 0 {
                     /* push (v,e) ptr on stack */
-                    ptr_stack_push(curr_ptr);
+                    ptr_stack.push(curr_ptr);
                     let tgt = ls_target(net, curr_ptr) as usize;
                     curr_ptr = medh.state_array[tgt].transitions;
                     /* (v,e) = (v',firstedge), goto init */
@@ -547,7 +546,7 @@ pub fn fsm_create_letter_lookup(medh: &mut ApplyMedHandle, net: &Fsm) {
                 /* Copy all bits from root of SCC to descendants */
                 if sccinfo[v as usize].lowlink == sccinfo[v as usize].index {
                     loop {
-                        copystate = int_stack_pop();
+                        copystate = int_stack.pop();
                         if copystate == v {
                             break;
                         }
@@ -562,16 +561,16 @@ pub fn fsm_create_letter_lookup(medh: &mut ApplyMedHandle, net: &Fsm) {
     }
 
     /* (two commented-out debug loops in C have no effect) */
-    int_stack_clear();
+    int_stack.clear();
 
     /* We do the same thing for some finite n (up to maxdepth) in nletterbits */
     v = 0;
     while v < num_states {
-        ptr_stack_push(medh.state_array[v as usize].transitions);
-        int_stack_push(0);
-        while ptr_stack_isempty() == 0 {
-            curr_ptr = ptr_stack_pop();
-            depth = int_stack_pop();
+        ptr_stack.push(medh.state_array[v as usize].transitions);
+        int_stack.push(0);
+        while !ptr_stack.is_empty() {
+            curr_ptr = ptr_stack.pop();
+            depth = int_stack.pop();
             /* looper: */
             loop {
                 if depth == medh.maxdepth {
@@ -582,8 +581,8 @@ pub fn fsm_create_letter_lookup(medh: &mut ApplyMedHandle, net: &Fsm) {
                 }
                 if ls_target(net, curr_ptr) != -1 {
                     if ls_state_no(net, curr_ptr) == ls_state_no(net, curr_ptr + 1) {
-                        ptr_stack_push(curr_ptr + 1);
-                        int_stack_push(depth);
+                        ptr_stack.push(curr_ptr + 1);
+                        int_stack.push(depth);
                     }
                     depth += 1;
                     let tgt = ls_target(net, curr_ptr) as usize;

@@ -7,6 +7,7 @@ use super::*;
 // [spec:foma:def:fomalib.fsm-intersect-fn]
 // [spec:foma:sem:fomalib.fsm-intersect-fn]
 pub fn fsm_intersect(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm> {
+    let mut int_stack = IntStack::new();
     /* C: struct blookup {int mainloop; int target; } *array, *bptr; —
     function-local type */
     #[derive(Clone)]
@@ -44,22 +45,22 @@ pub fn fsm_intersect(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<
     /* new state 0 = {0,0} */
 
     /* STACK_2_PUSH(0,0) */
-    int_stack_push(0);
-    int_stack_push(0);
+    int_stack.push(0);
+    int_stack.push(0);
 
     let mut th = triplet_hash_init();
     triplet_hash_insert(&mut th, 0, 0, 0);
 
-    fsm_state_init(sigma_max(net1.sigma.as_deref()));
+    let mut builder = fsm_state_init(sigma_max(net1.sigma.as_deref()));
 
     let point_a = init_state_pointers(&net1.states);
     let point_b = init_state_pointers(&net2.states);
 
-    while int_stack_isempty() == 0 {
+    while !int_stack.is_empty() {
         /* Get a pair of states to examine */
 
-        let a = int_stack_pop();
-        let b = int_stack_pop();
+        let a = int_stack.pop();
+        let b = int_stack.pop();
 
         let current_state = triplet_hash_find(&th, a, b, 0);
         let current_start = if point_a[a as usize].start == 1 && point_b[b as usize].start == 1 {
@@ -74,7 +75,7 @@ pub fn fsm_intersect(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<
             0
         };
 
-        fsm_state_set_current_state(current_state, current_final, current_start);
+        fsm_state_set_current_state(&mut builder, current_state, current_final, current_start);
 
         /* Create a lookup index for machine b */
         /* array[in][out] holds the target for this state and the symbol pair in:out */
@@ -119,13 +120,14 @@ pub fn fsm_intersect(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<
             let mut target_number = triplet_hash_find(&th, atarget, btarget, 0);
             if target_number == -1 {
                 /* STACK_2_PUSH(bptr->target, machine_a->target) */
-                int_stack_push(btarget);
-                int_stack_push(atarget);
+                int_stack.push(btarget);
+                int_stack.push(atarget);
                 target_number = triplet_hash_insert(&mut th, atarget, btarget, 0);
             }
 
             let (ain, aout) = (net1.states[ai].r#in as i32, net1.states[ai].out as i32);
             fsm_state_add_arc(
+                &mut builder,
                 current_state,
                 ain,
                 aout,
@@ -136,14 +138,14 @@ pub fn fsm_intersect(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<
 
             ai += 1;
         }
-        fsm_state_end_state();
+        fsm_state_end_state(&mut builder);
     }
     let mut new_net = fsm_create("");
     fsm_sigma_destroy(new_net.sigma.take());
     new_net.sigma = net1.sigma.take();
     fsm_destroy(net2);
     fsm_destroy(net1);
-    fsm_state_close(&mut new_net);
+    fsm_state_close(&mut builder, &mut new_net);
     /* free(point_a); free(point_b); free(array) */
     drop(point_a);
     drop(point_b);
@@ -157,6 +159,7 @@ pub fn fsm_intersect(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<
 // [spec:foma:def:fomalib.fsm-compose-fn]
 // [spec:foma:sem:fomalib.fsm-compose-fn]
 pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm> {
+    let mut int_stack = IntStack::new();
     /* The composition algorithm is the basic naive composition where we lazily      */
     /* take the cross-product of states P and Q and move to a new state with symbols */
     /* ain, bout if the symbols aout = bin.  Also, if aout = 0 state p goes to       */
@@ -309,26 +312,26 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
 
     /* Mode, a, b */
     /* STACK_3_PUSH(0,0,0) */
-    int_stack_push(0);
-    int_stack_push(0);
-    int_stack_push(0);
+    int_stack.push(0);
+    int_stack.push(0);
+    int_stack.push(0);
 
     let mut th = triplet_hash_init();
     triplet_hash_insert(&mut th, 0, 0, 0);
 
-    fsm_state_init(sigma_max(net1.sigma.as_deref()));
+    let mut builder = fsm_state_init(sigma_max(net1.sigma.as_deref()));
 
     let point_a = init_state_pointers(&net1.states);
     let point_b = init_state_pointers(&net2.states);
 
     let mut mainloop = 0;
 
-    while int_stack_isempty() == 0 {
+    while !int_stack.is_empty() {
         /* Get a pair of states to examine */
 
-        let a = int_stack_pop();
-        let b = int_stack_pop();
-        let mode = int_stack_pop();
+        let a = int_stack.pop();
+        let b = int_stack.pop();
+        let mode = int_stack.pop();
 
         let current_state = triplet_hash_find(&th, a, b, mode);
         let current_start =
@@ -344,7 +347,7 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
             0
         };
 
-        fsm_state_set_current_state(current_state, current_final, current_start);
+        fsm_state_set_current_state(&mut builder, current_state, current_final, current_start);
 
         /* Create the index for machine b in this state */
         mainloop += 1;
@@ -413,13 +416,14 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
                     let mut target_number = triplet_hash_find(&th, atarget, btarget, 0);
                     if target_number == -1 {
                         /* STACK_3_PUSH(0, iptr->target, machine_a->target) */
-                        int_stack_push(0);
-                        int_stack_push(btarget);
-                        int_stack_push(atarget);
+                        int_stack.push(0);
+                        int_stack.push(btarget);
+                        int_stack.push(atarget);
                         target_number = triplet_hash_insert(&mut th, atarget, btarget, 0);
                     }
 
                     fsm_state_add_arc(
+                        &mut builder,
                         current_state,
                         ain,
                         bout,
@@ -449,12 +453,13 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
                 let mut target_number = triplet_hash_find(&th, atarget, b, 0);
                 if target_number == -1 {
                     /* STACK_3_PUSH(0, b, machine_a->target) */
-                    int_stack_push(0);
-                    int_stack_push(b);
-                    int_stack_push(atarget);
+                    int_stack.push(0);
+                    int_stack.push(b);
+                    int_stack.push(atarget);
                     target_number = triplet_hash_insert(&mut th, atarget, b, 0);
                 }
                 fsm_state_add_arc(
+                    &mut builder,
                     current_state,
                     ain,
                     aout,
@@ -472,13 +477,14 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
                     let mut target_number = triplet_hash_find(&th, atarget, b, 0);
                     if target_number == -1 {
                         /* STACK_3_PUSH(0, b, machine_a->target) */
-                        int_stack_push(0);
-                        int_stack_push(b);
-                        int_stack_push(atarget);
+                        int_stack.push(0);
+                        int_stack.push(b);
+                        int_stack.push(atarget);
                         target_number = triplet_hash_insert(&mut th, atarget, b, 0);
                     }
 
                     fsm_state_add_arc(
+                        &mut builder,
                         current_state,
                         ain,
                         EPSILON,
@@ -494,13 +500,14 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
                     let mut target_number = triplet_hash_find(&th, atarget, b, 1);
                     if target_number == -1 {
                         /* STACK_3_PUSH(1, b, machine_a->target) */
-                        int_stack_push(1);
-                        int_stack_push(b);
-                        int_stack_push(atarget);
+                        int_stack.push(1);
+                        int_stack.push(b);
+                        int_stack.push(atarget);
                         target_number = triplet_hash_insert(&mut th, atarget, b, 1);
                     }
 
                     fsm_state_add_arc(
+                        &mut builder,
                         current_state,
                         ain,
                         EPSILON,
@@ -529,12 +536,13 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
                 let mut target_number = triplet_hash_find(&th, a, btarget, 1);
                 if target_number == -1 {
                     /* STACK_3_PUSH(1, machine_b->target, a) */
-                    int_stack_push(1);
-                    int_stack_push(btarget);
-                    int_stack_push(a);
+                    int_stack.push(1);
+                    int_stack.push(btarget);
+                    int_stack.push(a);
                     target_number = triplet_hash_insert(&mut th, a, btarget, 1);
                 }
                 fsm_state_add_arc(
+                    &mut builder,
                     current_state,
                     bin,
                     bout,
@@ -552,13 +560,14 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
                     let mut target_number = triplet_hash_find(&th, a, btarget, 1);
                     if target_number == -1 {
                         /* STACK_3_PUSH(1, machine_b->target, a) */
-                        int_stack_push(1);
-                        int_stack_push(btarget);
-                        int_stack_push(a);
+                        int_stack.push(1);
+                        int_stack.push(btarget);
+                        int_stack.push(a);
                         target_number = triplet_hash_insert(&mut th, a, btarget, 1);
                     }
 
                     fsm_state_add_arc(
+                        &mut builder,
                         current_state,
                         EPSILON,
                         bout,
@@ -575,13 +584,14 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
                     let mut target_number = triplet_hash_find(&th, a, btarget, 2);
                     if target_number == -1 {
                         /* STACK_3_PUSH(2, machine_b->target, a) */
-                        int_stack_push(2);
-                        int_stack_push(btarget);
-                        int_stack_push(a);
+                        int_stack.push(2);
+                        int_stack.push(btarget);
+                        int_stack.push(a);
                         target_number = triplet_hash_insert(&mut th, a, btarget, 2);
                     }
 
                     fsm_state_add_arc(
+                        &mut builder,
                         current_state,
                         EPSILON,
                         bout,
@@ -593,13 +603,13 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
             }
             bi += 1;
         }
-        fsm_state_end_state();
+        fsm_state_end_state(&mut builder);
     }
 
     /* free(net1->states) */
     net1.states = Vec::new();
     fsm_destroy(net2);
-    fsm_state_close(&mut net1);
+    fsm_state_close(&mut builder, &mut net1);
     /* free(point_a); free(point_b); free(index); free(outarray) */
     drop(point_a);
     drop(point_b);
@@ -620,6 +630,7 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
 // [spec:foma:def:fomalib.fsm-cross-product-fn]
 // [spec:foma:sem:fomalib.fsm-cross-product-fn]
 pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm> {
+    let mut int_stack = IntStack::new();
     /* Perform a cross product by running two machines in parallel */
     /* The approach here allows a state to stay, creating a a:0 or 0:b transition */
     /* with the a/b-state waiting, and the arc going to {a,stay} or {stay,b} */
@@ -650,22 +661,22 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
     /* new state 0 = {0,0} */
 
     /* STACK_2_PUSH(0,0) */
-    int_stack_push(0);
-    int_stack_push(0);
+    int_stack.push(0);
+    int_stack.push(0);
 
     let mut th = triplet_hash_init();
     triplet_hash_insert(&mut th, 0, 0, 0);
 
-    fsm_state_init(sigma_max(net1.sigma.as_deref()));
+    let mut builder = fsm_state_init(sigma_max(net1.sigma.as_deref()));
 
     let point_a = init_state_pointers(&net1.states);
     let point_b = init_state_pointers(&net2.states);
 
-    while int_stack_isempty() == 0 {
+    while !int_stack.is_empty() {
         /* Get a pair of states to examine */
 
-        let a = int_stack_pop();
-        let b = int_stack_pop();
+        let a = int_stack.pop();
+        let b = int_stack.pop();
 
         /* printf("Treating pair: {%i,%i}\n",a,b); */
 
@@ -682,7 +693,7 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
             0
         };
 
-        fsm_state_set_current_state(current_state, current_final, current_start);
+        fsm_state_set_current_state(&mut builder, current_state, current_final, current_start);
 
         let mut ai = point_a[a as usize].transitions;
         while net1.states[ai].state_no == a {
@@ -707,8 +718,8 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
                     let mut target_number = triplet_hash_find(&th, atarget, btarget, 0);
                     if target_number == -1 {
                         /* STACK_2_PUSH(machine_b->target, machine_a->target) */
-                        int_stack_push(btarget);
-                        int_stack_push(atarget);
+                        int_stack.push(btarget);
+                        int_stack.push(atarget);
                         target_number = triplet_hash_insert(&mut th, atarget, btarget, 0);
                     }
                     let mut symbol1 = net1.states[ai].r#in as i32;
@@ -721,6 +732,7 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
                     }
 
                     fsm_state_add_arc(
+                        &mut builder,
                         current_state,
                         symbol1,
                         symbol2,
@@ -733,6 +745,7 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
                         && net2.states[bi].r#in as i32 == IDENTITY
                     {
                         fsm_state_add_arc(
+                            &mut builder,
                             current_state,
                             UNKNOWN,
                             UNKNOWN,
@@ -749,8 +762,8 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
                     let mut target_number = triplet_hash_find(&th, astate, btarget, 0);
                     if target_number == -1 {
                         /* STACK_2_PUSH(machine_b->target, machine_a->state_no) */
-                        int_stack_push(btarget);
-                        int_stack_push(astate);
+                        int_stack.push(btarget);
+                        int_stack.push(astate);
                         target_number = triplet_hash_insert(&mut th, astate, btarget, 0);
                     }
                     /* @:0 becomes ?:0 */
@@ -760,6 +773,7 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
                         net2.states[bi].r#in as i32
                     };
                     fsm_state_add_arc(
+                        &mut builder,
                         current_state,
                         EPSILON,
                         symbol2,
@@ -776,8 +790,8 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
                     let mut target_number = triplet_hash_find(&th, atarget, bstate, 0);
                     if target_number == -1 {
                         /* STACK_2_PUSH(machine_b->state_no, machine_a->target) */
-                        int_stack_push(bstate);
-                        int_stack_push(atarget);
+                        int_stack.push(bstate);
+                        int_stack.push(atarget);
                         target_number = triplet_hash_insert(&mut th, atarget, bstate, 0);
                     }
                     /* @:0 becomes ?:0 */
@@ -787,6 +801,7 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
                         net1.states[ai].r#in as i32
                     };
                     fsm_state_add_arc(
+                        &mut builder,
                         current_state,
                         symbol1,
                         EPSILON,
@@ -800,12 +815,12 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
             ai += 1;
         }
         /* Check arctrack */
-        fsm_state_end_state();
+        fsm_state_end_state(&mut builder);
     }
 
     /* free(net1->states) */
     net1.states = Vec::new();
-    fsm_state_close(&mut net1);
+    fsm_state_close(&mut builder, &mut net1);
 
     let mut epsilon = 0;
     let mut unknown = 0;
