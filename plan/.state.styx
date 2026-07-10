@@ -101,7 +101,7 @@ assertions (
     {id w8-defines, kind @complete, author "brendan@necessary.nu", at 2026-07-09T15:15:38.151188Z}
     {id w9-state, kind @complete, author "brendan@necessary.nu", at 2026-07-10T14:36:51.33408Z}
     {id w9-bools, kind @complete, author "brendan@necessary.nu", at 2026-07-10T16:56:03.908435Z}
-    {id w9-results, kind @doing, author "brendan@necessary.nu", at 2026-07-10T16:59:08.584263Z}
+    {id w9-results, kind @complete, author "brendan@necessary.nu", at 2026-07-10T22:18:09.708848Z}
     {id w9-sigma, kind @complete, author "brendan@necessary.nu", at 2026-07-10T19:30:42.570971Z}
     {id w9-harden, kind @complete, author "brendan@necessary.nu", at 2026-07-10T21:55:55.442955Z}
 )
