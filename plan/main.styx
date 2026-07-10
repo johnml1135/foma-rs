@@ -1078,6 +1078,14 @@ children (
                 id w9-sigma
                 title "Sigma linked list → Vec. Replace Option<Box<Sigma>>/next-chain with Vec<Sigma> (Sigma { number, symbol }); Fsm.sigma becomes a non-Option Vec; delete the -1 empty-sentinel head + special-casing. Kills ~180 unwraps and the sentinel. Preserve list/insertion order (wire format), sparse independent numbers, sigma_sort reorder. Re-verify transcripts; then fix the hfst backend (reads n.number/symbol/next) on its branch."
                 priority 2
+                log (
+                    {
+                        at 2026-07-10T19:30:42.570971Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Todo → Done (nplan_complete)"
+                    }
+                )
             }
         )
     }

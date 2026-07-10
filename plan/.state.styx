@@ -102,4 +102,5 @@ assertions (
     {id w9-state, kind @complete, author "brendan@necessary.nu", at 2026-07-10T14:36:51.33408Z}
     {id w9-bools, kind @complete, author "brendan@necessary.nu", at 2026-07-10T16:56:03.908435Z}
     {id w9-results, kind @doing, author "brendan@necessary.nu", at 2026-07-10T16:59:08.584263Z}
+    {id w9-sigma, kind @complete, author "brendan@necessary.nu", at 2026-07-10T19:30:42.570971Z}
 )
