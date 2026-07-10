@@ -984,4 +984,37 @@ children (
             }
         )
     }
+
+    {
+        id wave-9-idiomatize
+        title "Wave 9: finish idiomatization — remaining hidden state → owned/Session, i32 predicates → bool, library Result + tracing (no prints), apply/read ergonomics. Observable CLI behaviour stays byte-exact throughout."
+        children (
+            {
+                id w9-state
+                title "Tier 1: leftover hidden state. QUANTIFIERS registry → Session field (sibling of defines); regex G_INTERNAL_SYM → Session counter + G_PARSE_DEPTH → local/param; dynarray BUILDER thread_local → threaded FsmBuilder handle through the fsm_state_* veneer; int_stack/ptr_stack thread_locals → owned per-algorithm scratch structs (coaccessible, fsm_count/fsm_isidentity, spelling); dynarray RAND_NEXT LCG → owned state (Session/handle)."
+                priority 0
+            }
+
+            {
+                id w9-bools
+                title "Tier 2: i32-as-bool → bool. ~19 predicate fns (fsm_isempty/isuniversal/isfunctional/isidentity/issequential/isunambiguous, fsm_equivalent, stack_isempty, apply_stack_isempty, int/ptr_stack_isempty/isfull/find, flag_check, iface_stack_check, fsm_read_is_final/is_initial, apply_at_last_arc/binarysearch/follow_next_arc, ishexstr) return bool; ~117 == 0 / != 0 call sites cleaned. Genuine value-codes (sigma_find -1, stack_rotate -1) stay i32."
+                priority 1
+                deps (w9-state)
+            }
+
+            {
+                id w9-results
+                title "Tier 3: silent library — Result + tracing. io save_defined/load_defined/foma_net_print/foma_write_prolog/fsm_write_binary_file/io_net_read → Result<_, FomaError>; user-facing success/error text moves up to iface/bins (byte-exact transcripts preserved); library diagnostics (lexc warnings, flag_eliminate skips, add_defined_function redefined, compose flag warning, apply flag messages) become tracing events (tracing dep in lib; bins install a stderr tracing-subscriber formatted to keep CLI output identical). High-risk unwraps on valid inputs (sigma_remove*, lexc trans, med confusion case) → graceful."
+                priority 2
+                deps (w9-bools)
+            }
+
+            {
+                id w9-ergo
+                title "Tier 4: ergonomics. ApplyHandle FlagList assoc-list → HashMap (hot apply path); Iterator impls over FsmReadHandle arcs/states/finals/initials and Sigma traversal (mirroring the proven ApplyIter pattern); internal while-let sigma walks migrate where it simplifies."
+                priority 3
+                deps (w9-results)
+            }
+        )
+    }
 )
