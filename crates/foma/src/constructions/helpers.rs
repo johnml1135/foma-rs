@@ -197,11 +197,11 @@ pub(crate) fn fsm_add_to_states(net: &mut Fsm, add: i32) {
 // [spec:foma:def:fomalib.fsm-mark-fsm-tail-fn]
 // [spec:foma:sem:fomalib.fsm-mark-fsm-tail-fn]
 pub fn fsm_mark_fsm_tail(net: Box<Fsm>, marker: &Fsm) -> Box<Fsm> {
-    let mut inh = fsm_read_init(Some(net)).unwrap();
+    let mut inh = fsm_read_init(net);
     /* C: the read handle borrows marker (which is NOT destroyed); the
     Rust handle owns its net, so it reads a deep copy of marker —
     read-only, observably equivalent */
-    let mut minh = fsm_read_init(Some(Box::new(marker.clone()))).unwrap();
+    let mut minh = fsm_read_init(Box::new(marker.clone()));
 
     let name = inh.net.as_ref().unwrap().name.clone();
     let mut outh = fsm_construct_init(&name);

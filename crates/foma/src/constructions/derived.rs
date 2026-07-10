@@ -31,7 +31,7 @@ pub fn fsm_letter_machine(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
     // Brzozowski — bind the returned Box and continue with it)
     let net = fsm_minimize(opts, net);
     let mut addstate = net.statecount;
-    let mut inh = fsm_read_init(Some(net)).unwrap();
+    let mut inh = fsm_read_init(net);
     let mut outh = fsm_construct_init("name");
 
     while fsm_get_next_arc(&mut inh) != 0 {
@@ -285,8 +285,8 @@ pub fn fsm_substitute_label(
     /* C: the read handles borrow net and substitute (NEITHER is consumed
     on any path); the Rust handles own deep copies — read-only, observably
     equivalent */
-    let mut inh = fsm_read_init(Some(Box::new(net.clone()))).unwrap();
-    let mut subh = fsm_read_init(Some(Box::new(substitute.clone()))).unwrap();
+    let mut inh = fsm_read_init(Box::new(net.clone()));
+    let mut subh = fsm_read_init(Box::new(substitute.clone()));
     let repsym = fsm_get_symbol_number(&inh, original);
     if repsym == -1 {
         let _ = fsm_read_done(inh);
@@ -344,7 +344,7 @@ pub fn fsm_substitute_label(
                 )
             };
             fsm_construct_add_arc_nums(&mut outh, source, addstate1, EPSILON, EPSILON);
-            let mut subh2 = fsm_read_init(Some(subnet2)).unwrap();
+            let mut subh2 = fsm_read_init(subnet2);
             while fsm_get_next_arc(&mut subh2) != 0 {
                 source = fsm_get_arc_source(&subh2);
                 target = fsm_get_arc_target(&subh2);
@@ -1920,7 +1920,7 @@ pub fn fsm_left_rewr(opts: &FomaOptions, net: Box<Fsm>, rewr: Box<Fsm>) -> Box<F
     let relabelin = rewr.states[0].r#in as i32;
     let relabelout = rewr.states[0].out as i32;
 
-    let mut inh = fsm_read_init(Some(net)).unwrap();
+    let mut inh = fsm_read_init(net);
     let sinkstate = fsm_get_num_states(&inh);
     let name = inh.net.as_ref().unwrap().name.clone();
     let mut outh = fsm_construct_init(&name);
@@ -1990,7 +1990,7 @@ pub fn fsm_left_rewr(opts: &FomaOptions, net: Box<Fsm>, rewr: Box<Fsm>) -> Box<F
 // [spec:foma:def:fomalib.fsm-add-sink-fn]
 // [spec:foma:sem:fomalib.fsm-add-sink-fn]
 pub fn fsm_add_sink(net: Box<Fsm>, r#final: i32) -> Box<Fsm> {
-    let mut inh = fsm_read_init(Some(net)).unwrap();
+    let mut inh = fsm_read_init(net);
     let sinkstate = fsm_get_num_states(&inh);
     let name = inh.net.as_ref().unwrap().name.clone();
     let mut outh = fsm_construct_init(&name);
@@ -2055,10 +2055,10 @@ pub fn fsm_add_sink(net: Box<Fsm>, r#final: i32) -> Box<Fsm> {
 // [spec:foma:def:fomalib.fsm-add-loop-fn]
 // [spec:foma:sem:fomalib.fsm-add-loop-fn]
 pub fn fsm_add_loop(net: Box<Fsm>, marker: &Fsm, finals: i32) -> Box<Fsm> {
-    let mut inh = fsm_read_init(Some(net)).unwrap();
+    let mut inh = fsm_read_init(net);
     /* C: the read handle borrows marker (which is NOT destroyed); the
     Rust handle owns a deep copy — read-only, observably equivalent */
-    let mut minh = fsm_read_init(Some(Box::new(marker.clone()))).unwrap();
+    let mut minh = fsm_read_init(Box::new(marker.clone()));
 
     let name = inh.net.as_ref().unwrap().name.clone();
     let mut outh = fsm_construct_init(&name);
@@ -2277,8 +2277,8 @@ pub fn fsm_context_restrict(
 pub fn fsm_flatten(opts: &FomaOptions, net: Box<Fsm>, epsilon: Box<Fsm>) -> Option<Box<Fsm>> {
     let net = fsm_minimize(opts, net);
 
-    let mut inh = fsm_read_init(Some(net)).unwrap();
-    let mut eps = fsm_read_init(Some(epsilon)).unwrap();
+    let mut inh = fsm_read_init(net);
+    let mut eps = fsm_read_init(epsilon);
     // [spec:foma:sem:constructions.fsm-flatten-fn+1] no arc in the epsilon
     // machine (fsm_get_next_arc == 0, end-of-arcs) → return None. C tested == -1,
     // which fsm_get_next_arc never returns, so an arc-less epsilon machine fell
@@ -2354,7 +2354,7 @@ pub fn fsm_flatten(opts: &FomaOptions, net: Box<Fsm>, epsilon: Box<Fsm>) -> Opti
 // [spec:foma:def:fomalib.fsm-close-sigma-fn]
 // [spec:foma:sem:fomalib.fsm-close-sigma-fn]
 pub fn fsm_close_sigma(opts: &FomaOptions, net: Box<Fsm>, mode: i32) -> Box<Fsm> {
-    let mut inh = fsm_read_init(Some(net)).unwrap();
+    let mut inh = fsm_read_init(net);
     let name = inh.net.as_ref().unwrap().name.clone();
     let mut newh = fsm_construct_init(&name);
     fsm_construct_copy_sigma(&mut newh, inh.net.as_ref().unwrap().sigma.as_deref());

@@ -27,7 +27,7 @@ pub fn fsm_reverse(net: Box<Fsm>) -> Box<Fsm> {
     /* C: net stays a caller pointer alongside the read handle; here the
     handle owns the net until fsm_read_done returns it, so net->name /
     net->sigma are reached through inh (observably equivalent) */
-    let mut inh = fsm_read_init(Some(net)).unwrap();
+    let mut inh = fsm_read_init(net);
     let name = inh.net.as_ref().unwrap().name.clone();
     let mut revh = fsm_construct_init(&name);
     fsm_construct_copy_sigma(&mut revh, inh.net.as_ref().unwrap().sigma.as_deref());

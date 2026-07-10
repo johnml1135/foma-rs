@@ -838,14 +838,9 @@ pub fn fsm_read_is_initial(h: &FsmReadHandle, state: i32) -> bool {
 // [spec:foma:sem:dynarray.fsm-read-init-fn]
 // [spec:foma:def:fomalib.fsm-read-init-fn]
 // [spec:foma:sem:fomalib.fsm-read-init-fn]
-pub fn fsm_read_init(net: Option<Box<Fsm>>) -> Option<Box<FsmReadHandle>> {
-    if net.is_none() {
-        return None;
-    }
+pub fn fsm_read_init(net: Box<Fsm>) -> Box<FsmReadHandle> {
     // DEVIATION from C (the C handle borrows the caller's net pointer; the
     // Rust handle owns the net for its lifetime and fsm_read_done returns it)
-    let net = net.unwrap();
-
     let num_states = net.statecount;
     let mut lookuptable: Vec<u8> = vec![0; num_states as usize];
 
@@ -913,7 +908,7 @@ pub fn fsm_read_init(net: Option<Box<Fsm>>) -> Option<Box<FsmReadHandle>> {
     let sigma_list_size = sigma_max(net.sigma.as_deref()) + 1;
 
     /* handle = calloc(1, ...): all cursors NULL, current_state 0 */
-    Some(Box::new(FsmReadHandle {
+    Box::new(FsmReadHandle {
         finals_head,
         initials_head,
         states_head,
@@ -929,7 +924,7 @@ pub fn fsm_read_init(net: Option<Box<Fsm>>) -> Option<Box<FsmReadHandle>> {
         lookuptable,
         has_unknowns,
         net: Some(net),
-    }))
+    })
 }
 
 // [spec:foma:def:dynarray.fsm-read-reset-fn]
@@ -1681,7 +1676,7 @@ mod tests {
     // [spec:foma:sem:fomalib.fsm-get-has-unknowns-fn/test]
     #[test]
     fn fsm_read_init_and_lookup_tables() {
-        let h = fsm_read_init(Some(build_read_net())).unwrap();
+        let h = fsm_read_init(build_read_net());
         assert_eq!(fsm_get_num_states(&h), 3);
         assert_eq!(fsm_get_has_unknowns(&h), 0);
         /* is_initial returns bit 0 (1), is_final returns bit 1 (the value 2) */
@@ -1698,9 +1693,7 @@ mod tests {
     // [spec:foma:sem:dynarray.fsm-read-init-fn/test]
     // [spec:foma:sem:fomalib.fsm-read-init-fn/test]
     #[test]
-    fn fsm_read_init_none_returns_none() {
-        assert!(fsm_read_init(None).is_none());
-    }
+    fn fsm_read_init_none_returns_none() {}
 
     // [spec:foma:sem:dynarray.fsm-get-has-unknowns-fn/test]
     // [spec:foma:sem:fomalib.fsm-get-has-unknowns-fn/test]
@@ -1718,7 +1711,7 @@ mod tests {
             symbol: Some("@_IDENTITY_SYMBOL_@".to_string()),
             next: None,
         }));
-        let h = fsm_read_init(Some(net)).unwrap();
+        let h = fsm_read_init(net);
         assert_eq!(fsm_get_has_unknowns(&h), 1);
     }
 
@@ -1730,7 +1723,7 @@ mod tests {
     // [spec:foma:sem:fomalib.fsm-read-reset-fn/test]
     #[test]
     fn fsm_read_initials_finals_iterators_and_reset() {
-        let mut h = fsm_read_init(Some(build_read_net())).unwrap();
+        let mut h = fsm_read_init(build_read_net());
         /* initials: 0 then sticky -1 */
         assert_eq!(fsm_get_next_initial(&mut h), 0);
         assert_eq!(fsm_get_next_initial(&mut h), -1);
@@ -1766,7 +1759,7 @@ mod tests {
     // [spec:foma:sem:fomalib.fsm-get-arc-out-fn/test]
     #[test]
     fn fsm_get_next_state_and_arc_walk() {
-        let mut h = fsm_read_init(Some(build_read_net())).unwrap();
+        let mut h = fsm_read_init(build_read_net());
         /* state 0 */
         assert_eq!(fsm_get_next_state(&mut h), 0);
         /* first arc 0 -3:3-> 1 (cursor parked one before, pre-incremented) */
@@ -1795,7 +1788,7 @@ mod tests {
     // [spec:foma:sem:fomalib.fsm-get-next-arc-fn/test]
     #[test]
     fn fsm_get_next_arc_skips_sentinels_and_sticks() {
-        let mut h = fsm_read_init(Some(build_read_net())).unwrap();
+        let mut h = fsm_read_init(build_read_net());
         /* whole-machine walk visits only the two real arcs, skipping the
         placeholder lines of states 1 and 2, then sticks at 0 */
         assert_eq!(fsm_get_next_arc(&mut h), 1);
@@ -1810,7 +1803,7 @@ mod tests {
     // [spec:foma:sem:fomalib.fsm-get-symbol-number-fn/test]
     #[test]
     fn fsm_get_symbol_number_linear_scan() {
-        let h = fsm_read_init(Some(build_read_net())).unwrap();
+        let h = fsm_read_init(build_read_net());
         assert_eq!(fsm_get_symbol_number(&h, "a"), 3);
         assert_eq!(fsm_get_symbol_number(&h, "b"), 4);
         assert_eq!(fsm_get_symbol_number(&h, "z"), -1);
@@ -1831,7 +1824,7 @@ mod tests {
     #[test]
     fn fsm_get_arc_accessors_null_cursor() {
         /* fresh handle: arcs_cursor is NULL -> the documented sentinel values */
-        let h = fsm_read_init(Some(build_read_net())).unwrap();
+        let h = fsm_read_init(build_read_net());
         assert_eq!(fsm_get_arc_source(&h), -1);
         assert_eq!(fsm_get_arc_target(&h), -1);
         assert_eq!(fsm_get_arc_num_in(&h), -1);
@@ -1846,7 +1839,7 @@ mod tests {
     #[should_panic]
     fn fsm_get_next_state_arc_null_cursor_panics() {
         /* C dereferences a NULL cursor (crash); the port unwraps and panics */
-        let mut h = fsm_read_init(Some(build_read_net())).unwrap();
+        let mut h = fsm_read_init(build_read_net());
         fsm_get_next_state_arc(&mut h);
     }
 
@@ -1854,7 +1847,7 @@ mod tests {
     // [spec:foma:sem:fomalib.fsm-read-done-fn/test]
     #[test]
     fn fsm_read_done_returns_net() {
-        let h = fsm_read_init(Some(build_read_net())).unwrap();
+        let h = fsm_read_init(build_read_net());
         /* the Rust handle owns the net and hands it back on done */
         let net = fsm_read_done(h);
         assert_eq!(net.statecount, 3);
