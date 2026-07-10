@@ -49,23 +49,32 @@ fn ls_target(net: &Fsm, off: usize) -> i32 {
 }
 
 /* medh->curr_ptr-> field accessors (curr_ptr is the persisted resume cursor). */
+fn med_net(medh: &ApplyMedHandle) -> &Fsm {
+    medh.net
+        .as_ref()
+        .expect("med net present during an active walk")
+}
+fn med_curr_ptr(medh: &ApplyMedHandle) -> usize {
+    medh.curr_ptr
+        .expect("curr_ptr positioned during an active walk")
+}
 fn cur_state_no(medh: &ApplyMedHandle) -> i32 {
-    medh.net.as_ref().unwrap().states[medh.curr_ptr.unwrap()].state_no
+    med_net(medh).states[med_curr_ptr(medh)].state_no
 }
 fn cur_in(medh: &ApplyMedHandle) -> i16 {
-    medh.net.as_ref().unwrap().states[medh.curr_ptr.unwrap()].r#in
+    med_net(medh).states[med_curr_ptr(medh)].r#in
 }
 fn cur_target(medh: &ApplyMedHandle) -> i32 {
-    medh.net.as_ref().unwrap().states[medh.curr_ptr.unwrap()].target
+    med_net(medh).states[med_curr_ptr(medh)].target
 }
 fn cur_final(medh: &ApplyMedHandle) -> i8 {
-    medh.net.as_ref().unwrap().states[medh.curr_ptr.unwrap()].final_state
+    med_net(medh).states[med_curr_ptr(medh)].final_state
 }
 fn next_state_no(medh: &ApplyMedHandle) -> i32 {
-    net_line_state_no(medh, medh.curr_ptr.unwrap() + 1)
+    net_line_state_no(medh, med_curr_ptr(medh) + 1)
 }
 fn net_line_state_no(medh: &ApplyMedHandle, off: usize) -> i32 {
-    medh.net.as_ref().unwrap().states[off].state_no
+    med_net(medh).states[off].state_no
 }
 
 // [spec:foma:def:spelling.print-sym-fn]
@@ -170,7 +179,8 @@ fn print_match(medh: &mut ApplyMedHandle, node: usize, sigma: &[Sigma], word: &s
     while !int_stack.is_empty() {
         let s = int_stack.pop();
         if s > 2 {
-            medh.outstring.push_str(&print_sym(s, sigma).unwrap());
+            medh.outstring
+                .push_str(print_sym(s, sigma).expect("symbol > 2 resolves in the med sigma"));
         }
         if s == 0 {
             if let Some(al) = &medh.align_symbol {
@@ -195,7 +205,8 @@ fn print_match(medh: &mut ApplyMedHandle, node: usize, sigma: &[Sigma], word: &s
     while !int_stack.is_empty() {
         let sym = int_stack.pop();
         if sym > 2 {
-            medh.instring.push_str(&print_sym(sym, sigma).unwrap());
+            medh.instring
+                .push_str(print_sym(sym, sigma).expect("symbol > 2 resolves in the med sigma"));
             i += word[i..].chars().next().map_or(0, |c| c.len_utf8());
         }
         if sym == 0 {
@@ -671,10 +682,10 @@ pub fn apply_med_init(net: &Fsm) -> Box<ApplyMedHandle> {
         }
     }
     medh.maxsigma = sigma_max(&net.sigma) + 1;
-    medh.sigmahash = Some(sh_init());
+    let sigmahash = medh.sigmahash.insert(sh_init());
     for s in &net.sigma {
         if s.number > IDENTITY {
-            let _ = sh_add_string(medh.sigmahash.as_mut().unwrap(), &s.symbol, s.number);
+            let _ = sh_add_string(sigmahash, &s.symbol, s.number);
         }
     }
 
@@ -740,8 +751,12 @@ pub fn apply_med(medh: &mut ApplyMedHandle, word: Option<&str>) -> Option<String
             let mut cbuf = [0u8; 4];
             for c in w.chars() {
                 let ch = c.encode_utf8(&mut cbuf);
-                medh.intword[j] = match sh_find_string(medh.sigmahash.as_mut().unwrap(), ch) {
-                    Some(_) => sh_get_value(medh.sigmahash.as_ref().unwrap()),
+                let sigmahash = medh
+                    .sigmahash
+                    .as_mut()
+                    .expect("sigmahash built in med init");
+                medh.intword[j] = match sh_find_string(sigmahash, ch) {
+                    Some(_) => sh_get_value(sigmahash),
                     None => IDENTITY,
                 };
                 j += 1;
@@ -765,10 +780,9 @@ pub fn apply_med(medh: &mut ApplyMedHandle, word: Option<&str>) -> Option<String
             /* Save this in case we realloc and print_match(); computed before
             the None check as in C (benign — unused when None). */
             medh.curr_agenda_offset = curr_node.unwrap_or(0);
-            if curr_node.is_none() {
+            let Some(curr_node_idx) = curr_node else {
                 break 'outer; /* goto out */
-            }
-            let curr_node_idx = curr_node.unwrap();
+            };
             medh.curr_state = medh.agenda[curr_node_idx as usize].fsmstate;
             medh.curr_ptr = Some(medh.state_array[medh.curr_state as usize].transitions);
             /* leftover conditional with an empty body (dead code) */
@@ -804,8 +818,11 @@ pub fn apply_med(medh: &mut ApplyMedHandle, word: Option<&str>) -> Option<String
                     if medh.curr_node_has_match == 0 {
                         /* Found a match */
                         medh.curr_node_has_match = 1;
-                        let sigma = medh.net.as_ref().unwrap().sigma.clone();
-                        let word = medh.word.clone().unwrap();
+                        let sigma = med_net(medh).sigma.clone();
+                        let word = medh
+                            .word
+                            .clone()
+                            .expect("word set for the current med lookup");
                         let off = medh.curr_agenda_offset as usize;
                         print_match(medh, off, &sigma, &word);
                         medh.nummatches += 1;
@@ -933,7 +950,7 @@ pub fn apply_med(medh: &mut ApplyMedHandle, word: Option<&str>) -> Option<String
             } /* skip: */
 
             if next_state_no(medh) == cur_state_no(medh) {
-                medh.curr_ptr = Some(medh.curr_ptr.unwrap() + 1);
+                medh.curr_ptr = Some(med_curr_ptr(medh) + 1);
             } else {
                 break 'inner;
             }
@@ -949,7 +966,11 @@ pub fn apply_med(medh: &mut ApplyMedHandle, word: Option<&str>) -> Option<String
 // [spec:foma:sem:fomalib.cmatrix-print-att-fn]
 pub fn cmatrix_print_att<W: std::io::Write + ?Sized>(net: &Fsm, outfile: &mut W) {
     let maxsigma = sigma_max(&net.sigma) + 1;
-    let cm = &net.medlookup.as_ref().unwrap().confusion_matrix;
+    let cm = &net
+        .medlookup
+        .as_ref()
+        .expect("confusion matrix present (caller checked)")
+        .confusion_matrix;
 
     for i in 0..maxsigma {
         for j in 0..maxsigma {
@@ -961,14 +982,14 @@ pub fn cmatrix_print_att<W: std::io::Write + ?Sized>(net: &Fsm, outfile: &mut W)
                     outfile,
                     "0\t0\t{}\t{}\t{}",
                     "@0@",
-                    sigma_string(j, &net.sigma).unwrap(),
+                    sigma_string(j, &net.sigma).expect("symbol number in matrix range resolves"),
                     cm[(i * maxsigma + j) as usize]
                 );
             } else if j == 0 && i != 0 {
                 let _ = writeln!(
                     outfile,
                     "0\t0\t{}\t{}\t{}",
-                    sigma_string(i, &net.sigma).unwrap(),
+                    sigma_string(i, &net.sigma).expect("symbol number in matrix range resolves"),
                     "@0@",
                     cm[(i * maxsigma + j) as usize]
                 );
@@ -976,8 +997,8 @@ pub fn cmatrix_print_att<W: std::io::Write + ?Sized>(net: &Fsm, outfile: &mut W)
                 let _ = writeln!(
                     outfile,
                     "0\t0\t{}\t{}\t{}",
-                    sigma_string(i, &net.sigma).unwrap(),
-                    sigma_string(j, &net.sigma).unwrap(),
+                    sigma_string(i, &net.sigma).expect("symbol number in matrix range resolves"),
+                    sigma_string(j, &net.sigma).expect("symbol number in matrix range resolves"),
                     cm[(i * maxsigma + j) as usize]
                 );
             }
@@ -1000,7 +1021,11 @@ pub fn cmatrix_print(net: &Fsm) {
 /// which misaligned every row past the diagonal.
 fn cmatrix_print_to<W: std::io::Write + ?Sized>(net: &Fsm, out: &mut W) {
     let maxsigma = sigma_max(&net.sigma) + 1;
-    let cm = &net.medlookup.as_ref().unwrap().confusion_matrix;
+    let cm = &net
+        .medlookup
+        .as_ref()
+        .expect("confusion matrix present (caller checked)")
+        .confusion_matrix;
 
     let mut lsymbol: i32 = 0;
     for s in &net.sigma {
@@ -1011,20 +1036,20 @@ fn cmatrix_print_to<W: std::io::Write + ?Sized>(net: &Fsm, out: &mut W) {
         let l = s.symbol.len() as i32;
         lsymbol = if l > lsymbol { l } else { lsymbol };
     }
-    write!(out, "{:>w$}", "", w = (lsymbol + 2) as usize).unwrap();
-    write!(out, "{}", "0 ").unwrap();
+    write!(out, "{:>w$}", "", w = (lsymbol + 2) as usize).expect("writing the confusion matrix");
+    write!(out, "{}", "0 ").expect("writing the confusion matrix");
 
     let mut i = 3;
     loop {
         if let Some(thisstring) = sigma_string(i, &net.sigma) {
-            write!(out, "{} ", thisstring).unwrap();
+            write!(out, "{} ", thisstring).expect("writing the confusion matrix");
         } else {
             break;
         }
         i += 1;
     }
 
-    writeln!(out).unwrap();
+    writeln!(out).expect("writing the confusion matrix");
 
     let mut i = 0i32;
     while i < maxsigma {
@@ -1032,17 +1057,20 @@ fn cmatrix_print_to<W: std::io::Write + ?Sized>(net: &Fsm, out: &mut W) {
         while j < maxsigma {
             if j == 0 {
                 if i == 0 {
-                    write!(out, "{:>w$}", "0", w = (lsymbol + 1) as usize).unwrap();
-                    write!(out, "{:>2}", "*").unwrap();
+                    write!(out, "{:>w$}", "0", w = (lsymbol + 1) as usize)
+                        .expect("writing the confusion matrix");
+                    write!(out, "{:>2}", "*").expect("writing the confusion matrix");
                 } else {
                     write!(
                         out,
                         "{:>w$}",
-                        sigma_string(i, &net.sigma).unwrap(),
+                        sigma_string(i, &net.sigma)
+                            .expect("symbol number in matrix range resolves"),
                         w = (lsymbol + 1) as usize
                     )
-                    .unwrap();
-                    write!(out, "{:>2}", cm[(i * maxsigma + j) as usize]).unwrap();
+                    .expect("writing the confusion matrix");
+                    write!(out, "{:>2}", cm[(i * maxsigma + j) as usize])
+                        .expect("writing the confusion matrix");
                 }
                 j += 1;
                 j += 1;
@@ -1050,16 +1078,23 @@ fn cmatrix_print_to<W: std::io::Write + ?Sized>(net: &Fsm, out: &mut W) {
                 continue;
             }
             if i == j {
-                let width = sigma_string(j, &net.sigma).unwrap().len() + 1;
-                write!(out, "{:>w$}", "*", w = width).unwrap();
+                let width = sigma_string(j, &net.sigma)
+                    .expect("symbol number in matrix range resolves")
+                    .len()
+                    + 1;
+                write!(out, "{:>w$}", "*", w = width).expect("writing the confusion matrix");
             } else {
                 /* printf("%.*d", strlen(sym_j)+1, cost) — zero-padded width */
-                let width = sigma_string(j, &net.sigma).unwrap().len() + 1;
-                write!(out, "{:0w$}", cm[(i * maxsigma + j) as usize], w = width).unwrap();
+                let width = sigma_string(j, &net.sigma)
+                    .expect("symbol number in matrix range resolves")
+                    .len()
+                    + 1;
+                write!(out, "{:0w$}", cm[(i * maxsigma + j) as usize], w = width)
+                    .expect("writing the confusion matrix");
             }
             j += 1;
         }
-        writeln!(out).unwrap();
+        writeln!(out).expect("writing the confusion matrix");
         if i == 0 {
             i += 1;
             i += 1;
@@ -1090,7 +1125,10 @@ pub fn cmatrix_init(net: &mut Fsm) {
             }
         }
     }
-    net.medlookup.as_mut().unwrap().confusion_matrix = cm;
+    net.medlookup
+        .as_mut()
+        .expect("confusion matrix present (caller checked)")
+        .confusion_matrix = cm;
 }
 
 // [spec:foma:def:spelling.cmatrix-default-substitute-fn]
@@ -1099,7 +1137,11 @@ pub fn cmatrix_init(net: &mut Fsm) {
 // [spec:foma:sem:fomalib.cmatrix-default-substitute-fn]
 pub fn cmatrix_default_substitute(net: &mut Fsm, cost: i32) {
     let maxsigma = sigma_max(&net.sigma) + 1;
-    let cm = &mut net.medlookup.as_mut().unwrap().confusion_matrix;
+    let cm = &mut net
+        .medlookup
+        .as_mut()
+        .expect("confusion matrix present (caller checked)")
+        .confusion_matrix;
     for i in 1..maxsigma {
         for j in 1..maxsigma {
             if i == j {
@@ -1117,7 +1159,11 @@ pub fn cmatrix_default_substitute(net: &mut Fsm, cost: i32) {
 // [spec:foma:sem:fomalib.cmatrix-default-insert-fn]
 pub fn cmatrix_default_insert(net: &mut Fsm, cost: i32) {
     let maxsigma = sigma_max(&net.sigma) + 1;
-    let cm = &mut net.medlookup.as_mut().unwrap().confusion_matrix;
+    let cm = &mut net
+        .medlookup
+        .as_mut()
+        .expect("confusion matrix present (caller checked)")
+        .confusion_matrix;
     for i in 0..maxsigma {
         cm[i as usize] = cost;
     }
@@ -1129,7 +1175,11 @@ pub fn cmatrix_default_insert(net: &mut Fsm, cost: i32) {
 // [spec:foma:sem:fomalib.cmatrix-default-delete-fn]
 pub fn cmatrix_default_delete(net: &mut Fsm, cost: i32) {
     let maxsigma = sigma_max(&net.sigma) + 1;
-    let cm = &mut net.medlookup.as_mut().unwrap().confusion_matrix;
+    let cm = &mut net
+        .medlookup
+        .as_mut()
+        .expect("confusion matrix present (caller checked)")
+        .confusion_matrix;
     for i in 0..maxsigma {
         cm[(i * maxsigma) as usize] = cost;
     }
@@ -1141,23 +1191,35 @@ pub fn cmatrix_default_delete(net: &mut Fsm, cost: i32) {
 // [spec:foma:sem:fomalib.cmatrix-set-cost-fn]
 pub fn cmatrix_set_cost(net: &mut Fsm, r#in: Option<&str>, out: Option<&str>, cost: i32) {
     let maxsigma = sigma_max(&net.sigma) + 1;
+    // A symbol lookup only fails for a Some(s) that isn't in the alphabet; None
+    // maps to 0, so the -1 case always carries the offending symbol.
     let i: i32 = match r#in {
         None => 0,
-        Some(s) => sigma_find(s, &net.sigma),
+        Some(s) => {
+            let found = sigma_find(s, &net.sigma);
+            if found == -1 {
+                println!("Warning, symbol '{}' not in alphabet", s);
+                return;
+            }
+            found
+        }
     };
     let o: i32 = match out {
         None => 0,
-        Some(s) => sigma_find(s, &net.sigma),
+        Some(s) => {
+            let found = sigma_find(s, &net.sigma);
+            if found == -1 {
+                println!("Warning, symbol '{}' not in alphabet", s);
+                return;
+            }
+            found
+        }
     };
-    if i == -1 {
-        println!("Warning, symbol '{}' not in alphabet", r#in.unwrap());
-        return;
-    }
-    if o == -1 {
-        println!("Warning, symbol '{}' not in alphabet", out.unwrap());
-        return;
-    }
-    let cm = &mut net.medlookup.as_mut().unwrap().confusion_matrix;
+    let cm = &mut net
+        .medlookup
+        .as_mut()
+        .expect("confusion matrix present (caller checked)")
+        .confusion_matrix;
     cm[(i * maxsigma + o) as usize] = cost;
 }
 
