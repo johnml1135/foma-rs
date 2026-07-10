@@ -1942,15 +1942,13 @@ mod tests {
         let opts = &FomaOptions::default();
         let mut rb = mini_rb();
         let mut net = rewr_contains(opts, &mut rb, fsm_symbol("a"));
-        assert_eq!(
-            fsm_isempty(opts, &mut net),
-            0,
+        assert!(
+            !(fsm_isempty(opts, &mut net)),
             "containment language is non-empty"
         );
         let mut probe = fsm_intersect(opts, fsm_copy(&mut net), fsm_empty_string());
-        assert_eq!(
+        assert!(
             fsm_isempty(opts, &mut probe),
-            1,
             "empty string not accepted -> no complement was taken"
         );
     }

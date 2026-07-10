@@ -499,9 +499,8 @@ fn fsm_compose_relates_input_to_output() {
 fn fsm_compose_non_matching_middle_is_empty() {
     let opts = &FomaOptions::default();
     let mut c = fsm_compose(opts, re("a:b"), re("c:d"));
-    assert_ne!(
+    assert!(
         fsm_isempty(opts, &mut c),
-        0,
         "b != c yields the empty language"
     );
 }
@@ -535,7 +534,7 @@ fn fsm_intersect_identity_matches_ordinary_after_merge_expansion() {
 fn fsm_intersect_disjoint_is_empty() {
     let opts = &FomaOptions::default();
     let mut r = fsm_intersect(opts, re("a"), re("b"));
-    assert_ne!(fsm_isempty(opts, &mut r), 0);
+    assert!(fsm_isempty(opts, &mut r));
 }
 
 // [spec:foma:sem:constructions.fsm-cross-product-fn/test]
@@ -622,9 +621,8 @@ fn fsm_concat_splices_languages() {
 fn fsm_concat_with_empty_language_is_empty() {
     let opts = &FomaOptions::default();
     let mut r = fsm_concat(opts, re("a"), fsm_empty_set());
-    assert_ne!(
+    assert!(
         fsm_isempty(opts, &mut r),
-        0,
         "no final state in an operand -> empty"
     );
 }
@@ -1092,9 +1090,9 @@ fn fsm_shuffle_interleaves_both_languages() {
 #[test]
 fn fsm_equivalent_tests_path_equivalence() {
     let opts = &FomaOptions::default();
-    assert_eq!(fsm_equivalent(opts, re("a|b"), re("b|a")), 1);
-    assert_eq!(fsm_equivalent(opts, re("a b"), re("a b")), 1);
-    assert_eq!(fsm_equivalent(opts, re("a"), re("b")), 0);
+    assert!(fsm_equivalent(opts, re("a|b"), re("b|a")));
+    assert!(fsm_equivalent(opts, re("a b"), re("a b")));
+    assert!(!(fsm_equivalent(opts, re("a"), re("b"))));
 }
 
 /* ---- contains family ---------------------------------------------- */

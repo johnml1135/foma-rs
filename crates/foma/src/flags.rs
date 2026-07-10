@@ -362,7 +362,7 @@ pub(crate) fn flag_purge(net: &mut Fsm, name: Option<&str>) {
             break;
         }
         let symbol = s.symbol.as_deref().unwrap_or("");
-        if flag_check(symbol) != 0 {
+        if flag_check(symbol) {
             match name {
                 None => {
                     ftable[s.number as usize] = 1;
@@ -419,7 +419,7 @@ pub(crate) fn flag_extract(net: &Fsm) -> Option<Box<Flags>> {
     let mut sigma = net.sigma.as_deref();
     while let Some(s) = sigma {
         let symbol = s.symbol.as_deref().unwrap_or("");
-        if flag_check(symbol) != 0 {
+        if flag_check(symbol) {
             let flagst = Box::new(Flags {
                 r#type: flag_get_type(symbol),
                 name: flag_get_name(symbol),
@@ -437,9 +437,9 @@ pub(crate) fn flag_extract(net: &Fsm) -> Option<Box<Flags>> {
 // [spec:foma:sem:flags.flag-check-fn]
 // [spec:foma:def:fomalibconf.flag-check-fn]
 // [spec:foma:sem:fomalibconf.flag-check-fn]
-pub fn flag_check(s: &str) -> i32 {
+pub fn flag_check(s: &str) -> bool {
     /* Byte-level DFA for the flag-diacritic grammar (ND = any byte that is
-    neither '.' nor NUL): return 1 iff s matches
+    neither '.' nor NUL): return true iff s matches
         "@" [U|P|N|E] "." ND+ "." ND+ "@"   (U/P/N/E: attribute AND value)
       | "@" [R|D]     "." ND+ ["." ND+] "@" (R/D: value optional)
       | "@" C         "." ND+ "@"           (C: never a value)
@@ -474,7 +474,7 @@ pub fn flag_check(s: &str) -> i32 {
                     i += 1;
                     S1
                 }
-                _ => return 0,
+                _ => return false,
             },
             S1 => match at(i) {
                 b'C' => {
@@ -489,7 +489,7 @@ pub fn flag_check(s: &str) -> i32 {
                     i += 1;
                     S3
                 }
-                _ => return 0,
+                _ => return false,
             },
             /* operator letter '.': into the first (mandatory) field */
             S2 if at(i) == b'.' => {
@@ -504,24 +504,24 @@ pub fn flag_check(s: &str) -> i32 {
                 i += 1;
                 S7
             }
-            S2 | S3 | S4 => return 0,
+            S2 | S3 | S4 => return false,
             /* first ND byte of each field must exist */
             S5 => match at(i) {
-                b'.' | 0 => return 0,
+                b'.' | 0 => return false,
                 _ => {
                     i += 1;
                     S8
                 }
             },
             S6 => match at(i) {
-                b'.' | 0 => return 0,
+                b'.' | 0 => return false,
                 _ => {
                     i += 1;
                     S9
                 }
             },
             S7 => match at(i) {
-                b'.' | 0 => return 0,
+                b'.' | 0 => return false,
                 _ => {
                     i += 1;
                     S10
@@ -534,7 +534,7 @@ pub fn flag_check(s: &str) -> i32 {
                     i += 1;
                     S7
                 }
-                0 => return 0,
+                0 => return false,
                 _ => {
                     i += 1;
                     S8
@@ -550,7 +550,7 @@ pub fn flag_check(s: &str) -> i32 {
                     i += 1;
                     S7
                 }
-                0 => return 0,
+                0 => return false,
                 _ => {
                     i += 1;
                     S9
@@ -562,14 +562,14 @@ pub fn flag_check(s: &str) -> i32 {
                     i += 1;
                     S11
                 }
-                b'.' | 0 => return 0,
+                b'.' | 0 => return false,
                 _ => {
                     i += 1;
                     S10
                 }
             },
             /* S11: accept iff the '@' was the final byte */
-            S11 => return if at(i) == 0 { 1 } else { 0 },
+            S11 => return at(i) == 0,
         };
     }
 }
@@ -689,7 +689,7 @@ pub fn flag_twosided(opts: &FomaOptions, mut net: Box<Fsm>) -> Box<Fsm> {
         /* DEVIATION from C (an empty-sigma sentinel node has number == -1;
         the C writes isflag[-1], an out-of-bounds write — skipped here) */
         if s.number != -1 {
-            if flag_check(s.symbol.as_deref().unwrap_or("")) != 0 {
+            if flag_check(s.symbol.as_deref().unwrap_or("")) {
                 isflag[s.number as usize] = 1;
             } else {
                 isflag[s.number as usize] = 0;
@@ -884,29 +884,29 @@ mod tests {
     #[test]
     fn flag_check_dfa() {
         /* U/P/N/E require both attribute and value */
-        assert_eq!(flag_check("@U.F.V@"), 1);
-        assert_eq!(flag_check("@P.F.V@"), 1);
-        assert_eq!(flag_check("@N.F.V@"), 1);
-        assert_eq!(flag_check("@E.F.V@"), 1);
+        assert!(flag_check("@U.F.V@"));
+        assert!(flag_check("@P.F.V@"));
+        assert!(flag_check("@N.F.V@"));
+        assert!(flag_check("@E.F.V@"));
         /* R/D value optional */
-        assert_eq!(flag_check("@R.F@"), 1);
-        assert_eq!(flag_check("@D.F@"), 1);
-        assert_eq!(flag_check("@R.F.V@"), 1);
-        assert_eq!(flag_check("@D.F.V@"), 1);
+        assert!(flag_check("@R.F@"));
+        assert!(flag_check("@D.F@"));
+        assert!(flag_check("@R.F.V@"));
+        assert!(flag_check("@D.F.V@"));
         /* C never takes a value */
-        assert_eq!(flag_check("@C.X@"), 1);
+        assert!(flag_check("@C.X@"));
         /* Quirk: '@' is an ordinary ND byte in the mandatory first field of
         U/P/N/E, so this is accepted despite the interior '@' */
-        assert_eq!(flag_check("@U.a@b.c@"), 1);
+        assert!(flag_check("@U.a@b.c@"));
 
         /* Rejections */
-        assert_eq!(flag_check(""), 0);
-        assert_eq!(flag_check("a"), 0);
-        assert_eq!(flag_check("@Z.F.V@"), 0, "bad operator letter");
-        assert_eq!(flag_check("@U.F@"), 0, "U needs a value field");
-        assert_eq!(flag_check("@C.X.Y@"), 0, "C may not take a value");
-        assert_eq!(flag_check("@R.F.V.W@"), 0, "at most two fields");
-        assert_eq!(flag_check("@U.F.V@x"), 0, "must end right after '@'");
+        assert!(!(flag_check("")));
+        assert!(!(flag_check("a")));
+        assert!(!(flag_check("@Z.F.V@")), "bad operator letter");
+        assert!(!(flag_check("@U.F@")), "U needs a value field");
+        assert!(!(flag_check("@C.X.Y@")), "C may not take a value");
+        assert!(!(flag_check("@R.F.V.W@")), "at most two fields");
+        assert!(!(flag_check("@U.F.V@x")), "must end right after '@'");
     }
 
     // [spec:foma:sem:flags.flag-get-type-fn/test]
@@ -1141,7 +1141,7 @@ mod tests {
         assert_eq!(all_words(&result), vec!["a", "c", "e"]);
         /* No flag symbols remain in sigma. */
         for s in sigma_syms(&result) {
-            assert_eq!(flag_check(&s), 0, "no flag symbols remain: {}", s);
+            assert!(!(flag_check(&s)), "no flag symbols remain: {}", s);
         }
 
         /* Eliminating a single named attribute leaves the other flags' effect. */

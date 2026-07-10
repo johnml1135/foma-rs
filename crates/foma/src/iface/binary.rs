@@ -8,7 +8,7 @@ use crate::define::defined_networks_init;
 // [spec:foma:def:foma.iface-compose-fn]
 // [spec:foma:sem:foma.iface-compose-fn]
 pub fn iface_compose(session: &mut Session) {
-    if iface_stack_check(session, 2) != 0 {
+    if iface_stack_check(session, 2) {
         while session.stack_size() > 1 {
             let one = session.stack_pop().unwrap();
             let two = session.stack_pop().unwrap();
@@ -25,7 +25,7 @@ pub fn iface_compose(session: &mut Session) {
 // [spec:foma:def:foma.iface-conc-fn]
 // [spec:foma:sem:foma.iface-conc-fn+1]
 pub fn iface_conc(session: &mut Session) {
-    if iface_stack_check(session, 2) != 0 {
+    if iface_stack_check(session, 2) {
         while session.stack_size() > 1 {
             // Wave 4 fix: the C left a stray debug printf("dd") here — deleted.
             let one = session.stack_pop().unwrap();
@@ -43,7 +43,7 @@ pub fn iface_conc(session: &mut Session) {
 // [spec:foma:def:foma.iface-crossproduct-fn]
 // [spec:foma:sem:foma.iface-crossproduct-fn]
 pub fn iface_crossproduct(session: &mut Session) {
-    if iface_stack_check(session, 2) != 0 {
+    if iface_stack_check(session, 2) {
         let one = session.stack_pop().unwrap();
         let two = session.stack_pop().unwrap();
         session.stack_add(fsm_topsort(fsm_minimize(
@@ -58,7 +58,7 @@ pub fn iface_crossproduct(session: &mut Session) {
 // [spec:foma:def:foma.iface-ignore-fn]
 // [spec:foma:sem:foma.iface-ignore-fn]
 pub fn iface_ignore(session: &mut Session) {
-    if iface_stack_check(session, 2) != 0 {
+    if iface_stack_check(session, 2) {
         let one = session.stack_pop().unwrap();
         let two = session.stack_pop().unwrap();
         session.stack_add(fsm_topsort(fsm_minimize(
@@ -73,7 +73,7 @@ pub fn iface_ignore(session: &mut Session) {
 // [spec:foma:def:foma.iface-intersect-fn]
 // [spec:foma:sem:foma.iface-intersect-fn]
 pub fn iface_intersect(session: &mut Session) {
-    if iface_stack_check(session, 2) != 0 {
+    if iface_stack_check(session, 2) {
         while session.stack_size() > 1 {
             // C: fsm_intersect(stack_pop(), stack_pop()) — the two pops are one
             // expression (C order unspecified); Rust evaluates arguments
@@ -93,7 +93,7 @@ pub fn iface_intersect(session: &mut Session) {
 // [spec:foma:def:foma.iface-substitute-symbol-fn]
 // [spec:foma:sem:foma.iface-substitute-symbol-fn]
 pub fn iface_substitute_symbol(session: &mut Session, original: &str, substitute: &str) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         // DEVIATION from C: C dequotes the caller's `char *` buffers in place; the
         // args are &str here, so local byte copies are dequoted instead (observably
         // identical — the printed strings and the fsm op both use the dequoted text).
@@ -117,7 +117,7 @@ pub fn iface_substitute_symbol(session: &mut Session, original: &str, substitute
 // [spec:foma:def:foma.iface-substitute-defined-fn]
 // [spec:foma:sem:foma.iface-substitute-defined-fn]
 pub fn iface_substitute_defined(session: &mut Session, original: &str, substitute: &str) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         // DEVIATION from C: see iface_substitute_symbol — dequote on local copies.
         let mut original = original.as_bytes().to_vec();
         let mut substitute = substitute.as_bytes().to_vec();
@@ -162,7 +162,7 @@ pub fn iface_substitute_defined(session: &mut Session, original: &str, substitut
 // [spec:foma:def:foma.iface-shuffle-fn]
 // [spec:foma:sem:foma.iface-shuffle-fn]
 pub fn iface_shuffle(session: &mut Session) {
-    if iface_stack_check(session, 2) != 0 {
+    if iface_stack_check(session, 2) {
         while session.stack_size() > 1 {
             // C: fsm_shuffle(stack_pop(), stack_pop()) — two pops in one expression
             // (C order unspecified); Rust evaluates left-to-right. Shuffle is
@@ -182,7 +182,7 @@ pub fn iface_shuffle(session: &mut Session) {
 // [spec:foma:def:foma.iface-union-fn]
 // [spec:foma:sem:foma.iface-union-fn]
 pub fn iface_union(session: &mut Session) {
-    if iface_stack_check(session, 2) != 0 {
+    if iface_stack_check(session, 2) {
         while session.stack_size() > 1 {
             // C: fsm_union(&session.opts, stack_pop(), stack_pop()) — pops in one expression (C
             // order unspecified); union is commutative. Minimized, NOT topsorted.

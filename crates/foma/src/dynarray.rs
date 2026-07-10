@@ -820,18 +820,18 @@ pub fn fsm_construct_done(handle: Box<FsmConstructHandle>) -> Box<Fsm> {
 // [spec:foma:sem:dynarray.fsm-read-is-final-fn]
 // [spec:foma:def:fomalib.fsm-read-is-final-fn]
 // [spec:foma:sem:fomalib.fsm-read-is-final-fn]
-pub fn fsm_read_is_final(h: &FsmReadHandle, state: i32) -> i32 {
+pub fn fsm_read_is_final(h: &FsmReadHandle, state: i32) -> bool {
     /* no bounds check on state in C (OOB read); Rust panics */
-    (h.lookuptable[state as usize] & 2) as i32
+    (h.lookuptable[state as usize] & 2) != 0
 }
 
 // [spec:foma:def:dynarray.fsm-read-is-initial-fn]
 // [spec:foma:sem:dynarray.fsm-read-is-initial-fn]
 // [spec:foma:def:fomalib.fsm-read-is-initial-fn]
 // [spec:foma:sem:fomalib.fsm-read-is-initial-fn]
-pub fn fsm_read_is_initial(h: &FsmReadHandle, state: i32) -> i32 {
+pub fn fsm_read_is_initial(h: &FsmReadHandle, state: i32) -> bool {
     /* no bounds check on state in C (OOB read); Rust panics */
-    (h.lookuptable[state as usize] & 1) as i32
+    (h.lookuptable[state as usize] & 1) != 0
 }
 
 // [spec:foma:def:dynarray.fsm-read-init-fn]
@@ -1685,11 +1685,11 @@ mod tests {
         assert_eq!(fsm_get_num_states(&h), 3);
         assert_eq!(fsm_get_has_unknowns(&h), 0);
         /* is_initial returns bit 0 (1), is_final returns bit 1 (the value 2) */
-        assert_eq!(fsm_read_is_initial(&h, 0), 1);
-        assert_eq!(fsm_read_is_initial(&h, 1), 0);
-        assert_eq!(fsm_read_is_final(&h, 0), 0);
-        assert_eq!(fsm_read_is_final(&h, 1), 2);
-        assert_eq!(fsm_read_is_final(&h, 2), 2);
+        assert!(fsm_read_is_initial(&h, 0));
+        assert!(!(fsm_read_is_initial(&h, 1)));
+        assert!(!(fsm_read_is_final(&h, 0)));
+        assert!(fsm_read_is_final(&h, 1));
+        assert!(fsm_read_is_final(&h, 2));
         /* the -1-terminated finals/initials arrays */
         assert_eq!(h.initials_head, vec![0, -1]);
         assert_eq!(h.finals_head, vec![1, 2, -1]);

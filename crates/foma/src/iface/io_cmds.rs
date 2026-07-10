@@ -102,7 +102,7 @@ pub fn iface_save_defined(session: &mut Session, filename: &str) {
 // [spec:foma:def:foma.iface-write-att-fn]
 // [spec:foma:sem:foma.iface-write-att-fn]
 pub fn iface_write_att(session: &mut Session, filename: Option<&str>) -> i32 {
-    if iface_stack_check(session, 1) == 0 {
+    if !iface_stack_check(session, 1) {
         return 1;
     }
     let top = session.stack_find_top().unwrap();
@@ -130,7 +130,7 @@ pub fn iface_write_att(session: &mut Session, filename: Option<&str>) -> i32 {
 // [spec:foma:def:foma.iface-write-prolog-fn]
 // [spec:foma:sem:foma.iface-write-prolog-fn]
 pub fn iface_write_prolog(session: &mut Session, filename: Option<&str>) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
         session.stack_entry_fsm(top, |f| foma_write_prolog(f, filename));
     }

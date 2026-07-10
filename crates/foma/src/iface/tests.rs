@@ -26,7 +26,7 @@ fn push_topsorted(session: &mut Session, re: &str) {
 fn top_is(session: &mut Session, re: &str) -> bool {
     let expected = fsm_parse_regex(&session.opts, re, None, None).unwrap();
     let popped = session.stack_pop().unwrap();
-    fsm_equivalent(&session.opts, popped, expected) == 1
+    fsm_equivalent(&session.opts, popped, expected)
 }
 
 /// Does `net` accept `w` on the input (down) side?
@@ -72,8 +72,8 @@ fn help_family_prints_without_touching_the_stack() {
     iface_apropos("\u{1}zznomatchzz"); // no match → prints nothing
     iface_help_search("compose"); // matching entry
     iface_help_search("zznomatchzz"); // no match
-    iface_print_bool(1);
-    iface_print_bool(0);
+    iface_print_bool(true);
+    iface_print_bool(false);
     iface_warranty();
     // None of these read or write the stack.
     assert_eq!(session.stack_size(), 0);
@@ -755,7 +755,7 @@ fn load_defined_restores_saved_definitions() {
     let restored = restored.expect("Foo should be restored");
     let opts = &session.opts.clone();
     let expected = fsm_parse_regex(opts, "x y", None, None).unwrap();
-    assert_eq!(fsm_equivalent(&session.opts, restored, expected), 1);
+    assert!(fsm_equivalent(&session.opts, restored, expected));
 }
 
 // load stack: reads every net from a multi-net binary file and pushes them
@@ -954,12 +954,12 @@ fn read_text_and_spaced_text() {
 #[test]
 fn stack_check_counts_the_stack() {
     let mut session = Session::new();
-    assert_eq!(iface_stack_check(&mut session, 0), 1); // 0 >= 0 with an empty stack
-    assert_eq!(iface_stack_check(&mut session, 1), 0);
+    assert!(iface_stack_check(&mut session, 0)); // 0 >= 0 with an empty stack
+    assert!(!(iface_stack_check(&mut session, 1)));
     push(&mut session, "a");
     push(&mut session, "b");
-    assert_eq!(iface_stack_check(&mut session, 2), 1);
-    assert_eq!(iface_stack_check(&mut session, 3), 0);
+    assert!(iface_stack_check(&mut session, 2));
+    assert!(!(iface_stack_check(&mut session, 3)));
 }
 
 // substitute symbol / defined: symbol dequotes both args and replaces the
@@ -1125,10 +1125,11 @@ fn save_defined_and_save_stack_roundtrip() {
     iface_load_defined(&mut session, d);
     let restored = find_defined(&mut session.defines, "Foo").map(|f| fsm_copy(f));
     let expected = fsm_parse_regex(&session.opts, "x y", None, None).unwrap();
-    assert_eq!(
-        fsm_equivalent(&session.opts, restored.expect("Foo restored"), expected),
-        1
-    );
+    assert!(fsm_equivalent(
+        &session.opts,
+        restored.expect("Foo restored"),
+        expected
+    ));
 
     // save stack: writes bottom→top (a, b, c); load pushes in file order.
     let sp = dir.join("foma_s2_savestack.gz");
@@ -1316,82 +1317,58 @@ fn test_family_pins_predicate_and_preserves_stack() {
     // functional: true for a:b, false for a:b|a:c.
     push(&mut session, "a:b");
     let t = session.stack_find_top().unwrap();
-    assert_eq!(
-        session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isfunctional(opts, f)),
-        1
-    );
+    assert!(session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isfunctional(opts, f)));
     iface_test_functional(&mut session);
     assert_eq!(session.stack_size(), 1);
     let _ = session.stack_pop();
     push(&mut session, "[a:b] | [a:c]");
     let t = session.stack_find_top().unwrap();
-    assert_eq!(
-        session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isfunctional(opts, f)),
-        0
-    );
+    assert!(!(session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isfunctional(opts, f))));
     iface_test_functional(&mut session);
     let _ = session.stack_pop();
 
     // identity: true for a, false for a:b.
     push(&mut session, "a");
     let t = session.stack_find_top().unwrap();
-    assert_eq!(
-        session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isidentity(opts, f)),
-        1
-    );
+    assert!(session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isidentity(opts, f)));
     iface_test_identity(&mut session);
     let _ = session.stack_pop();
     push(&mut session, "a:b");
     let t = session.stack_find_top().unwrap();
-    assert_eq!(
-        session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isidentity(opts, f)),
-        0
-    );
+    assert!(!(session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isidentity(opts, f))));
     iface_test_identity(&mut session);
     let _ = session.stack_pop();
 
     // unambiguous: true for a:b, false for a:b|a:c.
     push(&mut session, "a:b");
     let t = session.stack_find_top().unwrap();
-    assert_eq!(
-        session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isunambiguous(opts, f)),
-        1
-    );
+    assert!(session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isunambiguous(opts, f)));
     iface_test_unambiguous(&mut session);
     let _ = session.stack_pop();
     push(&mut session, "[a:b] | [a:c]");
     let t = session.stack_find_top().unwrap();
-    assert_eq!(
-        session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isunambiguous(opts, f)),
-        0
-    );
+    assert!(!(session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isunambiguous(opts, f))));
     iface_test_unambiguous(&mut session);
     let _ = session.stack_pop();
 
     // sequential: true for the acyclic acceptor "a b".
     push(&mut session, "a b");
     let t = session.stack_find_top().unwrap();
-    assert_eq!(session.stack_entry_fsm(t, |f| fsm_issequential(f)), 1);
+    assert!(session.stack_entry_fsm(t, |f| fsm_issequential(f)));
     iface_test_sequential(&mut session);
     let _ = session.stack_pop();
 
     // null / nonnull: empty language vs. non-empty.
     push(&mut session, "[a] - [a]"); // empty
     let t = session.stack_find_top().unwrap();
-    assert_eq!(
-        session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isempty(opts, f)),
-        1
-    );
+    assert!(session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isempty(opts, f)));
     iface_test_null(&mut session);
     iface_test_nonnull(&mut session);
     assert_eq!(session.stack_size(), 1);
     let _ = session.stack_pop();
     push(&mut session, "a"); // non-empty
     let t = session.stack_find_top().unwrap();
-    assert_eq!(
-        session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isempty(opts, f)),
-        0
-    );
+    assert!(!(session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isempty(opts, f))));
     iface_test_null(&mut session);
     iface_test_nonnull(&mut session);
     let _ = session.stack_pop();
@@ -1417,7 +1394,7 @@ fn test_family_pins_predicate_and_preserves_stack() {
     assert_eq!(session.stack_size(), 2);
     let one = session.stack_entry_fsm(session.stack_find_top().unwrap(), |f| fsm_copy(f));
     let two = session.stack_entry_fsm(session.stack_find_second().unwrap(), |f| fsm_copy(f));
-    assert_eq!(fsm_equivalent(&session.opts, one, two), 1);
+    assert!(fsm_equivalent(&session.opts, one, two));
     session = Session::new();
     push(&mut session, "a");
     push(&mut session, "b");
@@ -1594,13 +1571,13 @@ fn write_att_and_prolog_roundtrip() {
     assert_eq!(session.stack_size(), 1); // net not consumed
     let back = read_att(&session.opts, att).unwrap();
     let expected = fsm_parse_regex(&session.opts, "a b", None, None).unwrap();
-    assert_eq!(fsm_equivalent(&session.opts, back, expected), 1);
+    assert!(fsm_equivalent(&session.opts, back, expected));
 
     iface_write_prolog(&mut session, Some(pl));
     assert_eq!(session.stack_size(), 1);
     let back = fsm_read_prolog(pl).unwrap();
     let expected = fsm_parse_regex(&session.opts, "a b", None, None).unwrap();
-    assert_eq!(fsm_equivalent(&session.opts, back, expected), 1);
+    assert!(fsm_equivalent(&session.opts, back, expected));
 }
 
 // sigptr (static): the three reserved arc labels map to 0/?/@; a matched

@@ -720,7 +720,7 @@ fn compile_regex(session: &mut Session, pmode: i32, defname: &str, body: &str) {
 
 /* interface.l <DEFI> "define NAME" (no regex body): name the top-of-stack net. */
 fn define_top_of_stack(session: &mut Session, name: &str) {
-    if iface_stack_check(session, 1) == 0 {
+    if !iface_stack_check(session, 1) {
         return;
     }
     let net = session.stack_pop();
@@ -868,7 +868,7 @@ fn dispatch(session: &mut Session, line: &str) -> bool {
         if let Some(dir) = dir {
             let arg = arg_after(t, nskip);
             if arg.is_empty() {
-                if iface_stack_check(session, 1) != 0 {
+                if iface_stack_check(session, 1) {
                     PROMPTMODE.with(|p| p.set(PROMPT_A));
                     APPLY_DIRECTION.with(|d| d.set(dir));
                 }

@@ -120,15 +120,15 @@ pub(crate) fn global_vars() -> Vec<Gv> {
 // [spec:foma:sem:iface.iface-stack-check-fn]
 // [spec:foma:def:foma.iface-stack-check-fn]
 // [spec:foma:sem:foma.iface-stack-check-fn]
-pub fn iface_stack_check(session: &mut Session, size: i32) -> i32 {
+pub fn iface_stack_check(session: &mut Session, size: i32) -> bool {
     if session.stack_size() < size {
         print!(
             "Not enough networks on stack. Operation requires at least {}.\n",
             size
         );
-        return 0;
+        return false;
     }
-    1
+    true
 }
 
 // Full variable-name comparison: returns 0 iff the names are equal. Plumbing for

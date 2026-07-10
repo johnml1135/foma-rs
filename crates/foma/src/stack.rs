@@ -343,12 +343,8 @@ impl Session {
     // [spec:foma:sem:stack.stack-isempty-fn]
     // [spec:foma:def:foma.stack-isempty-fn]
     // [spec:foma:sem:foma.stack-isempty-fn]
-    pub fn stack_isempty(&self) -> i32 {
-        if self.e_next(self.main_stack()).is_none() {
-            1
-        } else {
-            0
-        }
+    pub fn stack_isempty(&self) -> bool {
+        self.e_next(self.main_stack()).is_none()
     }
 
     // [spec:foma:def:stack.stack-turn-fn]
@@ -364,7 +360,7 @@ impl Session {
         // tail. Each entry travels with its own fsm/ah/amedh/number (numbers are
         // not renumbered, matching the C code's evident intent), so afterwards the
         // former top is the new bottom and the former bottom is the new top.
-        if self.stack_isempty() != 0 {
+        if self.stack_isempty() {
             println!("Stack is empty.");
             return 0;
         }
@@ -462,7 +458,7 @@ impl Session {
     // [spec:foma:sem:foma.stack-rotate-fn+1]
     pub fn stack_rotate(&mut self) -> i32 {
         /* Top element of stack to bottom */
-        if self.stack_isempty() != 0 {
+        if self.stack_isempty() {
             println!("Stack is empty.");
             return -1;
         }
@@ -529,14 +525,14 @@ mod tests {
         assert_eq!(session.e_number(head), -1);
         assert_eq!(session.e_next(head), None);
         assert_eq!(session.e_previous(head), None);
-        assert_eq!(session.stack_isempty(), 1);
+        assert!(session.stack_isempty());
         assert_eq!(session.stack_size(), 0);
         // Re-init on a populated stack abandons the old list (leak, as in C)
         // and starts empty again.
         add_named(&mut session, "a", "old");
         assert_eq!(session.stack_init(), 1);
         assert_eq!(session.stack_size(), 0);
-        assert_eq!(session.stack_isempty(), 1);
+        assert!(session.stack_isempty());
     }
 
     // [spec:foma:sem:stack.stack-isempty-fn/test]
@@ -544,11 +540,11 @@ mod tests {
     #[test]
     fn stack_isempty_is_1_iff_no_real_entries() {
         let mut session = Session::new();
-        assert_eq!(session.stack_isempty(), 1);
+        assert!(session.stack_isempty());
         add_named(&mut session, "a", "x");
-        assert_eq!(session.stack_isempty(), 0);
+        assert!(!(session.stack_isempty()));
         session.stack_clear();
-        assert_eq!(session.stack_isempty(), 1);
+        assert!(session.stack_isempty());
     }
 
     // [spec:foma:sem:stack.stack-size-fn/test]
@@ -614,7 +610,7 @@ mod tests {
         assert_eq!(session.stack_pop().unwrap().name, "second");
         // Size-1 fast path: fsm is saved, stack_clear() re-inits empty.
         assert_eq!(session.stack_pop().unwrap().name, "first");
-        assert_eq!(session.stack_isempty(), 1);
+        assert!(session.stack_isempty());
         assert_eq!(session.stack_size(), 0);
     }
 
@@ -769,7 +765,7 @@ mod tests {
         session.stack_get_ah().unwrap();
         session.stack_get_med_ah().unwrap();
         assert_eq!(session.stack_clear(), 1);
-        assert_eq!(session.stack_isempty(), 1);
+        assert!(session.stack_isempty());
         assert_eq!(session.stack_size(), 0);
         assert_eq!(session.e_number(session.main_stack()), -1);
     }

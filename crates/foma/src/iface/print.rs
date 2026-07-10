@@ -981,8 +981,8 @@ pub fn iface_help_search(s: &str) {
 
 // [spec:foma:def:iface.iface-print-bool-fn]
 // [spec:foma:sem:iface.iface-print-bool-fn]
-pub fn iface_print_bool(value: i32) {
-    print!("{} (1 = TRUE, 0 = FALSE)\n", value);
+pub fn iface_print_bool(value: bool) {
+    print!("{} (1 = TRUE, 0 = FALSE)\n", if value { 1 } else { 0 });
 }
 
 // [spec:foma:def:iface.iface-warranty-fn]
@@ -998,7 +998,7 @@ pub fn iface_warranty() {
 // [spec:foma:def:foma.iface-print-dot-fn]
 // [spec:foma:sem:foma.iface-print-dot-fn]
 pub fn iface_print_dot(session: &mut Session, filename: Option<&str>) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         if let Some(f) = filename {
             print!("Writing dot file to {}.\n", f);
         }
@@ -1030,7 +1030,7 @@ pub fn iface_print_net(session: &mut Session, netname: Option<&str>, filename: O
             }
         }
         None => {
-            if iface_stack_check(session, 1) != 0 {
+            if iface_stack_check(session, 1) {
                 let top = session.stack_find_top().unwrap();
                 session.stack_entry_fsm(top, |net| print_net(net, filename));
             }
@@ -1043,7 +1043,7 @@ pub fn iface_print_net(session: &mut Session, netname: Option<&str>, filename: O
 // [spec:foma:def:foma.iface-print-cmatrix-att-fn]
 // [spec:foma:sem:foma.iface-print-cmatrix-att-fn+1]
 pub fn iface_print_cmatrix_att(session: &mut Session, filename: Option<&str>) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
         // C: medlookup == NULL || medlookup->confusion_matrix == NULL. Empty Vec ↔ NULL.
         let has_cm = session.stack_entry_fsm(top, |f| {
@@ -1083,7 +1083,7 @@ pub fn iface_print_cmatrix_att(session: &mut Session, filename: Option<&str>) {
 // [spec:foma:def:foma.iface-print-cmatrix-fn]
 // [spec:foma:sem:foma.iface-print-cmatrix-fn]
 pub fn iface_print_cmatrix(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
         let has_cm = session.stack_entry_fsm(top, |f| {
             !(f.medlookup.is_none() || f.medlookup.as_ref().unwrap().confusion_matrix.is_empty())
@@ -1129,7 +1129,7 @@ pub fn iface_print_defined(session: &mut Session) {
 // [spec:foma:def:foma.iface-print-sigma-fn]
 // [spec:foma:sem:foma.iface-print-sigma-fn]
 pub fn iface_print_sigma(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
         session.stack_entry_fsm(top, |f| {
             print_sigma(f.sigma.as_deref(), &mut std::io::stdout())
@@ -1142,7 +1142,7 @@ pub fn iface_print_sigma(session: &mut Session) {
 // [spec:foma:def:foma.iface-print-stats-fn]
 // [spec:foma:sem:foma.iface-print-stats-fn]
 pub fn iface_print_stats(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
         session.stack_entry_fsm(top, |f| print_stats(f));
     }
@@ -1153,7 +1153,7 @@ pub fn iface_print_stats(session: &mut Session) {
 // [spec:foma:def:foma.iface-view-fn]
 // [spec:foma:sem:foma.iface-view-fn]
 pub fn iface_view(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
         session.stack_entry_fsm(top, |f| view_net(f));
     }

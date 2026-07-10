@@ -36,7 +36,7 @@ pub fn iface_pop(session: &mut Session) {
 // [spec:foma:def:foma.iface-name-net-fn]
 // [spec:foma:sem:foma.iface-name-net-fn+1]
 pub fn iface_name_net(session: &mut Session, name: &str) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
         session.stack_entry_fsm(top, |f| {
             // [spec:foma:sem:iface.iface-name-net-fn+1] store the name in full. C
@@ -53,7 +53,7 @@ pub fn iface_name_net(session: &mut Session, name: &str) {
 // [spec:foma:def:foma.iface-print-name-fn]
 // [spec:foma:sem:foma.iface-print-name-fn]
 pub fn iface_print_name(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
         let name = session.stack_entry_fsm(top, |f| f.name.clone());
         print!("{}\n", name);
@@ -67,7 +67,7 @@ pub fn iface_print_name(session: &mut Session) {
 pub fn iface_quit(session: &mut Session) {
     // remove_defined(g_defines, NULL) — NULL name destroys every defined net.
     remove_defined(&mut session.defines, None);
-    while session.stack_isempty() == 0 {
+    while !session.stack_isempty() {
         let net = session.stack_pop().unwrap();
         fsm_destroy(net);
     }
@@ -79,7 +79,7 @@ pub fn iface_quit(session: &mut Session) {
 // [spec:foma:def:foma.iface-rotate-fn]
 // [spec:foma:sem:foma.iface-rotate-fn]
 pub fn iface_rotate(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         session.stack_rotate();
     }
 }
@@ -89,7 +89,7 @@ pub fn iface_rotate(session: &mut Session) {
 // [spec:foma:def:foma.iface-save-stack-fn]
 // [spec:foma:sem:foma.iface-save-stack-fn]
 pub fn iface_save_stack(session: &mut Session, filename: &str) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         // gzopen(filename, "wb") — File::create + GzEncoder.
         let file = match File::create(filename) {
             Ok(f) => f,
@@ -119,7 +119,7 @@ pub fn iface_turn(session: &mut Session) {
     // [spec:foma:sem:iface.iface-turn-fn+1] "turn stack" reverses the whole stack
     // via stack_turn(). C wired it to stack_rotate() (a top/bottom swap), which
     // contradicted the "turns stack upside down" help text.
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         session.stack_turn();
     }
 }

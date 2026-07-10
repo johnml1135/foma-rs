@@ -728,7 +728,7 @@ pub fn fsm_shuffle(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
 // [spec:foma:sem:constructions.fsm-equivalent-fn]
 // [spec:foma:def:fomalib.fsm-equivalent-fn]
 // [spec:foma:sem:fomalib.fsm-equivalent-fn]
-pub fn fsm_equivalent(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> i32 {
+pub fn fsm_equivalent(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> bool {
     let mut int_stack = IntStack::new();
     /* Test path equivalence of two FSMs by traversing both in parallel */
     let mut net1 = net1;
@@ -739,7 +739,7 @@ pub fn fsm_equivalent(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> i32
     fsm_count(&mut net1);
     fsm_count(&mut net2);
 
-    let mut equivalent = 0;
+    let mut equivalent = false;
     /* new state 0 = {0,0} */
     /* STACK_2_PUSH(0,0) */
     int_stack.push(0);
@@ -816,7 +816,7 @@ pub fn fsm_equivalent(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> i32
                 bi += 1;
             }
         }
-        equivalent = 1;
+        equivalent = true;
     }
     fsm_destroy(net1);
     fsm_destroy(net2);
@@ -1163,7 +1163,7 @@ pub fn fsm_ignore(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>, operation:
     let mut net1 = fsm_minimize(opts, net1);
     let mut net2 = fsm_minimize(opts, net2);
 
-    if fsm_isempty(opts, &mut net2) != 0 {
+    if fsm_isempty(opts, &mut net2) {
         fsm_destroy(net2);
         return net1;
     }
@@ -1947,7 +1947,7 @@ pub fn fsm_left_rewr(opts: &FomaOptions, net: Box<Fsm>, rewr: Box<Fsm>) -> Box<F
             sigmatable[innum as usize] = currstate;
             if innum == relabelin {
                 seensource = 1;
-                if fsm_read_is_final(&inh, currstate) != 0 {
+                if fsm_read_is_final(&inh, currstate) {
                     outnum = relabelout;
                 }
             }
@@ -1962,7 +1962,7 @@ pub fn fsm_left_rewr(opts: &FomaOptions, net: Box<Fsm>, rewr: Box<Fsm>) -> Box<F
         }
         if seensource == 0 {
             addedsink = 1;
-            if fsm_read_is_final(&inh, currstate) != 0 {
+            if fsm_read_is_final(&inh, currstate) {
                 fsm_construct_add_arc_nums(&mut outh, currstate, sinkstate, relabelin, relabelout);
             } else {
                 fsm_construct_add_arc_nums(&mut outh, currstate, sinkstate, relabelin, relabelin);
@@ -2091,7 +2091,7 @@ pub fn fsm_add_loop(net: Box<Fsm>, marker: &Fsm, finals: i32) -> Box<Fsm> {
     } else if finals == 0 || finals == 2 {
         let statecount = inh.net.as_ref().unwrap().statecount;
         for i in 0..statecount {
-            if finals == 2 || fsm_read_is_final(&inh, i) == 0 {
+            if finals == 2 || !fsm_read_is_final(&inh, i) {
                 fsm_read_reset(Some(&mut minh));
                 while fsm_get_next_arc(&mut minh) != 0 {
                     let min_in = fsm_get_arc_in(&minh).unwrap().to_string();

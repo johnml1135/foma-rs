@@ -19,7 +19,7 @@ pub fn fsm_intersect(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<
     let mut net1 = fsm_minimize(opts, net1);
     let mut net2 = fsm_minimize(opts, net2);
 
-    if fsm_isempty(opts, &mut net1) != 0 || fsm_isempty(opts, &mut net2) != 0 {
+    if fsm_isempty(opts, &mut net1) || fsm_isempty(opts, &mut net2) {
         fsm_destroy(net1);
         fsm_destroy(net2);
         return fsm_empty_set();
@@ -210,7 +210,7 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
     let mut net1 = fsm_minimize(opts, net1);
     let mut net2 = fsm_minimize(opts, net2);
 
-    if fsm_isempty(opts, &mut net1) != 0 || fsm_isempty(opts, &mut net2) != 0 {
+    if fsm_isempty(opts, &mut net1) || fsm_isempty(opts, &mut net2) {
         fsm_destroy(net1);
         fsm_destroy(net2);
         return fsm_empty_set();
@@ -228,7 +228,7 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
         let max2sigma = sigma_max(net2.sigma.as_deref());
         let mut sig1 = net1.sigma.as_deref();
         while let Some(s1) = sig1 {
-            if flag_check(s1.symbol.as_deref().unwrap_or("")) != 0 {
+            if flag_check(s1.symbol.as_deref().unwrap_or("")) {
                 flags1 = 1;
                 if sigma_find(s1.symbol.as_deref().unwrap_or(""), net2.sigma.as_deref()) == -1 {
                     sigma_add(
@@ -242,7 +242,7 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
 
         let mut sig2 = net2.sigma.as_deref();
         while let Some(s2) = sig2 {
-            if flag_check(s2.symbol.as_deref().unwrap_or("")) != 0 {
+            if flag_check(s2.symbol.as_deref().unwrap_or("")) {
                 if s2.number <= max2sigma {
                     flags2 = 1;
                 }
@@ -274,7 +274,7 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
         is_flag = vec![false; (sigma_max(net1.sigma.as_deref()) + 1) as usize];
         let mut sig1 = net1.sigma.as_deref();
         while let Some(s1) = sig1 {
-            if flag_check(s1.symbol.as_deref().unwrap_or("")) != 0 {
+            if flag_check(s1.symbol.as_deref().unwrap_or("")) {
                 is_flag[s1.number as usize] = true;
             } else {
                 is_flag[s1.number as usize] = false;

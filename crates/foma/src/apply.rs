@@ -183,10 +183,10 @@ pub fn apply_set_print_pairs(h: &mut ApplyHandle, value: i32) {
 // [spec:foma:sem:apply.apply-force-clear-stack-fn]
 pub(crate) fn apply_force_clear_stack(h: &mut ApplyHandle) {
     /* Make sure stack is empty and marks reset */
-    if apply_stack_isempty(h) == 0 {
+    if !apply_stack_isempty(h) {
         let sn = l_state_no(h, h.ptr);
         h.marks[sn as usize] = 0;
-        while apply_stack_isempty(h) == 0 {
+        while !apply_stack_isempty(h) {
             apply_stack_pop(h);
             let sn = l_state_no(h, h.ptr);
             h.marks[sn as usize] = 0;
@@ -199,11 +199,8 @@ pub(crate) fn apply_force_clear_stack(h: &mut ApplyHandle) {
 
 // [spec:foma:def:apply.apply-stack-isempty-fn]
 // [spec:foma:sem:apply.apply-stack-isempty-fn]
-pub(crate) fn apply_stack_isempty(h: &ApplyHandle) -> i32 {
-    if h.apply_stack_ptr == 0 {
-        return 1;
-    }
-    0
+pub(crate) fn apply_stack_isempty(h: &ApplyHandle) -> bool {
+    h.apply_stack_ptr == 0
 }
 
 // [spec:foma:def:apply.apply-stack-clear-fn]
@@ -853,7 +850,7 @@ pub fn apply_index(
 
 // [spec:foma:def:apply.apply-binarysearch-fn]
 // [spec:foma:sem:apply.apply-binarysearch-fn]
-pub fn apply_binarysearch(h: &mut ApplyHandle) -> i32 {
+pub fn apply_binarysearch(h: &mut ApplyHandle) -> bool {
     let mut thisptr: i32;
     let mut lastptr: i32;
     let mut midptr: i32;
@@ -869,17 +866,17 @@ pub fn apply_binarysearch(h: &mut ApplyHandle) -> i32 {
         l_out(h, h.curr_ptr)
     };
     if nextsym == EPSILON {
-        return 1;
+        return true;
     }
     if nextsym == -1 {
-        return 0;
+        return false;
     }
     if h.ipos >= h.current_instring_length {
-        return 0;
+        return false;
     }
     seeksym = h.sigmatch_array[h.ipos as usize].signumber;
     if seeksym == nextsym || (nextsym == UNKNOWN && seeksym == IDENTITY) {
-        return 1;
+        return true;
     }
 
     thisstate = l_state_no(h, thisptr);
@@ -895,19 +892,19 @@ pub fn apply_binarysearch(h: &mut ApplyHandle) -> i32 {
             };
             if (nextsym == seeksym) || (nextsym == UNKNOWN && seeksym == IDENTITY) {
                 h.curr_ptr = thisptr;
-                return 1;
+                return true;
             }
             if nextsym > seeksym || nextsym == -1 {
-                return 0;
+                return false;
             }
             thisptr += 1;
         }
-        return 0;
+        return false;
     }
 
     loop {
         if thisptr > lastptr {
-            return 0;
+            return false;
         }
         midptr = (thisptr + lastptr) / 2;
         nextsym = if (h.mode & DOWN) == DOWN {
@@ -931,14 +928,14 @@ pub fn apply_binarysearch(h: &mut ApplyHandle) -> i32 {
                 midptr -= 1; /* Find first match in case of ties */
             }
             h.curr_ptr = midptr;
-            return 1;
+            return true;
         }
     }
 }
 
 // [spec:foma:def:apply.apply-follow-next-arc-fn]
 // [spec:foma:sem:apply.apply-follow-next-arc-fn]
-pub fn apply_follow_next_arc(h: &mut ApplyHandle) -> i32 {
+pub fn apply_follow_next_arc(h: &mut ApplyHandle) -> bool {
     let fname: Option<String>;
     let fvalue: Option<String>;
     let mut eatupi: i32;
@@ -994,12 +991,12 @@ pub fn apply_follow_next_arc(h: &mut ApplyHandle) -> i32 {
                     h.ipos += eatupi;
                     h.opos += eatupo;
                     apply_set_iptr(h);
-                    return 1;
+                    return true;
                 }
             }
             h.iptr = h.iptr.as_ref().unwrap().next.clone();
         }
-        return 0;
+        return false;
     } else if (h.binsearch != 0 && h.has_flags == 0)
         || (h.binsearch != 0 && {
             let sn = l_state_no(h, h.ptr);
@@ -1007,7 +1004,7 @@ pub fn apply_follow_next_arc(h: &mut ApplyHandle) -> i32 {
         })
     {
         loop {
-            if apply_binarysearch(h) != 0 {
+            if apply_binarysearch(h) {
                 if (h.mode & DOWN) == DOWN {
                     symin = l_in(h, h.curr_ptr);
                     symout = l_out(h, h.curr_ptr);
@@ -1036,7 +1033,7 @@ pub fn apply_follow_next_arc(h: &mut ApplyHandle) -> i32 {
                         h.ipos += eatupi;
                         h.opos += eatupo;
                         apply_set_iptr(h);
-                        return 1;
+                        return true;
                     }
                 }
                 let a = l_state_no(h, h.curr_ptr);
@@ -1045,12 +1042,12 @@ pub fn apply_follow_next_arc(h: &mut ApplyHandle) -> i32 {
                     h.curr_ptr += 1;
                     h.ptr = h.curr_ptr;
                     if l_target(h, h.curr_ptr) == -1 {
-                        return 0;
+                        return false;
                     }
                     continue;
                 }
             }
-            return 0;
+            return false;
         }
     } else {
         h.curr_ptr = h.ptr;
@@ -1118,11 +1115,11 @@ pub fn apply_follow_next_arc(h: &mut ApplyHandle) -> i32 {
                 h.ipos += eatupi;
                 h.opos += eatupo;
                 apply_set_iptr(h);
-                return 1;
+                return true;
             }
             h.curr_ptr += 1;
         }
-        return 0;
+        return false;
     }
 }
 
@@ -1172,19 +1169,19 @@ pub fn apply_skip_this_arc(h: &mut ApplyHandle) {
 
 // [spec:foma:def:apply.apply-at-last-arc-fn]
 // [spec:foma:sem:apply.apply-at-last-arc-fn]
-pub fn apply_at_last_arc(h: &ApplyHandle) -> i32 {
+pub fn apply_at_last_arc(h: &ApplyHandle) -> bool {
     let seeksym: i32;
     let nextsym: i32;
     if h.state_has_index != 0 {
         let iptr = h.iptr.as_ref().unwrap();
         if iptr.next.is_none() || iptr.next.as_ref().unwrap().fsmptr == -1 {
-            return 1;
+            return true;
         }
     } else if (h.binsearch != 0 && h.has_flags == 0)
         || (h.binsearch != 0 && !bittest(&h.flagstates, l_state_no(h, h.ptr)))
     {
         if l_state_no(h, h.ptr) != l_state_no(h, h.ptr + 1) {
-            return 1;
+            return true;
         }
         // C reads sigmatch_array[ipos] without bounds check; at end-of-input
         // this is an OOB/stale read. DEVIATION from C (guard; use a sentinel
@@ -1200,12 +1197,12 @@ pub fn apply_at_last_arc(h: &ApplyHandle) -> i32 {
             l_out(h, h.ptr)
         };
         if nextsym == -1 || seeksym < nextsym {
-            return 1;
+            return true;
         }
     } else if l_state_no(h, h.ptr) != l_state_no(h, h.ptr + 1) {
-        return 1;
+        return true;
     }
-    0
+    false
 }
 
 /* map h->ptr (line pointer) to h->iptr (index pointer) */
@@ -1287,12 +1284,12 @@ pub fn apply_net(h: &mut ApplyHandle) -> Option<String> {
     loop {
         match pc {
             Pc::Loop => {
-                if apply_stack_isempty(h) != 0 {
+                if apply_stack_isempty(h) {
                     break;
                 }
                 apply_stack_pop(h);
                 /* If last line was popped */
-                if apply_at_last_arc(h) != 0 {
+                if apply_at_last_arc(h) {
                     let sn = l_state_no(h, h.ptr);
                     h.marks[sn as usize] = 0; /* Unmark */
                     pc = Pc::Loop; /* pop next */
@@ -1303,7 +1300,7 @@ pub fn apply_net(h: &mut ApplyHandle) -> Option<String> {
                 continue;
             }
             Pc::L1 => {
-                if apply_follow_next_arc(h) == 0 {
+                if !apply_follow_next_arc(h) {
                     let sn = l_state_no(h, h.ptr);
                     h.marks[sn as usize] = 0; /* Unmark */
                     pc = Pc::Loop; /* pop next */
@@ -1676,7 +1673,7 @@ pub fn apply_create_sigarray(h: &mut ApplyHandle, net: &Fsm) {
     }
 
     for (number, symbol) in &sig_entries {
-        if flag_check(symbol) != 0 {
+        if flag_check(symbol) {
             h.has_flags = 1;
             apply_add_flag(h, flag_get_name(symbol));
         }
@@ -1717,7 +1714,7 @@ pub fn apply_create_sigarray(h: &mut ApplyHandle, net: &Fsm) {
             sig = s.next.as_deref();
         }
         for (number, symbol) in &entries2 {
-            if flag_check(symbol) != 0 {
+            if flag_check(symbol) {
                 h.flag_lookup[*number as usize].r#type = flag_get_type(symbol);
                 h.flag_lookup[*number as usize].name = flag_get_name(symbol);
                 h.flag_lookup[*number as usize].value = flag_get_value(symbol);
@@ -2061,7 +2058,7 @@ mod tests {
         assert_eq!(h.printcount, 1);
         assert_eq!(h.iterator, 0);
         assert_eq!(h.apply_stack_top, DEFAULT_STACK_SIZE as i32);
-        assert_eq!(apply_stack_isempty(&h), 1);
+        assert!(apply_stack_isempty(&h));
     }
 
     // [spec:foma:sem:apply.apply-create-statemap-fn/test]
@@ -2595,7 +2592,7 @@ mod tests {
         let net = parse("a:b");
         let mut h = apply_init(&net);
         apply_stack_clear(&mut h);
-        assert_eq!(apply_stack_isempty(&h), 1);
+        assert!(apply_stack_isempty(&h));
         // push records curr_ptr/ipos/opos; pop restores them.
         h.curr_ptr = 0;
         h.ipos = 5;
@@ -2603,7 +2600,7 @@ mod tests {
         h.iptr = None;
         h.state_has_index = 0;
         apply_stack_push(&mut h, 0, None, None, 0);
-        assert_eq!(apply_stack_isempty(&h), 0);
+        assert!(!(apply_stack_isempty(&h)));
         assert_eq!(h.apply_stack_ptr, 1);
         h.ipos = 99;
         h.opos = 99;
@@ -2611,7 +2608,7 @@ mod tests {
         assert_eq!(h.ptr, 0);
         assert_eq!(h.ipos, 5);
         assert_eq!(h.opos, 7);
-        assert_eq!(apply_stack_isempty(&h), 1);
+        assert!(apply_stack_isempty(&h));
     }
 
     // [spec:foma:sem:apply.apply-force-clear-stack-fn/test]
@@ -2623,9 +2620,9 @@ mod tests {
         h.ipos = 0;
         h.opos = 0;
         apply_stack_push(&mut h, 0, None, None, 0);
-        assert_eq!(apply_stack_isempty(&h), 0);
+        assert!(!(apply_stack_isempty(&h)));
         apply_force_clear_stack(&mut h);
-        assert_eq!(apply_stack_isempty(&h), 1);
+        assert!(apply_stack_isempty(&h));
         assert_eq!(h.iterator, 0);
         assert_eq!(h.iterate_old, 0);
     }

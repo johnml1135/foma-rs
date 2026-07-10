@@ -131,7 +131,7 @@ pub fn decode_quoted(s: &mut Vec<u8>) {
         if s[i as usize] == 0x5c
             && len - i > 5
             && s[(i + 1) as usize] == 0x75
-            && ishexstr(&s[(i + 2) as usize..]) != 0
+            && ishexstr(&s[(i + 2) as usize..])
         {
             /* Cannot be None: the codepoint parsed from 4 hex digits is <= 0xFFFF */
             let unistr: Vec<u8> = utf8code16tostr(&s[(i + 2) as usize..]).unwrap();
@@ -196,7 +196,7 @@ pub fn streqrep(s: &mut Vec<u8>, oldstring: &[u8], newstring: &[u8]) {
 // [spec:foma:sem:utf8.ishexstr-fn]
 // [spec:foma:def:fomalibconf.ishexstr-fn]
 // [spec:foma:sem:fomalibconf.ishexstr-fn]
-pub fn ishexstr(str: &[u8]) -> i32 {
+pub fn ishexstr(str: &[u8]) -> bool {
     let mut i: i32 = 0;
     while i < 4 {
         /* C compares (signed) char, so bytes >= 0x80 are negative and fail
@@ -211,9 +211,9 @@ pub fn ishexstr(str: &[u8]) -> i32 {
             i += 1;
             continue;
         }
-        return 0;
+        return false;
     }
-    1
+    true
 }
 
 /* Checks if the next character in the string is a combining character     */
@@ -571,19 +571,19 @@ mod tests {
     // [spec:foma:sem:fomalibconf.ishexstr-fn/test]
     #[test]
     fn test_ishexstr() {
-        assert_eq!(ishexstr(b"0041"), 1);
-        assert_eq!(ishexstr(b"DEAD"), 1);
-        assert_eq!(ishexstr(b"beef"), 1);
-        assert_eq!(ishexstr(b"09af"), 1);
+        assert!(ishexstr(b"0041"));
+        assert!(ishexstr(b"DEAD"));
+        assert!(ishexstr(b"beef"));
+        assert!(ishexstr(b"09af"));
         // boundaries just outside each range
-        assert_eq!(ishexstr(b"123:"), 0); // ':' == 0x3a, above '9'
-        assert_eq!(ishexstr(b"12G4"), 0); // 'G' == 0x47, above 'F'
-        assert_eq!(ishexstr(b"aaag"), 0); // 'g' == 0x67, above 'f'
-        assert_eq!(ishexstr(b"aa`a"), 0); // '`' == 0x60, below 'a'
+        assert!(!(ishexstr(b"123:"))); // ':' == 0x3a, above '9'
+        assert!(!(ishexstr(b"12G4"))); // 'G' == 0x47, above 'F'
+        assert!(!(ishexstr(b"aaag"))); // 'g' == 0x67, above 'f'
+        assert!(!(ishexstr(b"aa`a"))); // '`' == 0x60, below 'a'
         // short input: index >= len stands in for NUL (byte 0) → fail
-        assert_eq!(ishexstr(b"12"), 0);
+        assert!(!(ishexstr(b"12")));
         // byte >= 0x80 is negative as signed char → fails
-        assert_eq!(ishexstr(&[0x30, 0x30, 0x30, 0xff]), 0);
+        assert!(!(ishexstr(&[0x30, 0x30, 0x30, 0xff])));
     }
 
     // hexstrtoint: two hex bytes → 0..255; signed-char sign-extension yields

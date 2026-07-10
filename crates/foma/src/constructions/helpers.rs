@@ -215,7 +215,7 @@ pub fn fsm_mark_fsm_tail(net: Box<Fsm>, marker: &Fsm) -> Box<Fsm> {
 
     while fsm_get_next_arc(&mut inh) != 0 {
         let target = fsm_get_arc_target(&inh);
-        if fsm_read_is_final(&inh, target) != 0 {
+        if fsm_read_is_final(&inh, target) {
             let newtarget;
             if mappings[target as usize] == 0 {
                 newtarget = maxstate;

@@ -7,7 +7,7 @@ use super::*;
 // [spec:foma:def:foma.iface-test-equivalent-fn]
 // [spec:foma:sem:foma.iface-test-equivalent-fn]
 pub fn iface_test_equivalent(session: &mut Session) {
-    if iface_stack_check(session, 2) != 0 {
+    if iface_stack_check(session, 2) {
         let top = session.stack_find_top().unwrap();
         let second = session.stack_find_second().unwrap();
         let mut one = session.stack_entry_fsm(top, |f| fsm_copy(f));
@@ -25,7 +25,7 @@ pub fn iface_test_equivalent(session: &mut Session) {
 // [spec:foma:def:foma.iface-test-functional-fn]
 // [spec:foma:sem:foma.iface-test-functional-fn]
 pub fn iface_test_functional(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
         let r = session.stack_entry_fsm_with_opts(top, |opts, f| fsm_isfunctional(opts, f));
         iface_print_bool(r);
@@ -37,7 +37,7 @@ pub fn iface_test_functional(session: &mut Session) {
 // [spec:foma:def:foma.iface-test-identity-fn]
 // [spec:foma:sem:foma.iface-test-identity-fn]
 pub fn iface_test_identity(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
         let r = session.stack_entry_fsm_with_opts(top, |opts, f| fsm_isidentity(opts, f));
         iface_print_bool(r);
@@ -49,11 +49,11 @@ pub fn iface_test_identity(session: &mut Session) {
 // [spec:foma:def:foma.iface-test-nonnull-fn]
 // [spec:foma:sem:foma.iface-test-nonnull-fn]
 pub fn iface_test_nonnull(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
         // C: iface_print_bool(!fsm_isempty(...)) — logical NOT of the int result.
         let e = session.stack_entry_fsm_with_opts(top, |opts, f| fsm_isempty(opts, f));
-        iface_print_bool((e == 0) as i32);
+        iface_print_bool(!e);
     }
 }
 
@@ -62,7 +62,7 @@ pub fn iface_test_nonnull(session: &mut Session) {
 // [spec:foma:def:foma.iface-test-null-fn]
 // [spec:foma:sem:foma.iface-test-null-fn]
 pub fn iface_test_null(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
         let r = session.stack_entry_fsm_with_opts(top, |opts, f| fsm_isempty(opts, f));
         iface_print_bool(r);
@@ -74,7 +74,7 @@ pub fn iface_test_null(session: &mut Session) {
 // [spec:foma:def:foma.iface-test-unambiguous-fn]
 // [spec:foma:sem:foma.iface-test-unambiguous-fn]
 pub fn iface_test_unambiguous(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
         let r = session.stack_entry_fsm_with_opts(top, |opts, f| fsm_isunambiguous(opts, f));
         iface_print_bool(r);
@@ -86,7 +86,7 @@ pub fn iface_test_unambiguous(session: &mut Session) {
 // [spec:foma:def:foma.iface-test-lower-universal-fn]
 // [spec:foma:sem:foma.iface-test-lower-universal-fn]
 pub fn iface_test_lower_universal(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
         let copy = session.stack_entry_fsm(top, |f| fsm_copy(f));
         let mut tmp = fsm_complement(&session.opts, fsm_lower(copy));
@@ -100,7 +100,7 @@ pub fn iface_test_lower_universal(session: &mut Session) {
 // [spec:foma:def:foma.iface-test-sequential-fn]
 // [spec:foma:sem:foma.iface-test-sequential-fn]
 pub fn iface_test_sequential(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
         let r = session.stack_entry_fsm(top, |f| fsm_issequential(f));
         iface_print_bool(r);
@@ -112,7 +112,7 @@ pub fn iface_test_sequential(session: &mut Session) {
 // [spec:foma:def:foma.iface-test-upper-universal-fn]
 // [spec:foma:sem:foma.iface-test-upper-universal-fn]
 pub fn iface_test_upper_universal(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
         let copy = session.stack_entry_fsm(top, |f| fsm_copy(f));
         let mut tmp = fsm_complement(&session.opts, fsm_upper(copy));

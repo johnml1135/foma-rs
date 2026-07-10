@@ -455,7 +455,7 @@ pub fn fsm_empty() -> Vec<FsmState> {
 // [spec:foma:sem:structures.fsm-isuniversal-fn+1]
 // [spec:foma:def:fomalib.fsm-isuniversal-fn]
 // [spec:foma:sem:fomalib.fsm-isuniversal-fn+1]
-pub fn fsm_isuniversal(opts: &FomaOptions, net: Box<Fsm>) -> i32 {
+pub fn fsm_isuniversal(opts: &FomaOptions, net: Box<Fsm>) -> bool {
     /* destructive: consumes/replaces the argument; the minimized+compacted
     net is dropped (C leaked it, neither returning nor destroying it).
 
@@ -468,32 +468,23 @@ pub fn fsm_isuniversal(opts: &FomaOptions, net: Box<Fsm>) -> i32 {
     let mut net = fsm_minimize(opts, net);
     fsm_compact(&mut net);
     let fsm = &net.states;
-    if fsm[0].target == 0
+    fsm[0].target == 0
         && fsm[0].final_state == 1
         && fsm[0].r#in as i32 == IDENTITY
         && fsm[0].out as i32 == IDENTITY
         && fsm[1].state_no == -1
         && sigma_max(net.sigma.as_deref()) < 3
-    {
-        1
-    } else {
-        0
-    }
 }
 
 // [spec:foma:def:structures.fsm-isempty-fn]
 // [spec:foma:sem:structures.fsm-isempty-fn]
 // [spec:foma:def:fomalib.fsm-isempty-fn]
 // [spec:foma:sem:fomalib.fsm-isempty-fn]
-pub fn fsm_isempty(opts: &FomaOptions, net: &mut Fsm) -> i32 {
+pub fn fsm_isempty(opts: &FomaOptions, net: &mut Fsm) -> bool {
     /* &mut: fsm_copy refreshes the source's counts via fsm_count */
     let minimal = fsm_minimize(opts, fsm_copy(net));
     let fsm = &minimal.states;
-    let result = if fsm[0].target == -1 && fsm[0].final_state == 0 && fsm[1].state_no == -1 {
-        1
-    } else {
-        0
-    };
+    let result = fsm[0].target == -1 && fsm[0].final_state == 0 && fsm[1].state_no == -1;
     fsm_destroy(minimal);
     result
 }
@@ -502,7 +493,7 @@ pub fn fsm_isempty(opts: &FomaOptions, net: &mut Fsm) -> i32 {
 // [spec:foma:sem:structures.fsm-issequential-fn]
 // [spec:foma:def:fomalib.fsm-issequential-fn]
 // [spec:foma:sem:fomalib.fsm-issequential-fn]
-pub fn fsm_issequential(net: &Fsm) -> i32 {
+pub fn fsm_issequential(net: &Fsm) -> bool {
     /* calloc(sigma_max+1, sizeof(int)) followed by the explicit -2 fill */
     let mut sigtable: Vec<i32> = vec![0; (sigma_max(net.sigma.as_deref()) + 1) as usize];
     let mut i: i32 = 0;
@@ -514,7 +505,7 @@ pub fn fsm_issequential(net: &Fsm) -> i32 {
     let mut seentrans = 0;
     let mut epstrans = 0;
     let mut laststate: i32 = -1;
-    let mut sequential: i32 = 1;
+    let mut sequential = true;
     let mut i: usize = 0;
     while fsm[i].state_no != -1 {
         let insym = fsm[i].r#in as i32;
@@ -528,12 +519,12 @@ pub fn fsm_issequential(net: &Fsm) -> i32 {
             seentrans = 0;
         }
         if sigtable[insym as usize] == laststate || epstrans == 1 {
-            sequential = 0;
+            sequential = false;
             break;
         }
         if insym == EPSILON {
             if epstrans == 1 || seentrans == 1 {
-                sequential = 0;
+                sequential = false;
                 break;
             }
             epstrans = 1;
@@ -544,7 +535,7 @@ pub fn fsm_issequential(net: &Fsm) -> i32 {
     }
     /* free(sigtable) */
     drop(sigtable);
-    if sequential == 0 {
+    if !sequential {
         print!("fails at state {}\n", fsm[i].state_no);
     }
     sequential
@@ -554,7 +545,7 @@ pub fn fsm_issequential(net: &Fsm) -> i32 {
 // [spec:foma:sem:structures.fsm-isfunctional-fn]
 // [spec:foma:def:fomalib.fsm-isfunctional-fn]
 // [spec:foma:sem:fomalib.fsm-isfunctional-fn]
-pub fn fsm_isfunctional(opts: &FomaOptions, net: &mut Fsm) -> i32 {
+pub fn fsm_isfunctional(opts: &FomaOptions, net: &mut Fsm) -> bool {
     let mut tmp = fsm_minimize(
         opts,
         fsm_compose(opts, fsm_invert(fsm_copy(net)), fsm_copy(net)),
@@ -568,7 +559,7 @@ pub fn fsm_isfunctional(opts: &FomaOptions, net: &mut Fsm) -> i32 {
 // [spec:foma:sem:structures.fsm-isunambiguous-fn]
 // [spec:foma:def:fomalib.fsm-isunambiguous-fn]
 // [spec:foma:sem:fomalib.fsm-isunambiguous-fn]
-pub fn fsm_isunambiguous(opts: &FomaOptions, net: &mut Fsm) -> i32 {
+pub fn fsm_isunambiguous(opts: &FomaOptions, net: &mut Fsm) -> bool {
     let mut loweruniqnet = fsm_lowerdet(opts, fsm_copy(net));
     let mut testnet = fsm_minimize(
         opts,
@@ -651,7 +642,7 @@ pub fn fsm_extract_unambiguous(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
 // [spec:foma:sem:structures.fsm-isidentity-fn]
 // [spec:foma:def:fomalib.fsm-isidentity-fn]
 // [spec:foma:sem:fomalib.fsm-isidentity-fn]
-pub fn fsm_isidentity(opts: &FomaOptions, net: &mut Fsm) -> i32 {
+pub fn fsm_isidentity(opts: &FomaOptions, net: &mut Fsm) -> bool {
     /* We check whether a given transducer only produces identity relations     */
     /* By doing a DFS on the graph, and storing, for each state a "discrepancy" */
     /* string, showing the current "debt" on the upper or lower side.           */
@@ -851,10 +842,10 @@ pub fn fsm_isidentity(opts: &FomaOptions, net: &mut Fsm) -> i32 {
     if failed {
         ptr_stack.clear();
         fsm_destroy(tmp);
-        return 0;
+        return false;
     }
     fsm_destroy(tmp);
-    1
+    true
 }
 
 // [spec:foma:def:structures.fsm-markallfinal-fn]
@@ -1852,12 +1843,12 @@ mod tests {
     fn isuniversal_detects_universal_language() {
         let opts = &FomaOptions::default();
         // Wave 4 fix: the evident universality test — ?* IS universal -> 1
-        assert_eq!(fsm_isuniversal(opts, parse("?*")), 1);
+        assert!(fsm_isuniversal(opts, parse("?*")));
         // non-universal languages -> 0
-        assert_eq!(fsm_isuniversal(opts, fsm_empty_set()), 0);
-        assert_eq!(fsm_isuniversal(opts, parse("a")), 0);
+        assert!(!(fsm_isuniversal(opts, fsm_empty_set())));
+        assert!(!(fsm_isuniversal(opts, parse("a"))));
         // a single identity symbol (not its closure) is not universal
-        assert_eq!(fsm_isuniversal(opts, parse("?")), 0);
+        assert!(!(fsm_isuniversal(opts, parse("?"))));
     }
 
     // [spec:foma:sem:structures.fsm-isempty-fn/test]
@@ -1865,19 +1856,19 @@ mod tests {
     #[test]
     fn isempty_predicate() {
         let opts = &FomaOptions::default();
-        assert_eq!(fsm_isempty(opts, &mut fsm_empty_set()), 1);
-        assert_eq!(fsm_isempty(opts, &mut fsm_empty_string()), 0); // {""} is not empty
-        assert_eq!(fsm_isempty(opts, &mut parse("a")), 0);
+        assert!(fsm_isempty(opts, &mut fsm_empty_set()));
+        assert!(!(fsm_isempty(opts, &mut fsm_empty_string()))); // {""} is not empty
+        assert!(!(fsm_isempty(opts, &mut parse("a"))));
     }
 
     // [spec:foma:sem:structures.fsm-issequential-fn/test]
     // [spec:foma:sem:fomalib.fsm-issequential-fn/test]
     #[test]
     fn issequential_predicate() {
-        assert_eq!(fsm_issequential(&parse("a b c")), 1);
-        assert_eq!(fsm_issequential(&parse("a")), 1);
+        assert!(fsm_issequential(&parse("a b c")));
+        assert!(fsm_issequential(&parse("a")));
         // two arcs with the same input symbol at one state -> not sequential
-        assert_eq!(fsm_issequential(&parse("a:b | a:c")), 0);
+        assert!(!(fsm_issequential(&parse("a:b | a:c"))));
     }
 
     // [spec:foma:sem:structures.fsm-isfunctional-fn/test]
@@ -1885,8 +1876,8 @@ mod tests {
     #[test]
     fn isfunctional_predicate() {
         let opts = &FomaOptions::default();
-        assert_eq!(fsm_isfunctional(opts, &mut parse("a:b")), 1);
-        assert_eq!(fsm_isfunctional(opts, &mut parse("a:b | a:c")), 0);
+        assert!(fsm_isfunctional(opts, &mut parse("a:b")));
+        assert!(!(fsm_isfunctional(opts, &mut parse("a:b | a:c"))));
     }
 
     // [spec:foma:sem:structures.fsm-isunambiguous-fn/test]
@@ -1894,8 +1885,8 @@ mod tests {
     #[test]
     fn isunambiguous_predicate() {
         let opts = &FomaOptions::default();
-        assert_eq!(fsm_isunambiguous(opts, &mut parse("a:b")), 1);
-        assert_eq!(fsm_isunambiguous(opts, &mut parse("a:b | a:c")), 0);
+        assert!(fsm_isunambiguous(opts, &mut parse("a:b")));
+        assert!(!(fsm_isunambiguous(opts, &mut parse("a:b | a:c"))));
     }
 
     // [spec:foma:sem:structures.fsm-isidentity-fn/test]
@@ -1903,9 +1894,9 @@ mod tests {
     #[test]
     fn isidentity_predicate() {
         let opts = &FomaOptions::default();
-        assert_eq!(fsm_isidentity(opts, &mut fsm_identity()), 1); // ? maps x->x
-        assert_eq!(fsm_isidentity(opts, &mut parse("a")), 1); // a:a is identity
-        assert_eq!(fsm_isidentity(opts, &mut parse("a:b")), 0);
+        assert!(fsm_isidentity(opts, &mut fsm_identity())); // ? maps x->x
+        assert!(fsm_isidentity(opts, &mut parse("a"))); // a:a is identity
+        assert!(!(fsm_isidentity(opts, &mut parse("a:b"))));
     }
 
     // [spec:foma:sem:structures.fsm-extract-ambiguous-domain-fn/test]
@@ -1915,10 +1906,10 @@ mod tests {
         let opts = &FomaOptions::default();
         // ambiguously-mapped inputs of a:b|a:c = {a} -> non-empty
         let mut d = fsm_extract_ambiguous_domain(opts, parse("a:b | a:c"));
-        assert_eq!(fsm_isempty(opts, &mut d), 0);
+        assert!(!(fsm_isempty(opts, &mut d)));
         // functional net -> no ambiguous domain
         let mut d2 = fsm_extract_ambiguous_domain(opts, parse("a:b"));
-        assert_eq!(fsm_isempty(opts, &mut d2), 1);
+        assert!(fsm_isempty(opts, &mut d2));
     }
 
     // [spec:foma:sem:structures.fsm-extract-ambiguous-fn/test]
@@ -1927,9 +1918,9 @@ mod tests {
     fn extract_ambiguous_predicate() {
         let opts = &FomaOptions::default();
         let mut a = fsm_extract_ambiguous(opts, parse("a:b | a:c"));
-        assert_eq!(fsm_isempty(opts, &mut a), 0);
+        assert!(!(fsm_isempty(opts, &mut a)));
         let mut a2 = fsm_extract_ambiguous(opts, parse("a:b"));
-        assert_eq!(fsm_isempty(opts, &mut a2), 1);
+        assert!(fsm_isempty(opts, &mut a2));
     }
 
     // [spec:foma:sem:structures.fsm-extract-unambiguous-fn/test]
@@ -1939,10 +1930,10 @@ mod tests {
         let opts = &FomaOptions::default();
         // only input "a" and it is ambiguous -> unambiguous part empty
         let mut u = fsm_extract_unambiguous(opts, parse("a:b | a:c"));
-        assert_eq!(fsm_isempty(opts, &mut u), 1);
+        assert!(fsm_isempty(opts, &mut u));
         // functional net -> whole thing is unambiguous
         let mut u2 = fsm_extract_unambiguous(opts, parse("a:b"));
-        assert_eq!(fsm_isempty(opts, &mut u2), 0);
+        assert!(!(fsm_isempty(opts, &mut u2)));
     }
 
     // [spec:foma:sem:structures.fsm-extract-nonidentity-fn/test]
@@ -1952,10 +1943,10 @@ mod tests {
         let opts = &FomaOptions::default();
         // a:b violates identity -> upper side {a} non-empty
         let mut n = fsm_extract_nonidentity(opts, parse("a:b"));
-        assert_eq!(fsm_isempty(opts, &mut n), 0);
+        assert!(!(fsm_isempty(opts, &mut n)));
         // a:a is an identity relation -> no violating paths
         let mut n2 = fsm_extract_nonidentity(opts, parse("a"));
-        assert_eq!(fsm_isempty(opts, &mut n2), 1);
+        assert!(fsm_isempty(opts, &mut n2));
     }
 
     // [spec:foma:sem:structures.fsm-markallfinal-fn/test]
@@ -2195,7 +2186,7 @@ mod tests {
         let opts = &FomaOptions::default();
         // \x* x \x* x \x*  (strings with exactly two x's) -> non-empty language
         let mut net = fsm_quantifier(opts, "x");
-        assert_eq!(fsm_isempty(opts, &mut net), 0);
+        assert!(!(fsm_isempty(opts, &mut net)));
     }
 
     // [spec:foma:sem:structures.fsm-logical-precedence-fn/test]

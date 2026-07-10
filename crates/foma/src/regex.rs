@@ -818,7 +818,7 @@ fn add_rule(
 
     /* test = L ∩ [] : add the empty-[..] rule only if non-empty. */
     let mut test = fsm_intersect(opts, l, fsm_empty_string());
-    if fsm_isempty(opts, &mut test) == 0 {
+    if !fsm_isempty(opts, &mut test) {
         let test_right = main.right.as_deref_mut().map(fsm_copy);
         let test_right2 = main.right2.as_deref_mut().map(fsm_copy);
         out.push(Box::new(Fsmrules {
@@ -1007,10 +1007,10 @@ mod tests {
         let opts = &FomaOptions::default();
         let net = super::fsm_parse_regex(opts, "a b ; x y z ;", None, None).unwrap();
         let expected = super::fsm_parse_regex(opts, "x y z", None, None).unwrap();
-        assert_eq!(fsm_equivalent(opts, net, expected), 1);
+        assert!(fsm_equivalent(opts, net, expected));
         let net = super::fsm_parse_regex(opts, "a ; b", None, None).unwrap();
         let expected = super::fsm_parse_regex(opts, "b", None, None).unwrap();
-        assert_eq!(fsm_equivalent(opts, net, expected), 1);
+        assert!(fsm_equivalent(opts, net, expected));
     }
 
     // regex.l NONRESERVED: a symbol naming a defined net is substituted with
@@ -1030,7 +1030,7 @@ mod tests {
         assert_eq!(counted(net), (3, 2, 1));
         let net = super::fsm_parse_regex(opts, "Foo", Some(&mut nets), None).unwrap();
         let expected = super::fsm_parse_regex(opts, "x y", None, None).unwrap();
-        assert_eq!(fsm_equivalent(opts, net, expected), 1);
+        assert!(fsm_equivalent(opts, net, expected));
         // Without the table: "Foo" is one literal (multichar) symbol.
         let net = super::fsm_parse_regex(opts, "Foo", None, None).unwrap();
         assert_eq!(counted(net), (2, 1, 1));
@@ -1052,7 +1052,7 @@ mod tests {
         assert_eq!(counted(net), (3, 2, 1));
         let net = super::fsm_parse_regex(opts, "F(a)", Some(&mut nets), Some(&mut funcs)).unwrap();
         let expected = super::fsm_parse_regex(opts, "a a", None, None).unwrap();
-        assert_eq!(fsm_equivalent(opts, net, expected), 1);
+        assert!(fsm_equivalent(opts, net, expected));
         // Undefined functions fail.
         assert!(super::fsm_parse_regex(opts, "G(a)", Some(&mut nets), Some(&mut funcs)).is_none());
     }

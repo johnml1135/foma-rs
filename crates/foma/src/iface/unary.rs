@@ -7,7 +7,7 @@ use super::*;
 // [spec:foma:def:foma.iface-ambiguous-upper-fn]
 // [spec:foma:sem:foma.iface-ambiguous-upper-fn]
 pub fn iface_ambiguous_upper(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let popped = session.stack_pop().unwrap();
         session.stack_add(fsm_extract_ambiguous_domain(&session.opts, popped));
     }
@@ -18,7 +18,7 @@ pub fn iface_ambiguous_upper(session: &mut Session) {
 // [spec:foma:def:foma.iface-close-fn]
 // [spec:foma:sem:foma.iface-close-fn]
 pub fn iface_close(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let popped = session.stack_pop().unwrap();
         session.stack_add(fsm_topsort(fsm_minimize(
             &session.opts,
@@ -32,7 +32,7 @@ pub fn iface_close(session: &mut Session) {
 // [spec:foma:def:foma.iface-compact-fn]
 // [spec:foma:sem:foma.iface-compact-fn]
 pub fn iface_compact(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
         session.stack_entry_fsm(top, |f| fsm_compact(f));
         session.stack_entry_fsm(top, |f| sigma_sort(f));
@@ -46,7 +46,7 @@ pub fn iface_compact(session: &mut Session) {
 // [spec:foma:def:foma.iface-complete-fn]
 // [spec:foma:sem:foma.iface-complete-fn]
 pub fn iface_complete(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let popped = session.stack_pop().unwrap();
         session.stack_add(fsm_complete(&session.opts, popped));
     }
@@ -57,7 +57,7 @@ pub fn iface_complete(session: &mut Session) {
 // [spec:foma:def:foma.iface-determinize-fn]
 // [spec:foma:sem:foma.iface-determinize-fn]
 pub fn iface_determinize(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let popped = session.stack_pop().unwrap();
         session.stack_add(fsm_determinize(popped));
     }
@@ -68,7 +68,7 @@ pub fn iface_determinize(session: &mut Session) {
 // [spec:foma:def:foma.iface-eliminate-flags-fn]
 // [spec:foma:sem:foma.iface-eliminate-flags-fn]
 pub fn iface_eliminate_flags(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let popped = session.stack_pop().unwrap();
         session.stack_add(flag_eliminate(&session.opts, popped, None));
     }
@@ -79,7 +79,7 @@ pub fn iface_eliminate_flags(session: &mut Session) {
 // [spec:foma:def:foma.iface-extract-ambiguous-fn]
 // [spec:foma:sem:foma.iface-extract-ambiguous-fn]
 pub fn iface_extract_ambiguous(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let popped = session.stack_pop().unwrap();
         session.stack_add(fsm_extract_ambiguous(&session.opts, popped));
     }
@@ -90,7 +90,7 @@ pub fn iface_extract_ambiguous(session: &mut Session) {
 // [spec:foma:def:foma.iface-extract-unambiguous-fn]
 // [spec:foma:sem:foma.iface-extract-unambiguous-fn]
 pub fn iface_extract_unambiguous(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let popped = session.stack_pop().unwrap();
         session.stack_add(fsm_extract_unambiguous(&session.opts, popped));
     }
@@ -145,7 +145,7 @@ pub fn iface_extract_number(s: &str) -> i32 {
 // [spec:foma:def:foma.iface-eliminate-flag-fn]
 // [spec:foma:sem:foma.iface-eliminate-flag-fn]
 pub fn iface_eliminate_flag(session: &mut Session, name: &str) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let popped = session.stack_pop().unwrap();
         session.stack_add(flag_eliminate(&session.opts, popped, Some(name)));
     }
@@ -156,7 +156,7 @@ pub fn iface_eliminate_flag(session: &mut Session, name: &str) {
 // [spec:foma:def:foma.iface-factorize-fn]
 // [spec:foma:sem:foma.iface-factorize-fn]
 pub fn iface_factorize(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let popped = session.stack_pop().unwrap();
         session.stack_add(fsm_bimachine(popped));
     }
@@ -167,7 +167,7 @@ pub fn iface_factorize(session: &mut Session) {
 // [spec:foma:def:foma.iface-sequentialize-fn]
 // [spec:foma:sem:foma.iface-sequentialize-fn]
 pub fn iface_sequentialize(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let popped = session.stack_pop().unwrap();
         session.stack_add(fsm_sequentialize(popped));
     }
@@ -178,7 +178,7 @@ pub fn iface_sequentialize(session: &mut Session) {
 // [spec:foma:def:foma.iface-invert-fn]
 // [spec:foma:sem:foma.iface-invert-fn]
 pub fn iface_invert(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let popped = session.stack_pop().unwrap();
         session.stack_add(fsm_invert(popped));
     }
@@ -189,7 +189,7 @@ pub fn iface_invert(session: &mut Session) {
 // [spec:foma:def:foma.iface-label-net-fn]
 // [spec:foma:sem:foma.iface-label-net-fn]
 pub fn iface_label_net(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let popped = session.stack_pop().unwrap();
         session.stack_add(fsm_sigma_pairs_net(popped));
     }
@@ -200,7 +200,7 @@ pub fn iface_label_net(session: &mut Session) {
 // [spec:foma:def:foma.iface-letter-machine-fn]
 // [spec:foma:sem:foma.iface-letter-machine-fn]
 pub fn iface_letter_machine(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let popped = session.stack_pop().unwrap();
         session.stack_add(fsm_topsort(fsm_minimize(
             &session.opts,
@@ -214,7 +214,7 @@ pub fn iface_letter_machine(session: &mut Session) {
 // [spec:foma:def:foma.iface-lower-side-fn]
 // [spec:foma:sem:foma.iface-lower-side-fn]
 pub fn iface_lower_side(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let popped = session.stack_pop().unwrap();
         session.stack_add(fsm_topsort(fsm_minimize(&session.opts, fsm_lower(popped))));
     }
@@ -225,7 +225,7 @@ pub fn iface_lower_side(session: &mut Session) {
 // [spec:foma:def:foma.iface-minimize-fn]
 // [spec:foma:sem:foma.iface-minimize-fn]
 pub fn iface_minimize(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let store_minimal_var = session.opts.minimal;
         session.opts.minimal = true;
         let popped = session.stack_pop().unwrap();
@@ -239,7 +239,7 @@ pub fn iface_minimize(session: &mut Session) {
 // [spec:foma:def:foma.iface-one-plus-fn]
 // [spec:foma:sem:foma.iface-one-plus-fn]
 pub fn iface_one_plus(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let popped = session.stack_pop().unwrap();
         session.stack_add(fsm_topsort(fsm_minimize(
             &session.opts,
@@ -253,7 +253,7 @@ pub fn iface_one_plus(session: &mut Session) {
 // [spec:foma:def:foma.iface-negate-fn]
 // [spec:foma:sem:foma.iface-negate-fn]
 pub fn iface_negate(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let popped = session.stack_pop().unwrap();
         session.stack_add(fsm_topsort(fsm_minimize(
             &session.opts,
@@ -267,7 +267,7 @@ pub fn iface_negate(session: &mut Session) {
 // [spec:foma:def:foma.iface-prune-fn]
 // [spec:foma:sem:foma.iface-prune-fn]
 pub fn iface_prune(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let popped = session.stack_pop().unwrap();
         session.stack_add(fsm_topsort(fsm_coaccessible(popped)));
     }
@@ -278,7 +278,7 @@ pub fn iface_prune(session: &mut Session) {
 // [spec:foma:def:foma.iface-reverse-fn]
 // [spec:foma:sem:foma.iface-reverse-fn]
 pub fn iface_reverse(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let popped = session.stack_pop().unwrap();
         session.stack_add(fsm_topsort(fsm_determinize(fsm_reverse(popped))));
     }
@@ -289,7 +289,7 @@ pub fn iface_reverse(session: &mut Session) {
 // [spec:foma:def:foma.iface-sigma-net-fn]
 // [spec:foma:sem:foma.iface-sigma-net-fn]
 pub fn iface_sigma_net(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let popped = session.stack_pop().unwrap();
         session.stack_add(fsm_sigma_net(popped));
     }
@@ -300,7 +300,7 @@ pub fn iface_sigma_net(session: &mut Session) {
 // [spec:foma:def:foma.iface-sort-input-fn]
 // [spec:foma:sem:foma.iface-sort-input-fn]
 pub fn iface_sort_input(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
         session.stack_entry_fsm(top, |f| fsm_sort_arcs(f, 1));
     }
@@ -311,7 +311,7 @@ pub fn iface_sort_input(session: &mut Session) {
 // [spec:foma:def:foma.iface-sort-output-fn]
 // [spec:foma:sem:foma.iface-sort-output-fn]
 pub fn iface_sort_output(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
         session.stack_entry_fsm(top, |f| fsm_sort_arcs(f, 2));
     }
@@ -322,7 +322,7 @@ pub fn iface_sort_output(session: &mut Session) {
 // [spec:foma:def:foma.iface-sort-fn]
 // [spec:foma:sem:foma.iface-sort-fn]
 pub fn iface_sort(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
         session.stack_entry_fsm(top, |f| sigma_sort(f));
         let popped = session.stack_pop().unwrap();
@@ -335,7 +335,7 @@ pub fn iface_sort(session: &mut Session) {
 // [spec:foma:def:foma.iface-twosided-flags-fn]
 // [spec:foma:sem:foma.iface-twosided-flags-fn]
 pub fn iface_twosided_flags(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let popped = session.stack_pop().unwrap();
         session.stack_add(flag_twosided(&session.opts, popped));
     }
@@ -346,7 +346,7 @@ pub fn iface_twosided_flags(session: &mut Session) {
 // [spec:foma:def:foma.iface-upper-side-fn]
 // [spec:foma:sem:foma.iface-upper-side-fn]
 pub fn iface_upper_side(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let popped = session.stack_pop().unwrap();
         session.stack_add(fsm_topsort(fsm_minimize(&session.opts, fsm_upper(popped))));
     }
@@ -357,7 +357,7 @@ pub fn iface_upper_side(session: &mut Session) {
 // [spec:foma:def:foma.iface-zero-plus-fn]
 // [spec:foma:sem:foma.iface-zero-plus-fn]
 pub fn iface_zero_plus(session: &mut Session) {
-    if iface_stack_check(session, 1) != 0 {
+    if iface_stack_check(session, 1) {
         let popped = session.stack_pop().unwrap();
         session.stack_add(fsm_topsort(fsm_minimize(
             &session.opts,
