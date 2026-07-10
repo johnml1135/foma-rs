@@ -1277,9 +1277,12 @@ pub fn add_quantifier(quantifiers: &mut Quantifiers, string: &str) {
         }));
     } else {
         /* walk to the tail node (next == NULL) */
-        let mut q = quantifiers.head.as_deref_mut().unwrap();
+        let mut q = quantifiers
+            .head
+            .as_deref_mut()
+            .expect("head is Some in this branch");
         while q.next.is_some() {
-            q = q.next.as_deref_mut().unwrap();
+            q = q.next.as_deref_mut().expect("just checked next.is_some()");
         }
         q.next = Some(Box::new(DefinedQuantifiers {
             name: Some(string.to_string()),
@@ -1303,7 +1306,10 @@ pub fn union_quantifiers(quantifiers: &Quantifiers) -> Box<Fsm> {
     let mut symlo: i32 = 0;
     let mut q = quantifiers.head.as_deref();
     while let Some(node) = q {
-        let s = sigma_add(node.name.as_deref().unwrap(), &mut net.sigma);
+        let s = sigma_add(
+            node.name.as_deref().expect("quantifier node has a name"),
+            &mut net.sigma,
+        );
         if symlo == 0 {
             symlo = s;
         }
@@ -1346,7 +1352,7 @@ pub fn union_quantifiers(quantifiers: &Quantifiers) -> Box<Fsm> {
 pub fn find_quantifier(quantifiers: &Quantifiers, string: &str) -> Option<String> {
     let mut q = quantifiers.head.as_deref();
     while let Some(node) = q {
-        if string == node.name.as_deref().unwrap() {
+        if string == node.name.as_deref().expect("quantifier node has a name") {
             /* C returns the node's own name pointer (the caller must not free
             or mutate it); an owned clone is returned here (observably
             equivalent) */
@@ -1368,16 +1374,19 @@ pub fn purge_quantifier(quantifiers: &mut Quantifiers, string: &str) {
     already-removed node). This removes EVERY matching node — the evident
     intent. (C leaked the removed nodes and their names; dropped here.) */
     let mut q: &mut Option<Box<DefinedQuantifiers>> = &mut quantifiers.head;
-    loop {
-        let matched = match q.as_deref() {
-            None => break,
-            Some(node) => string == node.name.as_deref().unwrap(),
-        };
+    while q.is_some() {
+        let matched = string
+            == q.as_deref()
+                .expect("loop guard is q.is_some()")
+                .name
+                .as_deref()
+                .expect("quantifier node has a name");
         if matched {
-            let node = q.take().unwrap();
-            *q = node.next;
+            /* unlink: splice this node's successor into its slot */
+            let next = q.as_mut().expect("loop guard is q.is_some()").next.take();
+            *q = next;
         } else {
-            q = &mut q.as_deref_mut().unwrap().next;
+            q = &mut q.as_mut().expect("loop guard is q.is_some()").next;
         }
     }
 }

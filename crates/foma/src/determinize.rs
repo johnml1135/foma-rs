@@ -599,7 +599,9 @@ pub(crate) fn e_closure(s: &mut Subset, states: i32) -> i32 {
             let mut p: Option<usize> = Some(ptr);
             while let Some(pi) = p {
                 /* chain nodes always carry a target (head targets checked above) */
-                let tgt = s.e_closure_memo[pi].target.unwrap();
+                let tgt = s.e_closure_memo[pi]
+                    .target
+                    .expect("chain node always carries a target");
                 if s.e_closure_memo[tgt].mark != mainloop {
                     /* Push */
                     s.e_closure_memo[tgt].mark = mainloop;

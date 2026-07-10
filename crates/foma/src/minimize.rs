@@ -219,7 +219,9 @@ pub(crate) fn fsm_minimize_hop(net: Box<Fsm>) -> Box<Fsm> {
 
         /* C: Agenda_head->index = 0; — unconditional deref (the head exists
         here because num_finals > 0) */
-        let head = m.agenda_head.unwrap();
+        let head = m
+            .agenda_head
+            .expect("agenda head exists here because num_finals > 0");
         m.agenda_top[head].index = false;
         if let Some(next) = m.agenda_top[head].next {
             m.agenda_top[next].index = false;
@@ -482,14 +484,14 @@ pub(crate) fn refine_states(m: &mut Minimizer, invstates: i32) -> i32 {
                 /* In practice we need only add newP since tP stays where it is */
                 /* However, we mark the larger one as not starting the symloop */
                 /* from zero */
-                if m.phead[tP].agenda.is_some() {
+                if let Some(tp_agenda) = m.phead[tP].agenda {
                     /* Is tP smaller */
                     /* (latent quirk kept: inv_t_count sums a subset of tP's
                     members' inv_counts, so inv_count < inv_t_count is always
                     false and the else branch always runs) */
                     if m.phead[tP].inv_count < m.phead[tP].inv_t_count {
                         agenda_add(m, np, 1);
-                        let ag = m.phead[tP].agenda.unwrap();
+                        let ag = tp_agenda;
                         m.agenda_top[ag].index = false;
                     } else {
                         agenda_add(m, np, 0);
@@ -527,12 +529,12 @@ pub(crate) fn refine_states(m: &mut Minimizer, invstates: i32) -> i32 {
                 /* Add to middle of P-chain */
                 /* newP->next = P->next; P->next = newP; — C derefs the chain
                 head P unconditionally */
-                let p = m.p.unwrap();
+                let p = m.p.expect("P-chain head set before splitting");
                 m.phead[np].next = m.phead[p].next;
                 m.phead[p].next = Some(np);
             }
 
-            let newP = newP.unwrap();
+            let newP = newP.expect("newP set to current_split above");
             m.e[thise].group = newP;
             m.phead[newP].count += 1;
 
@@ -553,7 +555,9 @@ pub(crate) fn refine_states(m: &mut Minimizer, invstates: i32) -> i32 {
             }
 
             if m.phead[newP].last_e != Some(thise) {
-                let last = m.phead[newP].last_e.unwrap();
+                let last = m.phead[newP]
+                    .last_e
+                    .expect("newP always has a last_e once populated");
                 m.e[last].right = Some(thise);
                 m.e[thise].left = Some(last);
                 m.phead[newP].last_e = Some(thise);
@@ -662,14 +666,12 @@ pub(crate) fn init_PE(m: &mut Minimizer) {
         m.agenda_top[ag].p = nonFP;
         m.agenda_top[ag].next = None;
         m.total_states += 1;
-        if m.agenda_head.is_some() {
-            let head = m.agenda_head.unwrap();
+        if let Some(head) = m.agenda_head {
             m.agenda_top[head].next = Some(ag);
-            let p = m.p.unwrap();
+            let p = m.p.expect("m.p set once the agenda head exists");
             m.phead[p].next = Some(nonFP);
             /* P->next->next = NULL; */
-            let pn = m.phead[p].next.unwrap();
-            m.phead[pn].next = None;
+            m.phead[nonFP].next = None;
         } else {
             m.p = Some(nonFP);
             m.phead[nonFP].next = None;
@@ -687,22 +689,20 @@ pub(crate) fn init_PE(m: &mut Minimizer) {
         if m.finals[i] {
             m.e[i].group = FP;
             m.e[i].left = last_f;
-            if i > 0 && last_f.is_some() {
-                m.e[last_f.unwrap()].right = Some(i);
-            }
-            if last_f.is_none() {
-                m.phead[FP].first_e = Some(i);
+            match last_f {
+                Some(prev) if i > 0 => m.e[prev].right = Some(i),
+                None => m.phead[FP].first_e = Some(i),
+                _ => {}
             }
             last_f = Some(i);
             m.phead[FP].last_e = Some(i);
         } else {
             m.e[i].group = nonFP;
             m.e[i].left = last_nonf;
-            if i > 0 && last_nonf.is_some() {
-                m.e[last_nonf.unwrap()].right = Some(i);
-            }
-            if last_nonf.is_none() {
-                m.phead[nonFP].first_e = Some(i);
+            match last_nonf {
+                Some(prev) if i > 0 => m.e[prev].right = Some(i),
+                None => m.phead[nonFP].first_e = Some(i),
+                _ => {}
             }
             last_nonf = Some(i);
             m.phead[nonFP].last_e = Some(i);

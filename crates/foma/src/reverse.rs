@@ -28,9 +28,20 @@ pub fn fsm_reverse(net: Box<Fsm>) -> Box<Fsm> {
     handle owns the net until fsm_read_done returns it, so net->name /
     net->sigma are reached through inh (observably equivalent) */
     let mut inh = fsm_read_init(net);
-    let name = inh.net.as_ref().unwrap().name.clone();
+    let name = inh
+        .net
+        .as_ref()
+        .expect("net present until fsm_read_done")
+        .name
+        .clone();
     let mut revh = fsm_construct_init(&name);
-    fsm_construct_copy_sigma(&mut revh, &inh.net.as_ref().unwrap().sigma);
+    fsm_construct_copy_sigma(
+        &mut revh,
+        &inh.net
+            .as_ref()
+            .expect("net present until fsm_read_done")
+            .sigma,
+    );
 
     while fsm_get_next_arc(&mut inh) != 0 {
         let (target, source) = (fsm_get_arc_target(&inh), fsm_get_arc_source(&inh));

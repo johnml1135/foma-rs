@@ -466,7 +466,7 @@ impl Session {
     // [spec:foma:sem:foma.stack-clear-fn]
     pub fn stack_clear(&mut self) -> i32 {
         let mut stack_ptr = self.main_stack();
-        while self.e_next(stack_ptr).is_some() {
+        while let Some(next) = self.e_next(stack_ptr) {
             let ah = self.take_ah(stack_ptr);
             if let Some(ah) = ah {
                 apply_clear(ah);
@@ -475,7 +475,7 @@ impl Session {
             if amedh.is_some() {
                 apply_med_clear(amedh);
             }
-            self.set_main_stack(self.e_next(stack_ptr).unwrap());
+            self.set_main_stack(next);
             let fsm = self.take_fsm(stack_ptr);
             if let Some(fsm) = fsm {
                 // fsm_destroy(NULL) is a safe no-op in C; the None case is the guard.
@@ -501,7 +501,9 @@ impl Session {
         if self.stack_size() == 1 {
             return 1;
         }
-        let stack_ptr = self.stack_find_top().unwrap();
+        let stack_ptr = self
+            .stack_find_top()
+            .expect("non-empty stack has a top (guarded above)");
         let ms = self.main_stack();
         // [spec:foma:sem:stack.stack-rotate-fn+1] swap the cached apply/med handles
         // (ah/amedh) together with the fsm, so each handle stays bound to its own

@@ -133,8 +133,8 @@ pub fn decode_quoted(s: &mut Vec<u8>) {
             && s[(i + 1) as usize] == 0x75
             && ishexstr(&s[(i + 2) as usize..])
         {
-            /* Cannot be None: the codepoint parsed from 4 hex digits is <= 0xFFFF */
-            let unistr: Vec<u8> = utf8code16tostr(&s[(i + 2) as usize..]).unwrap();
+            let unistr: Vec<u8> = utf8code16tostr(&s[(i + 2) as usize..])
+                .expect("4 hex digits parse to a codepoint <= 0xFFFF");
             /* C: for (unistr=...; *unistr; j++, unistr++) — copy up to the
             NUL. The \u0000 escape yields the single byte 0, which the
             *unistr test rejects immediately, so the escape is deleted

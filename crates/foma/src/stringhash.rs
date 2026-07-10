@@ -69,8 +69,9 @@ pub fn sh_find_string(sh: &mut ShHandle, string: &str) -> Option<String> {
                 return None;
             }
             if h.string.as_deref() == Some(string) {
-                /* C: strcmp(hash->string, string) == 0 */
-                found = Some((h.string.clone().unwrap(), h.value));
+                /* C: strcmp(hash->string, string) == 0. The interned copy equals
+                `string`, so return an owned copy of the query. */
+                found = Some((string.to_string(), h.value));
                 break;
             }
             hash = h.next.as_deref();
@@ -110,14 +111,14 @@ pub fn sh_add_string(sh: &mut ShHandle, string: &str, value: i32) -> String {
     if hash.string.is_none() {
         hash.string = Some(string.to_string()); /* C: strdup(string) */
         hash.value = value;
-        hash.string.clone().unwrap()
+        string.to_string()
     } else {
         let newhash: Box<ShHashtable> = Box::new(ShHashtable {
             string: Some(string.to_string()), /* C: strdup(string) */
             value,
             next: hash.next.take(), /* C: newhash->next = hash->next */
         });
-        let ret: String = newhash.string.clone().unwrap();
+        let ret: String = string.to_string();
         hash.next = Some(newhash); /* C: hash->next = newhash */
         ret
     }

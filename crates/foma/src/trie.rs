@@ -57,18 +57,19 @@ pub fn fsm_trie_done(th: Box<FsmTrieHandle>) -> Box<Fsm> {
     for i in 0..THASH_TABLESIZE as usize {
         let mut thash: Option<&TrieHash> = Some(&th.trie_hash[i]);
         while let Some(t) = thash {
-            if t.insym.is_some() {
-                fsm_construct_add_arc(
-                    &mut newh,
-                    t.sourcestate as i32,
-                    t.targetstate as i32,
-                    t.insym.as_deref().unwrap(),
-                    t.outsym.as_deref().unwrap(),
-                );
-            } else {
+            let Some(insym) = t.insym.as_deref() else {
                 /* only possible for an unused in-array bucket head */
                 break;
-            }
+            };
+            fsm_construct_add_arc(
+                &mut newh,
+                t.sourcestate as i32,
+                t.targetstate as i32,
+                insym,
+                t.outsym
+                    .as_deref()
+                    .expect("insym and outsym are set together"),
+            );
             thash = t.next.as_deref();
         }
     }
@@ -81,7 +82,11 @@ pub fn fsm_trie_done(th: Box<FsmTrieHandle>) -> Box<Fsm> {
     let newnet = fsm_construct_done(newh);
     /* Free all mem: chained overflow nodes and the bucket/state arrays are
     dropped with the handle; sh_done consumes the string-intern hash */
-    sh_done(th.sh_hash.take().unwrap());
+    sh_done(
+        th.sh_hash
+            .take()
+            .expect("sh_hash present until fsm_trie_done"),
+    );
     newnet
 }
 
@@ -149,12 +154,16 @@ pub fn fsm_trie_symbol(th: &mut FsmTrieHandle, insym: &str, outsym: &str) {
     let thash = &mut th.trie_hash[h as usize];
     if thash.insym.is_none() {
         thash.insym = Some(sh_find_add_string(
-            th.sh_hash.as_deref_mut().unwrap(),
+            th.sh_hash
+                .as_deref_mut()
+                .expect("sh_hash present until fsm_trie_done"),
             insym,
             1,
         ));
         thash.outsym = Some(sh_find_add_string(
-            th.sh_hash.as_deref_mut().unwrap(),
+            th.sh_hash
+                .as_deref_mut()
+                .expect("sh_hash present until fsm_trie_done"),
             outsym,
             1,
         ));
@@ -165,12 +174,16 @@ pub fn fsm_trie_symbol(th: &mut FsmTrieHandle, insym: &str, outsym: &str) {
             /* calloc'd node spliced in right after the head */
             next: thash.next.take(),
             insym: Some(sh_find_add_string(
-                th.sh_hash.as_deref_mut().unwrap(),
+                th.sh_hash
+                    .as_deref_mut()
+                    .expect("sh_hash present until fsm_trie_done"),
                 insym,
                 1,
             )),
             outsym: Some(sh_find_add_string(
-                th.sh_hash.as_deref_mut().unwrap(),
+                th.sh_hash
+                    .as_deref_mut()
+                    .expect("sh_hash present until fsm_trie_done"),
                 outsym,
                 1,
             )),

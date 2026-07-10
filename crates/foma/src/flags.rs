@@ -110,7 +110,7 @@ pub fn flag_eliminate(opts: &FomaOptions, net: Box<Fsm>, name: Option<&str>) -> 
             fail_flags = Some(fsm_empty_set());
             self_ = Some(flag_create_symbol(
                 fl.r#type,
-                fl.name.as_deref().unwrap(),
+                fl.name.as_deref().expect("flag list node has a name"),
                 fl.value.as_deref(),
             ));
 
@@ -119,10 +119,10 @@ pub fn flag_eliminate(opts: &FomaOptions, net: Box<Fsm>, name: Option<&str>) -> 
             while let Some(ffl) = ff {
                 let fstatus = flag_build(
                     fl.r#type,
-                    fl.name.as_deref().unwrap(),
+                    fl.name.as_deref().expect("flag list node has a name"),
                     fl.value.as_deref(),
                     ffl.r#type,
-                    ffl.name.as_deref().unwrap(),
+                    ffl.name.as_deref().expect("flag list node has a name"),
                     ffl.value.as_deref(),
                 );
                 if fstatus == FAIL {
@@ -130,10 +130,12 @@ pub fn flag_eliminate(opts: &FomaOptions, net: Box<Fsm>, name: Option<&str>) -> 
                         opts,
                         fsm_union(
                             opts,
-                            fail_flags.take().unwrap(),
+                            fail_flags
+                                .take()
+                                .expect("fail_flags populated when flag was set"),
                             flag_create_symbol(
                                 ffl.r#type,
-                                ffl.name.as_deref().unwrap(),
+                                ffl.name.as_deref().expect("flag list node has a name"),
                                 ffl.value.as_deref(),
                             ),
                         ),
@@ -145,10 +147,12 @@ pub fn flag_eliminate(opts: &FomaOptions, net: Box<Fsm>, name: Option<&str>) -> 
                         opts,
                         fsm_union(
                             opts,
-                            succeed_flags.take().unwrap(),
+                            succeed_flags
+                                .take()
+                                .expect("succeed_flags populated when flag was set"),
                             flag_create_symbol(
                                 ffl.r#type,
-                                ffl.name.as_deref().unwrap(),
+                                ffl.name.as_deref().expect("flag list node has a name"),
                                 ffl.value.as_deref(),
                             ),
                         ),
@@ -167,12 +171,30 @@ pub fn flag_eliminate(opts: &FomaOptions, net: Box<Fsm>, name: Option<&str>) -> 
                         opts,
                         fsm_optionality(
                             opts,
-                            fsm_concat(opts, fsm_universal(), fail_flags.take().unwrap()),
+                            fsm_concat(
+                                opts,
+                                fsm_universal(),
+                                fail_flags
+                                    .take()
+                                    .expect("fail_flags populated when flag was set"),
+                            ),
                         ),
                         fsm_concat(
                             opts,
-                            fsm_complement(opts, fsm_contains(opts, succeed_flags.take().unwrap())),
-                            fsm_concat(opts, self_.take().unwrap(), fsm_universal()),
+                            fsm_complement(
+                                opts,
+                                fsm_contains(
+                                    opts,
+                                    succeed_flags
+                                        .take()
+                                        .expect("succeed_flags populated when flag was set"),
+                                ),
+                            ),
+                            fsm_concat(
+                                opts,
+                                self_.take().expect("self_ populated when flag was set"),
+                                fsm_universal(),
+                            ),
                         ),
                     ),
                 )
@@ -183,14 +205,21 @@ pub fn flag_eliminate(opts: &FomaOptions, net: Box<Fsm>, name: Option<&str>) -> 
                         opts,
                         fsm_concat(
                             opts,
-                            fail_flags.take().unwrap(),
+                            fail_flags
+                                .take()
+                                .expect("fail_flags populated when flag was set"),
                             fsm_concat(
                                 opts,
                                 fsm_complement(
                                     opts,
-                                    fsm_contains(opts, succeed_flags.take().unwrap()),
+                                    fsm_contains(
+                                        opts,
+                                        succeed_flags
+                                            .take()
+                                            .expect("succeed_flags populated when flag was set"),
+                                    ),
                                 ),
-                                self_.take().unwrap(),
+                                self_.take().expect("self_ populated when flag was set"),
                             ),
                         ),
                     ),
@@ -248,7 +277,7 @@ pub(crate) fn flag_create_symbol(r#type: i32, name: &str, value: Option<&str>) -
     let mut string = String::new();
     string.push_str("@");
     /* flag_type_to_char(type) — C would segfault on NULL for unknown types */
-    string.push_str(flag_type_to_char(r#type).unwrap());
+    string.push_str(flag_type_to_char(r#type).expect("known flag type has a char"));
     string.push_str(".");
     string.push_str(name);
     if value != "" {
