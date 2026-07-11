@@ -108,4 +108,5 @@ assertions (
     {id w9-io-errors, kind @complete, author "brendan@necessary.nu", at 2026-07-11T00:09:51.740611Z}
     {id w9-return-types, kind @complete, author "brendan@necessary.nu", at 2026-07-11T11:36:27.205359Z}
     {id w9-smolstr, kind @complete, author "brendan@necessary.nu", at 2026-07-11T12:45:01.234264Z}
+    {id w9-cstring, kind @doing, author "brendan@necessary.nu", at 2026-07-11T13:10:09.861493Z}
 )

@@ -1180,6 +1180,20 @@ children (
                     }
                 )
             }
+
+            {
+                id w9-cstring
+                title "Tier 9: kill the remaining byte-level C-string helpers in utf8.rs and friends. Delete dead ones (remove_trailing/trim/strip_newline — zero live callers); idiomatize the utf8skip byte-walk (13 sites) to char_indices()/chars() on &str; consider atoi/atoll → parse and xstrrev → chars().rev(). Keep genuine wire/byte-domain (the \\uXXXX decode chain, escape_string, streqrep, cstrlen/cstr_at NUL-field readers, utf8iscombining)."
+                priority 9
+                log (
+                    {
+                        at 2026-07-11T13:10:09.861493Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Todo → Doing (nplan_start)"
+                    }
+                )
+            }
         )
     }
 )

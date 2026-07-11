@@ -40,29 +40,11 @@
 > [spec:foma:sem:utf8.ishexstr-fn]
 > Returns 1 iff the four bytes str[0..3] are each an ASCII hex digit, tested by ranges 0x30–0x39 ('0'-'9'), 0x41–0x46 ('A'-'F'), 0x61–0x66 ('a'-'f'); returns 0 at the first byte outside all three ranges (so it never reads past an early NUL — the NUL itself fails). Bytes are compared as (signed) char, so bytes ≥ 0x80 are negative and correctly fail. Reads up to 4 bytes; caller must guarantee they exist.
 
-> [spec:foma:def:utf8.remove-trailing-fn]
-> char *remove_trailing(char *s, char c)
-
-> [spec:foma:sem:utf8.remove-trailing-fn]
-> In-place: starting from the last byte and moving backwards, overwrite with '\0' every byte that is `c`, ' ' (space), or '\t', stopping at the first byte that is none of these. Returns `s`. Empty string is a no-op.
-
 > [spec:foma:def:utf8.streqrep-fn]
 > char *streqrep(char *s, char *oldstring, char *newstring)
 
 > [spec:foma:sem:utf8.streqrep-fn+1]
 > Replaces every non-overlapping occurrence of `oldstring` in `s` with `newstring` (same length), in place. Returns `s`. A single left-to-right scan advances past each replacement, so it always terminates and is O(|s|). An empty `oldstring` and a `newstring` shorter than `oldstring` are treated as no-ops. The C source looped strstr from the start of `s` after every replacement, so old==new (or a replacement that still matched oldstring, or an empty oldstring) never terminated, and a shorter newstring made the memcpy read past its end.
-
-> [spec:foma:def:utf8.strip-newline-fn]
-> void strip_newline(char *s)
-
-> [spec:foma:sem:utf8.strip-newline-fn]
-> Scans `s` left to right and replaces the FIRST '\n' with '\0', truncating the string there; returns immediately after. No-op if there is no newline.
-
-> [spec:foma:def:utf8.trim-fn]
-> char *trim(char *string)
-
-> [spec:foma:sem:utf8.trim-fn]
-> NULL-safe: returns NULL for NULL input. Otherwise strips trailing ' ' and '\t' in place by scanning from the end and writing '\0' over each, stopping at the first other byte; returns `string`. Same as `[spec:foma:sem:utf8.remove-trailing-fn]` minus the extra character parameter.
 
 > [spec:foma:def:utf8.utf8code16tostr-fn]
 > unsigned char *utf8code16tostr(char *str)

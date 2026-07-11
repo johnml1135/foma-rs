@@ -435,12 +435,6 @@
 > [spec:foma:sem:fomalibconf.ptr-stack-push-fn+1]
 > Pushes `ptr` (an index/handle token) onto the global pointer stack, growing its backing `Vec` on demand — infallible and unbounded. The C `MAX_PTR_STACK` cap and the "Pointer stack full!\n" + exit(1) overflow path are gone. The stack stores the token only; no ownership is taken. Implementation: crates/foma/src/int_stack.rs.
 
-> [spec:foma:def:fomalibconf.remove-trailing-fn]
-> char *remove_trailing(char *s, char c)
-
-> [spec:foma:sem:fomalibconf.remove-trailing-fn]
-> Strips, in place, the trailing run of bytes each equal to `c`, ' ' (0x20) or '\t' (0x09) from NUL-terminated string `s`: starting at index strlen(s)-1 and walking backwards to 0, overwrite each such byte with '\0' and stop at the first byte that is none of the three. Returns `s` (same pointer, modified in place; no allocation). An empty string is a no-op (start index -1, loop body never runs). If `s` consists entirely of strippable bytes the result is the empty string. Implementation: foma/utf8.c.
-
 > [spec:foma:def:fomalibconf.round-up-to-power-of-two-fn]
 > unsigned int round_up_to_power_of_two(unsigned int v)
 
@@ -568,18 +562,6 @@
 
 > [spec:foma:sem:fomalibconf.streqrep-fn+1]
 > Replaces every non-overlapping occurrence of `oldstring` in `s` with the same-length prefix of `newstring`, in place, and returns `s`. Algorithm: let len = strlen(oldstring); a single left-to-right scan advances past each replacement (by len) so it always terminates and is O(|s|). Intended for equal-length replacement only (per the source comment). C rescanned from the start of `s` after every replacement, so if the written bytes still contained `oldstring` (newstring == oldstring, or overlapping self-reproduction, or an empty oldstring that matches everywhere) the loop never terminated; an empty `oldstring` and a `newstring` shorter than `oldstring` (which C's memcpy read past) are now no-ops rather than a hang/overread. Implementation: foma/utf8.c.
-
-> [spec:foma:def:fomalibconf.strip-newline-fn]
-> void strip_newline(char *s)
-
-> [spec:foma:sem:fomalibconf.strip-newline-fn]
-> Truncates `s` in place at its first '\n': scans forward from index 0 to strlen(s)-1; on the first '\n' writes '\0' there and returns. If the string contains no newline it is left unchanged. '\r' is not treated specially: a "\r\n" ending leaves the '\r' as the new last byte. Returns void. Implementation: foma/utf8.c.
-
-> [spec:foma:def:fomalibconf.trim-fn]
-> char *trim(char *string)
-
-> [spec:foma:sem:fomalibconf.trim-fn]
-> Strips trailing spaces (0x20) and tabs (0x09) — only trailing, despite the name — from `string` in place: if `string` is NULL, return NULL; otherwise from index strlen-1 down to 0, overwrite each ' ' or '\t' with '\0' and stop at the first other byte. Returns the same pointer. Empty string is a no-op. Equivalent to `remove_trailing(string, ' ')` plus the NULL guard. Implementation: foma/utf8.c.
 
 > [spec:foma:def:fomalibconf.utf8code16tostr-fn]
 > unsigned char *utf8code16tostr(char *str)

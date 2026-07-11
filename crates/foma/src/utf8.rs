@@ -7,44 +7,6 @@
 //! `truncate(i)` on the buffer; reading the terminating NUL corresponds
 //! to reading an implicit 0 at index `len`.
 
-/* Removes trailing character c, as well as spaces and tabs */
-// [spec:foma:def:utf8.remove-trailing-fn]
-// [spec:foma:sem:utf8.remove-trailing-fn]
-// [spec:foma:def:fomalibconf.remove-trailing-fn]
-// [spec:foma:sem:fomalibconf.remove-trailing-fn]
-// C returns `s` (the same pointer) for chaining; here the buffer is
-// mutated in place.
-pub fn remove_trailing(s: &mut Vec<u8>, c: u8) {
-    while let Some(&last) = s.last() {
-        if last == c || last == b' ' || last == b'\t' {
-            s.pop();
-        } else {
-            break;
-        }
-    }
-}
-
-/* Remove trailing space and \t */
-// [spec:foma:def:utf8.trim-fn]
-// [spec:foma:sem:utf8.trim-fn]
-// [spec:foma:def:fomalibconf.trim-fn]
-// [spec:foma:sem:fomalibconf.trim-fn]
-// C returns `string` (NULL for NULL input); here the buffer is mutated
-// in place, with the NULL branch kept as Option.
-pub fn trim(string: Option<&mut Vec<u8>>) {
-    let string = match string {
-        None => return, /* C: if (string == NULL) return(string); */
-        Some(s) => s,
-    };
-    while let Some(&last) = string.last() {
-        if last == b' ' || last == b'\t' {
-            string.pop();
-        } else {
-            break;
-        }
-    }
-}
-
 /* Reverses string in-place */
 // [spec:foma:def:utf8.xstrrev-fn]
 // [spec:foma:sem:utf8.xstrrev-fn]
@@ -79,17 +41,6 @@ pub fn escape_string(string: &[u8], chr: u8) -> Vec<u8> {
         out.push(b);
     }
     out
-}
-
-/* Substitute first \n for \0 */
-// [spec:foma:def:utf8.strip-newline-fn]
-// [spec:foma:sem:utf8.strip-newline-fn]
-// [spec:foma:def:fomalibconf.strip-newline-fn]
-// [spec:foma:sem:fomalibconf.strip-newline-fn]
-pub fn strip_newline(s: &mut Vec<u8>) {
-    if let Some(pos) = s.iter().position(|&b| b == b'\n') {
-        s.truncate(pos); /* C: s[pos] = '\0' */
-    }
 }
 
 /* Removes initial and final quote, and decodes the string if it contains special chars */
@@ -664,90 +615,5 @@ mod tests {
         let mut s = vec![0x61, 0xc3, 0xa9];
         xstrrev(Some(&mut s));
         assert_eq!(s, vec![0xa9, 0xc3, 0x61]);
-    }
-
-    // remove_trailing: strips trailing `c`, ' ', and '\t' from the end,
-    // stopping at the first other byte; empty is a no-op.
-    // [spec:foma:sem:utf8.remove-trailing-fn/test]
-    // [spec:foma:sem:fomalibconf.remove-trailing-fn/test]
-    #[test]
-    fn test_remove_trailing() {
-        // strips spaces even when c never matches
-        let mut s = b"abc  ".to_vec();
-        remove_trailing(&mut s, b'x');
-        assert_eq!(s, b"abc".to_vec());
-        // strips the target char c
-        let mut s = b"abcxx".to_vec();
-        remove_trailing(&mut s, b'x');
-        assert_eq!(s, b"abc".to_vec());
-        // mixed c/space/tab run stops at 'c'
-        let mut s = vec![0x61, 0x62, 0x63, 0x78, 0x20, 0x78, 0x09]; // abcx x\t
-        remove_trailing(&mut s, b'x');
-        assert_eq!(s, b"abc".to_vec());
-        // interior tab is preserved (loop breaks at 'c')
-        let mut s = vec![0x61, 0x62, 0x09, 0x63]; // ab\tc
-        remove_trailing(&mut s, b'x');
-        assert_eq!(s, vec![0x61, 0x62, 0x09, 0x63]);
-        // empty → no-op
-        let mut s = Vec::<u8>::new();
-        remove_trailing(&mut s, b'x');
-        assert_eq!(s, Vec::<u8>::new());
-        // all-matching → empty
-        let mut s = b"xxx".to_vec();
-        remove_trailing(&mut s, b'x');
-        assert_eq!(s, Vec::<u8>::new());
-    }
-
-    // trim: NULL-safe; strips trailing ' ' and '\t' only (no char param);
-    // leading whitespace and other trailing bytes are preserved.
-    // [spec:foma:sem:utf8.trim-fn/test]
-    // [spec:foma:sem:fomalibconf.trim-fn/test]
-    #[test]
-    fn test_trim() {
-        trim(None); // NULL → no-op, no panic
-        let mut s = b"abc  ".to_vec();
-        trim(Some(&mut s));
-        assert_eq!(s, b"abc".to_vec());
-        let mut s = vec![0x61, 0x62, 0x63, 0x09, 0x20, 0x09]; // abc\t \t
-        trim(Some(&mut s));
-        assert_eq!(s, b"abc".to_vec());
-        // does not strip non-whitespace (unlike remove_trailing with c)
-        let mut s = b"abcc".to_vec();
-        trim(Some(&mut s));
-        assert_eq!(s, b"abcc".to_vec());
-        // leading whitespace preserved
-        let mut s = b"  abc".to_vec();
-        trim(Some(&mut s));
-        assert_eq!(s, b"  abc".to_vec());
-        // all-whitespace → empty
-        let mut s = b"  ".to_vec();
-        trim(Some(&mut s));
-        assert_eq!(s, Vec::<u8>::new());
-    }
-
-    // strip_newline: truncates at the FIRST '\n'; no-op when none present.
-    // [spec:foma:sem:utf8.strip-newline-fn/test]
-    // [spec:foma:sem:fomalibconf.strip-newline-fn/test]
-    #[test]
-    fn test_strip_newline() {
-        let mut s = b"abc\ndef".to_vec();
-        strip_newline(&mut s);
-        assert_eq!(s, b"abc".to_vec());
-        // first newline only
-        let mut s = b"a\nb\nc".to_vec();
-        strip_newline(&mut s);
-        assert_eq!(s, b"a".to_vec());
-        // leading newline → empty
-        let mut s = b"\nabc".to_vec();
-        strip_newline(&mut s);
-        assert_eq!(s, Vec::<u8>::new());
-        // no newline → unchanged
-        let mut s = b"abc".to_vec();
-        strip_newline(&mut s);
-        assert_eq!(s, b"abc".to_vec());
-        // empty → no-op
-        let mut s = Vec::<u8>::new();
-        strip_newline(&mut s);
-        assert_eq!(s, Vec::<u8>::new());
     }
 }
