@@ -43,3 +43,12 @@ impl fmt::Display for FomaError {
 }
 
 impl std::error::Error for FomaError {}
+
+impl From<std::io::Error> for FomaError {
+    /// An `io::Error` from a write/read at a boundary that flows `FomaError`
+    /// becomes an `Io` variant carrying its message (dropping the non-`Eq`
+    /// source so `FomaError` stays `PartialEq`/`Eq`).
+    fn from(e: std::io::Error) -> Self {
+        FomaError::Io(e.to_string())
+    }
+}

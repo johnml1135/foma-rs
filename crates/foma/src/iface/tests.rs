@@ -84,11 +84,11 @@ fn help_family_prints_without_touching_the_stack() {
 // content is covered by io.rs's own tests.
 // [spec:foma:sem:iface.foma-net-print-fn/test]
 #[test]
-fn foma_net_print_writes_save_format_and_returns_1() {
+fn foma_net_print_writes_save_format() {
     let opts = &FomaOptions::default();
     let net = fsm_parse_regex(opts, "a", None, None).unwrap();
     let mut buf: Vec<u8> = Vec::new();
-    assert_eq!(foma_net_print(&net, &mut buf), 1);
+    foma_net_print(&net, &mut buf).expect("writing net to in-memory buffer");
     let s = String::from_utf8_lossy(&buf);
     assert!(
         s.starts_with("##foma-net 1.0##"),
@@ -778,7 +778,7 @@ fn load_stack_pushes_in_file_order_last_on_top() {
         for r in ["a", "b", "c"] {
             let mut net = fsm_parse_regex(opts, r, None, None).unwrap();
             fsm_count(&mut net);
-            foma_net_print(&net, &mut gz);
+            foma_net_print(&net, &mut gz).expect("writing net to scratch file");
         }
         gz.finish().unwrap();
     }
@@ -892,7 +892,7 @@ fn read_att_and_prolog_roundtrip_and_error() {
     {
         let net = fsm_parse_regex(opts, "a b", None, None).unwrap();
         let mut f = File::create(att).unwrap();
-        net_print_att(opts, &net, &mut f);
+        net_print_att(opts, &net, &mut f).expect("writing att to scratch file");
     }
     let plp = dir.join("foma_s2_read.prolog");
     let pl = plp.to_str().unwrap();

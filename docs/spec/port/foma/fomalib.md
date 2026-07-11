@@ -614,9 +614,9 @@
 > [spec:foma:def:fomalib.foma-net-print-fn]
 > FEXPORT int foma_net_print(struct fsm *net, gzFile outfile)
 
-> [spec:foma:sem:fomalib.foma-net-print-fn]
-> Serializes `net` to the already-open gzFile `outfile` in the textual foma binary format (all
-> writes via gzprintf). Layout, in order: header line "##foma-net 1.0##\n"; "##props##\n"
+> [spec:foma:sem:fomalib.foma-net-print-fn+1]
+> Serializes `net` to the already-open sink `outfile` in the textual foma binary format. Layout,
+> in order: header line "##foma-net 1.0##\n"; "##props##\n"
 > followed by one line of space-separated properties: arity arccount statecount linecount
 > finalcount pathcount(%lld) is_deterministic is_pruned is_minimized is_epsilon_free is_loop_free
 > extras name, where extras = is_completed | (arcs_sorted_in << 2) | (arcs_sorted_out << 4);
@@ -626,8 +626,9 @@
 > "state in target final"; on a repeated state number 3 fields "in out target" if in != out, else
 > 2 fields "in target"; then the sentinel line "-1 -1 -1 -1 -1\n". If net->medlookup and its
 > confusion_matrix exist: "##cmatrix##\n" followed by maxsigma*maxsigma lines (maxsigma =
-> sigma_max+1), one int per line, row-major. Finally "##end##\n". Returns 1 always; does not
-> close the file and does not modify the net.
+> sigma_max+1), one int per line, row-major. Finally "##end##\n". Returns `Ok(())` on success and
+> propagates the first write failure as its `io::Error` (the C returned a vestigial `1` always);
+> does not close the file and does not modify the net.
 
 > [spec:foma:def:fomalib.foma-write-prolog-fn]
 > FEXPORT int foma_write_prolog(struct fsm *net, char *filename)
@@ -2575,15 +2576,16 @@
 > [spec:foma:def:fomalib.net-print-att-fn]
 > FEXPORT int net_print_att(struct fsm *net, FILE *outfile)
 
-> [spec:foma:sem:fomalib.net-print-att-fn]
-> Writes net to an already-open FILE* in AT&T tabular format (no weights). Builds an
+> [spec:foma:sem:fomalib.net-print-att-fn+1]
+> Writes net to an already-open sink in AT&T tabular format (no weights). Builds an
 > indexable symbol array from the sigma; if sigma_max >= 0, slot 0 (EPSILON) is pointed at
 > the global g_att_epsilon (settable variable "att-epsilon", default "@0@") — UNKNOWN and
 > IDENTITY print as whatever their sigma strings are (normally "@_UNKNOWN_SYMBOL_@" /
 > "@_IDENTITY_SYMBOL_@"). Pass 1: for every line with target != -1, print
 > "source\ttarget\tinsym\toutsym\n". Pass 2: for the first line of each state block with
 > final_state == 1, print "state\n" (each final state exactly once, in state-array order).
-> Frees the symbol array and returns 1. net is unmodified; the stream is not closed.
+> Frees the symbol array and returns `Ok(())` on success, propagating the first write failure as
+> its `io::Error` (the C returned a vestigial `1`). net is unmodified; the stream is not closed.
 
 > [spec:foma:def:fomalib.read-att-fn]
 > fsm *read_att(char *filename)

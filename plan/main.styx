@@ -1117,6 +1117,20 @@ children (
                     }
                 )
             }
+
+            {
+                id w9-io-errors
+                title "Kill error-swallowing `let _ =`. ~108 non-test `let _ =` on IO write/read/flush/finish/seek discard the error silently (iface/common.rs print_* writers 44, io.rs foma_net_print/write_prolog/net_print_att/binary-read 37, apply_cmds 14, spelling 4, bins 9). Each → `?`/Result where it can meaningfully fail and propagates, else `.expect(\\\"why success is expected\\\")`. Never leave `let _ =` on a Result. Keep genuine value-drops (stack_pop, unused-var). Completes the silent-library goal w9-results only half-did."
+                priority 2
+                log (
+                    {
+                        at 2026-07-10T23:03:20.819698Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Todo → Doing (nplan_start)"
+                    }
+                )
+            }
         )
     }
 )

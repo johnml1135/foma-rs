@@ -178,20 +178,24 @@ fn cstr_at(buf: &[u8], idx: usize) -> String {
 
 // [spec:foma:def:io.escape-print-fn]
 // [spec:foma:sem:io.escape-print-fn]
-pub fn escape_print<W: std::io::Write + ?Sized>(stream: &mut W, string: &str) {
+pub fn escape_print<W: std::io::Write + ?Sized>(
+    stream: &mut W,
+    string: &str,
+) -> std::io::Result<()> {
     if string.contains('"') {
         /* strchr(string, '"') != NULL: byte-by-byte, emitting \" for each " */
         for &c in string.as_bytes() {
             if c == b'"' {
-                let _ = stream.write_all(b"\\\"");
+                stream.write_all(b"\\\"")?;
             } else {
-                let _ = stream.write_all(&[c]);
+                stream.write_all(&[c])?;
             }
         }
     } else {
         /* fprintf(stream, "%s", string) */
-        let _ = stream.write_all(string.as_bytes());
+        stream.write_all(string.as_bytes())?;
     }
+    Ok(())
 }
 
 // [spec:foma:def:io.foma-write-prolog-fn]
@@ -226,7 +230,7 @@ pub fn foma_write_prolog(net: &mut Fsm, filename: Option<&str>) -> Result<(), Fo
     let identifier = net.name.clone();
 
     /* Print identifier: fprintf(out, "%s%s%s", "network(", identifier, ").\n") */
-    let _ = write!(out, "network({}).\n", identifier);
+    write!(out, "network({}).\n", identifier)?;
 
     let mut i = 0usize;
     while net.states[i].state_no != -1 {
@@ -256,9 +260,9 @@ pub fn foma_write_prolog(net: &mut Fsm, filename: Option<&str>) -> Result<(), Fo
             if instring == "0" {
                 instring = "%0";
             }
-            let _ = write!(out, "symbol({}, \"", identifier);
-            escape_print(&mut out, instring);
-            let _ = write!(out, "\").\n");
+            write!(out, "symbol({}, \"", identifier)?;
+            escape_print(&mut out, instring)?;
+            write!(out, "\").\n")?;
         }
     }
 
@@ -272,7 +276,7 @@ pub fn foma_write_prolog(net: &mut Fsm, filename: Option<&str>) -> Result<(), Fo
             i += 1;
             continue;
         }
-        let _ = write!(out, "arc({}, {}, {}, ", identifier, state_no, target);
+        write!(out, "arc({}, {}, {}, ", identifier, state_no, target)?;
         let mut instring: &str = if in_ == 0 {
             "0"
         } else if in_ == 1 {
@@ -308,28 +312,28 @@ pub fn foma_write_prolog(net: &mut Fsm, filename: Option<&str>) -> Result<(), Fo
         }
 
         if net.arity == 2 && in_ == IDENTITY && out_ == IDENTITY {
-            let _ = write!(out, "\"?\").\n");
+            write!(out, "\"?\").\n")?;
         } else if net.arity == 2 && in_ == out_ && in_ != UNKNOWN {
-            let _ = write!(out, "\"");
-            escape_print(&mut out, instring);
-            let _ = write!(out, "\").\n");
+            write!(out, "\"")?;
+            escape_print(&mut out, instring)?;
+            write!(out, "\").\n")?;
         } else if net.arity == 2 {
-            let _ = write!(out, "\"");
-            escape_print(&mut out, instring);
-            let _ = write!(out, "\":\"");
-            escape_print(&mut out, outstring);
-            let _ = write!(out, "\").\n");
+            write!(out, "\"")?;
+            escape_print(&mut out, instring)?;
+            write!(out, "\":\"")?;
+            escape_print(&mut out, outstring)?;
+            write!(out, "\").\n")?;
         } else if net.arity == 1 {
-            let _ = write!(out, "\"");
-            escape_print(&mut out, instring);
-            let _ = write!(out, "\").\n");
+            write!(out, "\"")?;
+            escape_print(&mut out, instring)?;
+            write!(out, "\").\n")?;
         }
         i += 1;
     }
 
     for k in 0..net.statecount {
         if finals[k as usize] != 0 {
-            let _ = write!(out, "final({}, {}).\n", identifier, k);
+            write!(out, "final({}, {}).\n", identifier, k)?;
         }
     }
     /* if (filename != NULL) fclose(out); — the File is dropped here either way;
@@ -750,9 +754,16 @@ pub fn fsm_write_binary_file(net: &Fsm, filename: &str) -> i32 {
         Err(_) => return 1,
     };
     let mut outfile = GzEncoder::new(file, Compression::default());
-    foma_net_print(net, &mut outfile);
+    /* C returned 1 on any failure and 0 on success; a write or gzip-finish
+    error (e.g. disk full) is now surfaced through that same sentinel instead of
+    being silently dropped. */
+    if foma_net_print(net, &mut outfile).is_err() {
+        return 1;
+    }
     /* gzclose(outfile) — finish the gzip stream */
-    let _ = outfile.finish();
+    if outfile.finish().is_err() {
+        return 1;
+    }
     0
 }
 
@@ -763,7 +774,7 @@ pub fn fsm_write_binary_file(net: &Fsm, filename: &str) -> i32 {
 // behavior but to any `Write` sink instead of a named file.
 pub fn fsm_write_binary<W: std::io::Write>(net: &Fsm, out: W) -> std::io::Result<()> {
     let mut enc = GzEncoder::new(out, Compression::default());
-    foma_net_print(net, &mut enc);
+    foma_net_print(net, &mut enc)?;
     enc.finish()?;
     Ok(())
 }
@@ -927,11 +938,11 @@ pub fn save_defined(def: &mut DefinedNetworks, filename: &str) -> Result<(), Fom
         };
         /* strncpy(d->net->name, d->name, FSM_NAME_LEN) */
         net.name = truncate_name(&name);
-        foma_net_print(net, &mut outfile);
+        foma_net_print(net, &mut outfile)?;
         d = node.next.as_deref_mut();
     }
     /* gzclose(outfile) */
-    let _ = outfile.finish();
+    outfile.finish()?;
     Ok(())
 }
 
@@ -1272,21 +1283,26 @@ pub(crate) fn io_gets(iobh: &mut IoBufHandle, target: &mut String) -> i32 {
 }
 
 // [spec:foma:def:io.foma-net-print-fn]
-// [spec:foma:sem:io.foma-net-print-fn]
+// [spec:foma:sem:io.foma-net-print-fn+1]
 // [spec:foma:def:fomalib.foma-net-print-fn]
-// [spec:foma:sem:fomalib.foma-net-print-fn]
-// C signature: int foma_net_print(struct fsm *net, gzFile outfile). Here the
-// gzip layer is the GzEncoder (or any other writer) the caller passes as
-// `&mut W`, dispatched statically.
-pub fn foma_net_print<W: std::io::Write + ?Sized>(net: &Fsm, outfile: &mut W) -> i32 {
+// [spec:foma:sem:fomalib.foma-net-print-fn+1]
+// C signature: int foma_net_print(struct fsm *net, gzFile outfile) (the C `1`
+// return was a vestigial always-success status). Here the gzip layer is the
+// GzEncoder (or any other writer) the caller passes as `&mut W`, dispatched
+// statically, and a write failure is propagated as an `io::Error` instead of
+// being reported by a return code no caller inspected.
+pub fn foma_net_print<W: std::io::Write + ?Sized>(
+    net: &Fsm,
+    outfile: &mut W,
+) -> std::io::Result<()> {
     /* Header */
-    let _ = outfile.write_all(b"##foma-net 1.0##\n");
+    outfile.write_all(b"##foma-net 1.0##\n")?;
     /* Properties */
-    let _ = outfile.write_all(b"##props##\n");
+    outfile.write_all(b"##props##\n")?;
 
     let extras = net.is_completed | (net.arcs_sorted_in << 2) | (net.arcs_sorted_out << 4);
 
-    let _ = write!(
+    write!(
         outfile,
         "{} {} {} {} {} {} {} {} {} {} {} {} {}\n",
         net.arity,
@@ -1302,73 +1318,73 @@ pub fn foma_net_print<W: std::io::Write + ?Sized>(net: &Fsm, outfile: &mut W) ->
         net.is_loop_free,
         extras,
         net.name
-    );
+    )?;
 
     /* Sigma */
-    let _ = outfile.write_all(b"##sigma##\n");
+    outfile.write_all(b"##sigma##\n")?;
     for s in &net.sigma {
         /* gzprintf("%i %s\n", ...) — one "number symbol" line per entry, in
         alphabet order */
-        let _ = write!(outfile, "{} {}\n", s.number, s.symbol);
+        write!(outfile, "{} {}\n", s.number, s.symbol)?;
     }
 
     /* State array */
     let mut laststate: i32 = -1;
-    let _ = outfile.write_all(b"##states##\n");
+    outfile.write_all(b"##states##\n")?;
     let mut i = 0usize;
     while net.states[i].state_no != -1 {
         let fsm = &net.states[i];
         if fsm.state_no != laststate {
             if fsm.r#in != fsm.out {
-                let _ = write!(
+                write!(
                     outfile,
                     "{} {} {} {} {}\n",
                     fsm.state_no, fsm.r#in, fsm.out, fsm.target, fsm.final_state
-                );
+                )?;
             } else {
-                let _ = write!(
+                write!(
                     outfile,
                     "{} {} {} {}\n",
                     fsm.state_no, fsm.r#in, fsm.target, fsm.final_state
-                );
+                )?;
             }
         } else if fsm.r#in != fsm.out {
-            let _ = write!(outfile, "{} {} {}\n", fsm.r#in, fsm.out, fsm.target);
+            write!(outfile, "{} {} {}\n", fsm.r#in, fsm.out, fsm.target)?;
         } else {
-            let _ = write!(outfile, "{} {}\n", fsm.r#in, fsm.target);
+            write!(outfile, "{} {}\n", fsm.r#in, fsm.target)?;
         }
         laststate = fsm.state_no;
         i += 1;
     }
     /* Sentinel for states */
-    let _ = outfile.write_all(b"-1 -1 -1 -1 -1\n");
+    outfile.write_all(b"-1 -1 -1 -1 -1\n")?;
 
     /* Store confusion matrix */
     if let Some(ml) = net.medlookup.as_deref() {
         /* C: net->medlookup->confusion_matrix != NULL — an empty Vec ↔ NULL */
         if !ml.confusion_matrix.is_empty() {
-            let _ = outfile.write_all(b"##cmatrix##\n");
+            outfile.write_all(b"##cmatrix##\n")?;
             let maxsigma = sigma_max(&net.sigma) + 1;
             for k in 0..(maxsigma * maxsigma) {
-                let _ = write!(outfile, "{}\n", ml.confusion_matrix[k as usize]);
+                write!(outfile, "{}\n", ml.confusion_matrix[k as usize])?;
             }
         }
     }
 
     /* End */
-    let _ = outfile.write_all(b"##end##\n");
-    1
+    outfile.write_all(b"##end##\n")?;
+    Ok(())
 }
 
 // [spec:foma:def:io.net-print-att-fn]
-// [spec:foma:sem:io.net-print-att-fn]
+// [spec:foma:sem:io.net-print-att-fn+1]
 // [spec:foma:def:fomalib.net-print-att-fn]
-// [spec:foma:sem:fomalib.net-print-att-fn]
+// [spec:foma:sem:fomalib.net-print-att-fn+1]
 pub fn net_print_att<W: std::io::Write + ?Sized>(
     opts: &FomaOptions,
     net: &Fsm,
     outfile: &mut W,
-) -> i32 {
+) -> std::io::Result<()> {
     let mut sl = sigma_to_list(&net.sigma);
     if sigma_max(&net.sigma) >= 0 {
         /* (sl+0)->symbol = g_att_epsilon */
@@ -1378,14 +1394,14 @@ pub fn net_print_att<W: std::io::Write + ?Sized>(
     while net.states[i].state_no != -1 {
         let fsm = &net.states[i];
         if fsm.target != -1 {
-            let _ = write!(
+            write!(
                 outfile,
                 "{}\t{}\t{}\t{}\n",
                 fsm.state_no,
                 fsm.target,
                 sl[fsm.r#in as usize].symbol.as_deref().unwrap_or("(null)"),
                 sl[fsm.out as usize].symbol.as_deref().unwrap_or("(null)")
-            );
+            )?;
         }
         i += 1;
     }
@@ -1394,13 +1410,13 @@ pub fn net_print_att<W: std::io::Write + ?Sized>(
     while net.states[i].state_no != -1 {
         let fsm = &net.states[i];
         if fsm.state_no != prev && fsm.final_state == 1 {
-            let _ = write!(outfile, "{}\n", fsm.state_no);
+            write!(outfile, "{}\n", fsm.state_no)?;
         }
         prev = fsm.state_no;
         i += 1;
     }
     /* free(sl) — dropped */
-    1
+    Ok(())
 }
 
 // [spec:foma:def:io.io-get-gz-file-size-fn]
@@ -1476,16 +1492,22 @@ pub fn io_gz_file_to_mem(iobh: &mut IoBufHandle, filename: &str) -> usize {
         Err(_) => return 0,
     };
     let is_gzip = is_gzip_magic(&mut file);
-    let _ = file.seek(SeekFrom::Start(0));
+    if file.seek(SeekFrom::Start(0)).is_err() {
+        return 0;
+    }
     let mut content: Vec<u8> = Vec::new();
-    if is_gzip {
-        /* gzread's return is unchecked in C: a corrupt body leaves the tail
-        uninitialized. read_to_end reads the whole (single-member) stream, which
-        equals `size` for well-formed foma files. */
+    /* gzread's return is unchecked in C: a corrupt body leaves the tail
+    uninitialized. read_to_end reads the whole (single-member) stream, which
+    equals `size` for well-formed foma files; a read/decode error rewinds to
+    the C NULL/0 failure return instead of handing back a truncated buffer. */
+    let read_result = if is_gzip {
         let mut dec = GzDecoder::new(file);
-        let _ = dec.read_to_end(&mut content);
+        dec.read_to_end(&mut content)
     } else {
-        let _ = file.read_to_end(&mut content);
+        file.read_to_end(&mut content)
+    };
+    if read_result.is_err() {
+        return 0;
     }
     /* buf[size] = '\0' */
     content.push(0);
@@ -1785,12 +1807,12 @@ mod tests {
     fn escape_print_quotes_and_passthrough() {
         /* No quote → single write of the whole string. */
         let mut a: Vec<u8> = Vec::new();
-        escape_print(&mut a, "abc");
+        escape_print(&mut a, "abc").expect("writing to in-memory buffer");
         assert_eq!(a, b"abc");
         /* Contains a quote → byte-by-byte, each `"` becomes `\"`; backslashes
         pass through unescaped (documented asymmetry). */
         let mut b: Vec<u8> = Vec::new();
-        escape_print(&mut b, "he\"l\\o");
+        escape_print(&mut b, "he\"l\\o").expect("writing to in-memory buffer");
         assert_eq!(b, b"he\\\"l\\o");
     }
 
@@ -1883,24 +1905,24 @@ mod tests {
         assert!(spacedtext_get_next_token(&mut t, &mut c).is_none());
     }
 
-    // [spec:foma:sem:io.foma-net-print-fn/test]
-    // [spec:foma:sem:fomalib.foma-net-print-fn/test]
+    // [spec:foma:sem:io.foma-net-print-fn+1/test]
+    // [spec:foma:sem:fomalib.foma-net-print-fn+1/test]
     #[test]
     fn foma_net_print_exact_wire_image() {
         let net = craft_ab_net("test");
         let mut buf: Vec<u8> = Vec::new();
-        assert_eq!(foma_net_print(&net, &mut buf), 1);
+        foma_net_print(&net, &mut buf).expect("writing net to in-memory buffer");
         assert_eq!(String::from_utf8(buf).unwrap(), AB_FOMA_TEXT);
     }
 
-    // [spec:foma:sem:io.foma-net-print-fn/test]
+    // [spec:foma:sem:io.foma-net-print-fn+1/test]
     #[test]
     fn foma_net_print_cmatrix_section() {
         let mut net = craft_ab_net("cm");
         cmatrix_init(&mut net);
         net.medlookup.as_mut().unwrap().confusion_matrix[1] = 7;
         let mut buf: Vec<u8> = Vec::new();
-        foma_net_print(&net, &mut buf);
+        foma_net_print(&net, &mut buf).expect("writing net to in-memory buffer");
         let s = String::from_utf8(buf).unwrap();
         /* (sigma_max+1)^2 = 25 integer lines between ##cmatrix## and ##end## */
         assert!(s.contains("##cmatrix##\n"));
@@ -2060,8 +2082,8 @@ mod tests {
         {
             let file = File::create(f.path()).unwrap();
             let mut enc = GzEncoder::new(file, Compression::default());
-            foma_net_print(&n1, &mut enc);
-            foma_net_print(&n2, &mut enc);
+            foma_net_print(&n1, &mut enc).expect("writing net to scratch file");
+            foma_net_print(&n2, &mut enc).expect("writing net to scratch file");
             enc.finish().unwrap();
         }
         let mut handle = fsm_read_binary_file_multiple_init(f.path());
@@ -2120,8 +2142,8 @@ mod tests {
         ));
     }
 
-    // [spec:foma:sem:io.net-print-att-fn/test]
-    // [spec:foma:sem:fomalib.net-print-att-fn/test]
+    // [spec:foma:sem:io.net-print-att-fn+1/test]
+    // [spec:foma:sem:fomalib.net-print-att-fn+1/test]
     // [spec:foma:sem:io.read-att-fn/test]
     // [spec:foma:sem:fomalib.read-att-fn/test]
     #[test]
@@ -2130,7 +2152,7 @@ mod tests {
         /* net_print_att emits arcs first, then final-state lines. */
         let net = craft_ab_net("att");
         let mut buf: Vec<u8> = Vec::new();
-        assert_eq!(net_print_att(opts, &net, &mut buf), 1);
+        net_print_att(opts, &net, &mut buf).expect("writing att to in-memory buffer");
         assert_eq!(buf, b"0\t1\ta\tb\n1\n");
 
         /* read_att parses that image back into an equivalent transducer. */
@@ -2434,7 +2456,7 @@ mod tests {
         // io_gets yields at end-of-buffer.
         let net = fsm_parse_regex(opts, "a b", None, None).unwrap();
         let mut text: Vec<u8> = Vec::new();
-        foma_net_print(&net, &mut text);
+        foma_net_print(&net, &mut text).expect("writing net to in-memory buffer");
         let s = String::from_utf8(text).unwrap();
         let cut = s.find("##states##").expect("net text has a states section");
         let mut iobh = io_init();
@@ -2453,7 +2475,7 @@ mod tests {
         let mut net = fsm_parse_regex(opts, "a b", None, None).unwrap();
         net.name = String::new();
         let mut text: Vec<u8> = Vec::new();
-        foma_net_print(&net, &mut text);
+        foma_net_print(&net, &mut text).expect("writing net to in-memory buffer");
         let mut iobh = io_init();
         iobh.io_buf = Some(text);
         iobh.io_buf_ptr = 0;
@@ -2471,7 +2493,7 @@ mod tests {
         let opts = &FomaOptions::default();
         let net = fsm_parse_regex(opts, "a b", None, None).unwrap();
         let mut text: Vec<u8> = Vec::new();
-        foma_net_print(&net, &mut text);
+        foma_net_print(&net, &mut text).expect("writing net to in-memory buffer");
         let s = String::from_utf8(text).unwrap();
         // Delete the separating space from the first sigma entry line ("N sym").
         let sig_start = s.find("##sigma##\n").expect("sigma header") + "##sigma##\n".len();

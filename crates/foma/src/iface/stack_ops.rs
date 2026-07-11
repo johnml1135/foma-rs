@@ -110,11 +110,19 @@ pub fn iface_save_stack(session: &mut Session, filename: &str) {
             return;
         };
         while let Some(next) = session.stack_entry_next(stack_ptr) {
-            session.stack_entry_fsm(stack_ptr, |f| foma_net_print(f, &mut outfile));
+            // A gzip write failure (e.g. disk full) is reported here rather than
+            // silently dropped; C ignored foma_net_print's return entirely.
+            if let Err(e) = session.stack_entry_fsm(stack_ptr, |f| foma_net_print(f, &mut outfile))
+            {
+                eprint!("Error writing to file {}: {}\n", filename, e);
+                return;
+            }
             stack_ptr = next;
         }
         // gzclose(outfile)
-        let _ = outfile.finish();
+        if let Err(e) = outfile.finish() {
+            eprint!("Error writing to file {}: {}\n", filename, e);
+        }
     }
 }
 

@@ -131,7 +131,14 @@ pub fn iface_write_att(session: &mut Session, filename: Option<&str>) -> i32 {
             }
         }
     };
-    session.stack_entry_fsm_with_opts(top, |opts, f| net_print_att(opts, f, &mut outfile));
+    // C ignored net_print_att's return; a write failure (broken pipe on stdout,
+    // disk full on a file) is now reported and turned into the error sentinel.
+    if let Err(e) =
+        session.stack_entry_fsm_with_opts(top, |opts, f| net_print_att(opts, f, &mut outfile))
+    {
+        eprint!("{e}\n");
+        return 1;
+    }
     // fclose only when filename != NULL; stdout is not closed. Both drop here.
     0
 }

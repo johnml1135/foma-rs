@@ -76,9 +76,11 @@
 > [spec:foma:def:io.foma-net-print-fn]
 > int foma_net_print(struct fsm *net, gzFile outfile)
 
-> [spec:foma:sem:io.foma-net-print-fn]
-> Serializes `net` in the textual foma binary format to the already-open gzFile
-> `outfile`; always returns 1. All output goes through gzprintf, so the result is
+> [spec:foma:sem:io.foma-net-print-fn+1]
+> Serializes `net` in the textual foma binary format to the already-open sink
+> `outfile`, returning `Ok(())` on success and propagating the first write failure
+> as its `io::Error` (the C returned a vestigial `1` no caller inspected; a write
+> error was silently dropped). All output goes through the writer, so the result is
 > gzip-compressed by the zlib layer. Several networks may be written back-to-back into
 > one file.
 > Header: the line "##foma-net 1.0##\n", then "##props##\n", then one props line of 13
@@ -411,8 +413,10 @@
 > [spec:foma:def:io.net-print-att-fn]
 > int net_print_att(struct fsm *net, FILE *outfile)
 
-> [spec:foma:sem:io.net-print-att-fn]
-> Writes `net` to the open FILE* in AT&T tab-separated format; always returns 1. Builds a
+> [spec:foma:sem:io.net-print-att-fn+1]
+> Writes `net` to the open sink in AT&T tab-separated format, returning `Ok(())` on
+> success and propagating the first write failure as its `io::Error` (the C returned a
+> vestigial `1` no caller inspected; a write error was silently dropped). Builds a
 > symbol-number → string table with sigma_to_list; if sigma_max >= 0, entry 0 (epsilon)
 > is replaced by the global g_att_epsilon (default "@0@", user-settable via the
 > "att-epsilon" variable).
