@@ -39,6 +39,7 @@ use crate::trie::{
 use crate::types::{
     DefinedNetworks, Fsm, FsmConstructHandle, FsmReadBinaryHandle, FsmState, IDENTITY, UNKNOWN,
 };
+use smol_str::SmolStr;
 
 /* C: #define READ_BUF_SIZE 4096 (the io_gets/io_net_read line buffer size).
 Rust uses growable Strings for line buffers, so no fixed-size overrun. */
@@ -60,8 +61,8 @@ pub struct Binaryline {
     pub target: i32,
     pub out: i32,
     pub symbol: i32,
-    pub name: Option<String>,
-    pub value: Option<String>,
+    pub name: Option<SmolStr>,
+    pub value: Option<SmolStr>,
 }
 
 // [spec:foma:def:io.io-buf-handle]
@@ -1771,7 +1772,7 @@ mod tests {
             target: 4,
             out: 5,
             symbol: 6,
-            name: Some("n".to_string()),
+            name: Some("n".into()),
             value: None,
         };
         assert_eq!(

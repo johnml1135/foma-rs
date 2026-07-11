@@ -241,6 +241,7 @@ dependencies = [
  "logos",
  "nfst-syntax",
  "nfst-xre",
+ "smol_str",
 ]
 
 [[package]]
@@ -255,6 +256,7 @@ dependencies = [
  "chumsky",
  "logos",
  "nfst-syntax",
+ "smol_str",
 ]
 
 [[package]]

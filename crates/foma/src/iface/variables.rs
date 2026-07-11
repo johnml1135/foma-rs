@@ -2,6 +2,7 @@
 //! pair split helpers, stack-check, and the foma_net_print re-export.
 //! See iface/mod.rs.
 use super::*;
+use smol_str::SmolStr;
 
 // [spec:foma:def:iface.foma-net-print-fn]
 // [spec:foma:sem:iface.foma-net-print-fn]
@@ -19,7 +20,7 @@ pub use crate::io::foma_net_print;
 pub enum GvField {
     Bool(fn(&mut FomaOptions) -> &mut bool),
     Int(fn(&mut FomaOptions) -> &mut i32),
-    Str(fn(&mut FomaOptions) -> &mut String),
+    Str(fn(&mut FomaOptions) -> &mut SmolStr),
 }
 
 // [spec:foma:def:iface.g-v]
@@ -246,7 +247,7 @@ pub fn iface_set_variable(session: &mut Session, name: &str, value: &str) {
                 }
                 GvField::Str(f) => {
                     // *ptr = strdup(value): C leaks the old string; replaced here.
-                    *f(&mut session.opts) = value.to_string();
+                    *f(&mut session.opts) = value.into();
                     print!("variable {} = {}\n", gv.name, value);
                 }
                 GvField::Int(f) => {

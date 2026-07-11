@@ -13,6 +13,8 @@
 //! `iface/variables.rs`. Booleans are `bool` here (C used 0/1 ints); the C
 //! defaults are preserved exactly.
 
+use smol_str::SmolStr;
+
 /// The option set of one foma session (C: the `g_*` globals).
 #[derive(Debug, Clone, PartialEq)]
 pub struct FomaOptions {
@@ -66,7 +68,7 @@ pub struct FomaOptions {
     pub lexc_align: bool,
     /// C `char *g_att_epsilon = "@0@"` — CLI "att-epsilon": the epsilon symbol
     /// used when reading/writing AT&T format.
-    pub att_epsilon: String,
+    pub att_epsilon: SmolStr,
     /// C: `struct _fsm_options fsm_options` (foma.h), the library option set
     /// behind fsm_set_option/fsm_get_option — one field, folded in here.
     // [spec:foma:def:foma.fsm-options]
@@ -96,7 +98,7 @@ impl Default for FomaOptions {
             med_limit: 3,
             med_cutoff: 15,
             lexc_align: false,
-            att_epsilon: String::from("@0@"),
+            att_epsilon: SmolStr::new("@0@"),
             skip_word_boundary_marker: false,
         }
     }
