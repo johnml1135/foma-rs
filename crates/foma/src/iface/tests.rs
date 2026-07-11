@@ -901,20 +901,20 @@ fn read_att_and_prolog_roundtrip_and_error() {
         foma_write_prolog(&mut net, Some(pl)).expect("prolog write to temp file");
     }
     let mut session = Session::new();
-    assert_eq!(iface_read_att(&mut session, "/no/such/foma/att"), 1);
-    assert_eq!(iface_read_prolog(&mut session, "/no/such/foma/prolog"), 1);
+    assert!(!iface_read_att(&mut session, "/no/such/foma/att"));
+    assert!(!iface_read_prolog(&mut session, "/no/such/foma/prolog"));
     assert_eq!(session.stack_size(), 0);
-    assert_eq!(iface_read_att(&mut session, att), 0);
+    assert!(iface_read_att(&mut session, att));
     assert_eq!(session.stack_size(), 1);
     assert!(top_is(&mut session, "a b"));
-    assert_eq!(iface_read_prolog(&mut session, pl), 0);
+    assert!(iface_read_prolog(&mut session, pl));
     assert_eq!(session.stack_size(), 1);
     assert!(top_is(&mut session, "a b"));
 }
 
 // read text / spaced-text: compile a newline word list / space-separated
 // symbol lines into an automaton (topsort(minimize)); pushed on the stack. A
-// bad path returns 1.
+// bad path returns false.
 // [spec:foma:sem:iface.iface-read-text-fn/test]
 // [spec:foma:sem:foma.iface-read-text-fn/test]
 // [spec:foma:sem:iface.iface-read-spaced-text-fn/test]
@@ -930,19 +930,16 @@ fn read_text_and_spaced_text() {
     std::fs::write(rst, "a b c\n").unwrap();
 
     let mut session = Session::new();
-    assert_eq!(iface_read_text(&mut session, "/no/such/foma/text"), 1);
-    assert_eq!(
-        iface_read_spaced_text(&mut session, "/no/such/foma/spaced"),
-        1
-    );
+    assert!(!iface_read_text(&mut session, "/no/such/foma/text"));
+    assert!(!iface_read_spaced_text(&mut session, "/no/such/foma/spaced"));
     assert_eq!(session.stack_size(), 0);
-    assert_eq!(iface_read_text(&mut session, rt), 0);
+    assert!(iface_read_text(&mut session, rt));
     assert_eq!(session.stack_size(), 1);
     let net = session.stack_pop().unwrap();
     assert!(accepts_down(&net, "cat"));
     assert!(accepts_down(&net, "dog"));
     assert!(!accepts_down(&net, "cow"));
-    assert_eq!(iface_read_spaced_text(&mut session, rst), 0);
+    assert!(iface_read_spaced_text(&mut session, rst));
     assert_eq!(session.stack_size(), 1);
     assert!(accepts_down(&session.stack_pop().unwrap(), "abc"));
 }
@@ -1564,10 +1561,10 @@ fn write_att_and_prolog_roundtrip() {
     let pl = plp.to_str().unwrap();
 
     let mut session = Session::new();
-    assert_eq!(iface_write_att(&mut session, Some(att)), 1); // empty: returns 1
+    assert!(!iface_write_att(&mut session, Some(att))); // empty: fails
 
     push(&mut session, "a b");
-    assert_eq!(iface_write_att(&mut session, Some(att)), 0);
+    assert!(iface_write_att(&mut session, Some(att)));
     assert_eq!(session.stack_size(), 1); // net not consumed
     let back = read_att(&session.opts, att).unwrap();
     let expected = fsm_parse_regex(&session.opts, "a b", None, None).unwrap();

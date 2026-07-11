@@ -20,17 +20,17 @@ pub fn iface_load_defined(session: &mut Session, filename: &str) {
 // [spec:foma:sem:iface.iface-read-att-fn]
 // [spec:foma:def:foma.iface-read-att-fn]
 // [spec:foma:sem:foma.iface-read-att-fn]
-pub fn iface_read_att(session: &mut Session, filename: &str) -> i32 {
+pub fn iface_read_att(session: &mut Session, filename: &str) -> bool {
     print!("Reading AT&T file: {}\n", filename);
     match read_att(&session.opts, filename) {
         None => {
             eprint!("{}: ", filename);
             perror("Error opening file");
-            1
+            false
         }
         Some(tempnet) => {
             session.stack_add(tempnet);
-            0
+            true
         }
     }
 }
@@ -39,17 +39,17 @@ pub fn iface_read_att(session: &mut Session, filename: &str) -> i32 {
 // [spec:foma:sem:iface.iface-read-prolog-fn]
 // [spec:foma:def:foma.iface-read-prolog-fn]
 // [spec:foma:sem:foma.iface-read-prolog-fn]
-pub fn iface_read_prolog(session: &mut Session, filename: &str) -> i32 {
+pub fn iface_read_prolog(session: &mut Session, filename: &str) -> bool {
     print!("Reading prolog: {}\n", filename);
     match fsm_read_prolog(filename) {
         None => {
             eprint!("{}: ", filename);
             perror("Error opening file");
-            1
+            false
         }
         Some(tempnet) => {
             session.stack_add(tempnet);
-            0
+            true
         }
     }
 }
@@ -58,16 +58,16 @@ pub fn iface_read_prolog(session: &mut Session, filename: &str) -> i32 {
 // [spec:foma:sem:iface.iface-read-spaced-text-fn]
 // [spec:foma:def:foma.iface-read-spaced-text-fn]
 // [spec:foma:sem:foma.iface-read-spaced-text-fn]
-pub fn iface_read_spaced_text(session: &mut Session, filename: &str) -> i32 {
+pub fn iface_read_spaced_text(session: &mut Session, filename: &str) -> bool {
     match fsm_read_spaced_text_file(filename) {
         None => {
             eprint!("{}: ", filename);
             perror("File error");
-            1
+            false
         }
         Some(net) => {
             session.stack_add(fsm_topsort(fsm_minimize(&session.opts, net)));
-            0
+            true
         }
     }
 }
@@ -76,16 +76,16 @@ pub fn iface_read_spaced_text(session: &mut Session, filename: &str) -> i32 {
 // [spec:foma:sem:iface.iface-read-text-fn]
 // [spec:foma:def:foma.iface-read-text-fn]
 // [spec:foma:sem:foma.iface-read-text-fn]
-pub fn iface_read_text(session: &mut Session, filename: &str) -> i32 {
+pub fn iface_read_text(session: &mut Session, filename: &str) -> bool {
     match fsm_read_text_file(filename) {
         None => {
             eprint!("{}: ", filename);
             perror("File error");
-            1
+            false
         }
         Some(net) => {
             session.stack_add(fsm_topsort(fsm_minimize(&session.opts, net)));
-            0
+            true
         }
     }
 }
@@ -110,12 +110,12 @@ pub fn iface_save_defined(session: &mut Session, filename: &str) {
 // [spec:foma:sem:iface.iface-write-att-fn]
 // [spec:foma:def:foma.iface-write-att-fn]
 // [spec:foma:sem:foma.iface-write-att-fn]
-pub fn iface_write_att(session: &mut Session, filename: Option<&str>) -> i32 {
+pub fn iface_write_att(session: &mut Session, filename: Option<&str>) -> bool {
     if !iface_stack_check(session, 1) {
-        return 1;
+        return false;
     }
     let Some(top) = session.stack_find_top() else {
-        return 1;
+        return false;
     };
     let mut outfile: Output = match filename {
         None => Output::Stdout(std::io::stdout()),
@@ -126,21 +126,21 @@ pub fn iface_write_att(session: &mut Session, filename: Option<&str>) -> i32 {
                 Err(_) => {
                     eprint!("{}: ", name);
                     perror("File error opening.");
-                    return 1;
+                    return false;
                 }
             }
         }
     };
     // C ignored net_print_att's return; a write failure (broken pipe on stdout,
-    // disk full on a file) is now reported and turned into the error sentinel.
+    // disk full on a file) is now reported and turns into a false result.
     if let Err(e) =
         session.stack_entry_fsm_with_opts(top, |opts, f| net_print_att(opts, f, &mut outfile))
     {
         eprint!("{e}\n");
-        return 1;
+        return false;
     }
     // fclose only when filename != NULL; stdout is not closed. Both drop here.
-    0
+    true
 }
 
 // [spec:foma:def:iface.iface-write-prolog-fn]
