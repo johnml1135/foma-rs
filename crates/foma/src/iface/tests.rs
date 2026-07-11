@@ -1620,14 +1620,14 @@ fn sigptr_maps_reserved_and_special_symbols() {
 }
 
 // print_sigma (static): writes "Sigma:" + the >2 symbols + "@"/"?" then a
-// "Size:" line, and returns 1. Byte-exact on the sigma of "a b".
-// [spec:foma:sem:iface.print-sigma-fn/test]
+// "Size:" line. Byte-exact on the sigma of "a b".
+// [spec:foma:sem:iface.print-sigma-fn+1/test]
 #[test]
 fn print_sigma_static_formats_alphabet() {
     let opts = &FomaOptions::default();
     let net = fsm_parse_regex(opts, "a b", None, None).unwrap();
     let mut buf: Vec<u8> = Vec::new();
-    assert_eq!(print_sigma(&net.sigma, &mut buf), 1);
+    print_sigma(&net.sigma, &mut buf);
     let s = String::from_utf8(buf).unwrap();
     assert!(s.starts_with("Sigma:"), "got {:?}", s);
     assert!(s.contains(" a"));
@@ -1636,47 +1636,47 @@ fn print_sigma_static_formats_alphabet() {
 }
 
 // print_stats (static) + print_mem_size (static): print_stats drives
-// print_mem_size and returns 0.
-// [spec:foma:sem:iface.print-stats-fn/test]
-// [spec:foma:sem:foma.print-stats-fn/test]
+// print_mem_size (side-effect only).
+// [spec:foma:sem:iface.print-stats-fn+1/test]
+// [spec:foma:sem:foma.print-stats-fn+1/test]
 // [spec:foma:sem:iface.print-mem-size-fn/test]
 #[test]
-fn print_stats_static_returns_zero() {
+fn print_stats_static_prints_size_line() {
     let opts = &FomaOptions::default();
     let mut net = fsm_parse_regex(opts, "a b | c", None, None).unwrap();
     fsm_count(&mut net);
-    assert_eq!(print_stats(&net), 0);
+    print_stats(&net);
     // exercise print_mem_size directly as well (side-effect only).
     print_mem_size(&net);
 }
 
 // print_net (static): writes the Sigma/Net/Flags/Arity/arc dump to stdout
-// (None) or a file (Some), returns 0, and does not touch the stack.
-// [spec:foma:sem:iface.print-net-fn/test]
+// (None) or a file (Some) and does not touch the stack.
+// [spec:foma:sem:iface.print-net-fn+1/test]
 #[test]
 fn print_net_static_writes_dump() {
     let opts = &FomaOptions::default();
     let mut net = fsm_parse_regex(opts, "a b", None, None).unwrap();
-    assert_eq!(print_net(&mut net, None), 0); // to stdout
+    print_net(&mut net, None); // to stdout
     let p = std::env::temp_dir().join("foma_s2_printnet.txt");
     let mut net = fsm_parse_regex(opts, "a b", None, None).unwrap();
-    assert_eq!(print_net(&mut net, Some(p.to_str().unwrap())), 0);
+    print_net(&mut net, Some(p.to_str().unwrap()));
     let s = std::fs::read_to_string(&p).unwrap();
     assert!(s.contains("Sigma:"));
     assert!(s.contains("Net:"));
     assert!(s.contains("Arity:"));
 }
 
-// print_dot (static): writes a Graphviz digraph and returns 1.
-// [spec:foma:sem:iface.print-dot-fn+1/test]
+// print_dot (static): writes a Graphviz digraph.
+// [spec:foma:sem:iface.print-dot-fn+2/test]
 #[test]
 fn print_dot_static_writes_digraph() {
     let opts = &FomaOptions::default();
     let mut net = fsm_parse_regex(opts, "a b", None, None).unwrap();
-    assert_eq!(print_dot(&mut net, None), 1); // to stdout
+    print_dot(&mut net, None); // to stdout
     let p = std::env::temp_dir().join("foma_s2_printdot.dot");
     let mut net = fsm_parse_regex(opts, "a b", None, None).unwrap();
-    assert_eq!(print_dot(&mut net, Some(p.to_str().unwrap())), 1);
+    print_dot(&mut net, Some(p.to_str().unwrap()));
     let s = std::fs::read_to_string(&p).unwrap();
     assert!(
         s.starts_with("digraph A {"),
@@ -1685,10 +1685,7 @@ fn print_dot_static_writes_digraph() {
     );
     assert!(s.trim_end().ends_with("}"));
     // Unwritable path (a file under a non-existent directory): report the error
-    // and return 1 instead of crashing.
+    // and return instead of crashing.
     let mut net = fsm_parse_regex(opts, "a b", None, None).unwrap();
-    assert_eq!(
-        print_dot(&mut net, Some("/foma_no_such_dir_xyz123/out.dot")),
-        1
-    );
+    print_dot(&mut net, Some("/foma_no_such_dir_xyz123/out.dot"));
 }

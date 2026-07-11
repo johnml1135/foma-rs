@@ -1138,6 +1138,20 @@ children (
                     }
                 )
             }
+
+            {
+                id w9-return-types
+                title "De-C-ify remaining i32 return types (4 categories): vestigial always-1 → () (stack_init/clear/print, fsm_destroy, fsm_sigma_destroy, print_net/stats/sigma/dot/view_net); comparators -1/0/1 → std::cmp::Ordering (ssortcmp, trans_sort_cmp×2, sort_cmp, linesortcompin/out) + namecmp → bool; -1-not-found → Option (sigma_find/find_number/substitute, lexc_find_sigma_hash/find_mc, triplet_hash_find); read/write status → Result (fsm_write_binary_file, iface_read_att/prolog/spaced_text/text, iface_write_att, add_defined/remove_defined). Genuine i32 VALUES stay. hfst-facing changes (fsm_write_binary_file) flagged for the backend catch-up."
+                priority 2
+                log (
+                    {
+                        at 2026-07-11T00:15:11.359723Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Todo → Doing (nplan_start)"
+                    }
+                )
+            }
         )
     }
 )

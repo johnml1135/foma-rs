@@ -106,4 +106,5 @@ assertions (
     {id w9-harden, kind @complete, author "brendan@necessary.nu", at 2026-07-10T21:55:55.442955Z}
     {id w9-ergo, kind @complete, author "brendan@necessary.nu", at 2026-07-10T22:28:25.371454Z}
     {id w9-io-errors, kind @complete, author "brendan@necessary.nu", at 2026-07-11T00:09:51.740611Z}
+    {id w9-return-types, kind @doing, author "brendan@necessary.nu", at 2026-07-11T00:15:11.359723Z}
 )

@@ -66,10 +66,10 @@
 > [spec:foma:def:structures.fsm-destroy-fn]
 > int fsm_destroy(struct fsm *net)
 
-> [spec:foma:sem:structures.fsm-destroy-fn]
-> Returns 0 without doing anything when `net` is NULL.
+> [spec:foma:sem:structures.fsm-destroy-fn+1]
+> Does nothing when `net` is NULL (a NULL-able caller keeps the guard at the call site; a Box argument is never NULL).
 > Otherwise: if net->medlookup and its confusion_matrix are both non-NULL, frees the matrix and NULLs the field; then if medlookup is non-NULL, frees it and NULLs the field.
-> Calls fsm_sigma_destroy(net->sigma) (harmless on a NULL sigma list) and sets net->sigma = NULL; if net->states is non-NULL, frees it and NULLs it; finally frees net itself and returns 1.
+> Calls fsm_sigma_destroy(net->sigma) (harmless on a NULL sigma list) and sets net->sigma = NULL; if net->states is non-NULL, frees it and NULLs it; finally frees net itself. Returns nothing (the C `int` return, always 1 on a non-NULL net, carries no information).
 
 > [spec:foma:def:structures.fsm-empty-fn]
 > struct fsm_state *fsm_empty()
@@ -264,9 +264,9 @@
 > [spec:foma:def:structures.fsm-sigma-destroy-fn]
 > int fsm_sigma_destroy(struct sigma *sigma)
 
-> [spec:foma:sem:structures.fsm-sigma-destroy-fn]
+> [spec:foma:sem:structures.fsm-sigma-destroy-fn+1]
 > Frees an entire sigma linked list: for each node (saving its next pointer first), frees node->symbol if non-NULL (nulling the field before the node itself is freed), then frees the node.
-> Safe on a NULL list (loop body never runs). Always returns 1.
+> Safe on a NULL list (loop body never runs). Returns nothing (the C `int` return, always 1, carries no information).
 
 > [spec:foma:def:structures.fsm-sigma-net-fn]
 > struct fsm *fsm_sigma_net(struct fsm *net)

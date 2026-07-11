@@ -23,7 +23,7 @@
 > [spec:foma:def:stack.stack-clear-fn]
 > int stack_clear(void)
 
-> [spec:foma:sem:stack.stack-clear-fn]
+> [spec:foma:sem:stack.stack-clear-fn+1]
 > Destroys every entry on the global network stack and re-initializes it empty.
 > Loop: starting at main_stack, while the current entry's `next` is non-NULL (i.e. it is
 > not the sentinel): call apply_clear on its `ah` if non-NULL and apply_med_clear on its
@@ -31,8 +31,9 @@
 > fsm_destroy on the entry's fsm (fsm_destroy(NULL) is a safe no-op), free the entry,
 > and restart from the new main_stack. After the loop the current entry is the sentinel;
 > free it too (without touching its ah/amedh, which are uninitialized). Finally call
-> stack_init() to allocate a fresh empty sentinel into main_stack and return its result
-> (always 1). All fsms and apply handles on the stack are freed.
+> stack_init() to allocate a fresh empty sentinel into main_stack. All fsms and apply
+> handles on the stack are freed. Returns nothing (the C `int` return, always 1, encoded
+> a C void habit and carries no information).
 
 > [spec:foma:def:stack.stack-find-bottom-fn]
 > struct stack_entry *stack_find_bottom ()
@@ -90,17 +91,18 @@
 > [spec:foma:def:stack.stack-init-fn]
 > int stack_init()
 
-> [spec:foma:sem:stack.stack-init-fn]
+> [spec:foma:sem:stack.stack-init-fn+1]
 > Initializes the global network stack. The stack is a doubly linked list of
 > struct stack_entry {number, ah, amedh, fsm, next, previous} whose head is stored in
 > the global `struct stack_entry *main_stack`; the list always terminates in a sentinel
 > entry with number == -1, fsm == NULL, next == NULL. Real entries sit between the head
 > and the sentinel: head = bottom, the entry just before the sentinel = top. This
 > function mallocs one entry, sets number = -1, fsm = NULL, next = NULL,
-> previous = NULL (ah and amedh are left uninitialized), assigns it to main_stack, and
-> returns 1. It does not free any previous list (callers leak if main_stack was already
+> previous = NULL (ah and amedh are left uninitialized), and assigns it to main_stack.
+> It does not free any previous list (callers leak if main_stack was already
 > populated); every other stack_* function dereferences main_stack unconditionally, so
-> this must be called first.
+> this must be called first. Returns nothing (the C `int` return, always 1, encoded a C
+> void habit and carries no information).
 
 > [spec:foma:def:stack.stack-isempty-fn]
 > int stack_isempty ()
@@ -129,9 +131,10 @@
 > [spec:foma:def:stack.stack-print-fn]
 > int stack_print ()
 
-> [spec:foma:sem:stack.stack-print-fn]
-> No-op stub: performs nothing and unconditionally returns 1. Reads and writes no
-> state, prints nothing.
+> [spec:foma:sem:stack.stack-print-fn+1]
+> No-op stub: performs nothing. Reads and writes no state, prints nothing, returns
+> nothing (the C `int` return, always 1, encoded a C void habit and carries no
+> information).
 
 > [spec:foma:def:stack.stack-rotate-fn]
 > int stack_rotate ()

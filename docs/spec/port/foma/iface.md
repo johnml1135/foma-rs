@@ -964,10 +964,10 @@
 > [spec:foma:def:iface.print-dot-fn]
 > static int print_dot(struct fsm *net, char *filename)
 
-> [spec:foma:sem:iface.print-dot-fn+1]
+> [spec:foma:sem:iface.print-dot-fn+2]
 > Writes `net` in Graphviz dot format to filename (fopen "w"; NULL filename → stdout). The C source
 > did not check the fopen result (latent NULL-deref crash on open failure); instead, on open failure
-> report the error ("<name>: <strerror>\n" via perror) and return 1 without writing, matching the other
+> report the error ("<name>: <strerror>\n" via perror) and return without writing, matching the other
 > file-writing commands. Steps: fsm_count(net); build a finals[] table indexed by state_no. Emit "digraph A {\n"
 > "rankdir = LR;\n"; then for each state 0..statecount-1 one line "node
 > [shape=doublecircle,style=filled] %i\n" if final else "node [shape=circle,style=filled] %i\n".
@@ -979,8 +979,8 @@
 > "<in:out>" with both sides escaped; after each item, if accumulated label length exceeds 12 emit
 > literal "\\n" (dot newline) and reset the counter, else a space. Edge ends "\"];\n" (so the label
 > always has a trailing space or \n before the quote). Finally "}\n", free tables, fclose only when
-> filename non-NULL, return 1. Strings returned by escape_string/sigptr may be freshly allocated and
-> are leaked.
+> filename non-NULL. Returns nothing (the C `int` return, always 1, carries no information). Strings
+> returned by escape_string/sigptr may be freshly allocated and are leaked.
 
 > [spec:foma:def:iface.print-mem-size-fn]
 > void print_mem_size(struct fsm *net)
@@ -995,7 +995,7 @@
 > [spec:foma:def:iface.print-net-fn]
 > static int print_net(struct fsm *net, char *filename)
 
-> [spec:foma:sem:iface.print-net-fn]
+> [spec:foma:sem:iface.print-net-fn+1]
 > Human-readable dump of `net`. Output target: filename == NULL → stdout; else fopen "w" (on failure
 > prints "Error writing to file %s. Using stdout.\n" and falls back to stdout) and then
 > unconditionally prints "Writing network to file %s.\n" to stdout (even after the fallback).
@@ -1009,27 +1009,30 @@
 > "s%i:\t". Each arc: if in == out — IDENTITY → "@ -> ", UNKNOWN → "?:? -> ", else "<sym> -> " via
 > sigptr; if in != out → "<%s:%s> -> " (sigptr each side). Then "f" if the target is final, "s%i"
 > (target), and ", " if the next array entry has the same state_no else ".\n". fclose only when
-> filename non-NULL; free finals; return 0.
+> filename non-NULL; free finals. Returns nothing (the C `int` return, always 0, carries no
+> information).
 
 > [spec:foma:def:iface.print-sigma-fn]
 > static int print_sigma(struct sigma *sigma, FILE *out)
 
-> [spec:foma:sem:iface.print-sigma-fn]
+> [spec:foma:sem:iface.print-sigma-fn+1]
 > Writes "Sigma:" then walks the sigma list in order: entries with number > 2 print " <symbol>" and
 > increment a size counter; number == IDENTITY (2) prints " @"; number == UNKNOWN (1) prints " ?";
 > EPSILON (0) prints nothing. Then "\n" and "Size: %i.\n" where the size counts ONLY the regular
-> (number > 2) symbols, excluding @ and ?. Returns 1.
+> (number > 2) symbols, excluding @ and ?. Returns nothing (the C `int` return, always 1, carries no
+> information).
 
 > [spec:foma:def:iface.print-stats-fn]
 > int print_stats(struct fsm *net)
 
-> [spec:foma:sem:iface.print-stats-fn]
+> [spec:foma:sem:iface.print-stats-fn+1]
 > One-line size summary printed to stdout (used by stack_add when g_verbose, and by print defined).
 > Calls print_mem_size(net) first (no newline), then "1 state, " or "%i states, ", then "1 arc, " or
 > "%i arcs, ", then pathcount: 1 → "1 path"; -1 (PATHCOUNT_CYCLIC) → "Cyclic"; -2
 > (PATHCOUNT_OVERFLOW) → "more than %lld paths" with LLONG_MAX; -3 (PATHCOUNT_UNKNOWN) → "unknown
 > number of paths"; otherwise "%lld paths"; finally ".\n". Reads the cached statecount/arccount/
-> pathcount fields (does NOT call fsm_count). Returns 0.
+> pathcount fields (does NOT call fsm_count). Returns nothing (the C `int` return, always 0, carries
+> no information).
 
 > [spec:foma:def:iface.sigptr-fn]
 > static char *sigptr(struct sigma *sigma, int number)
@@ -1045,13 +1048,14 @@
 > [spec:foma:def:iface.view-net-fn]
 > static int view_net(struct fsm *net)
 
-> [spec:foma:sem:iface.view-net-fn]
+> [spec:foma:sem:iface.view-net-fn+1]
 > Displays `net` graphically: generates a temp name with tempnam(NULL, "foma"), appends ".dot",
 > strdups it, and writes the net there via print_dot. Makes a second tempnam-based name for the PNG,
 > then runs via system(): on macOS (__APPLE__) "dot -Tpng <dotfile> > <png>.png " then
 > "/usr/bin/open <png>.png 2>/dev/null &"; elsewhere "dot -Tpng <dotfile> > <png> " then
 > "/usr/bin/xdg-open <png> 2>/dev/null &". If either system() call returns -1 prints "Error writing
 > tempfile.\n" or "Error opening viewer.\n" respectively (command exit status otherwise ignored).
-> Frees the two name strings (temp files are never deleted), returns 1. Requires graphviz `dot` on
+> Frees the two name strings (temp files are never deleted). Returns nothing (the C `int` return,
+> always 1, carries no information). Requires graphviz `dot` on
 > PATH; commands are built with sprintf into a 255-byte buffer (no bounds checking).
 

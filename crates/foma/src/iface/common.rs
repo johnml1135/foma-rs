@@ -49,8 +49,8 @@ pub(crate) fn sigptr(sigma: &[Sigma], number: i32) -> String {
 }
 
 // [spec:foma:def:iface.print-net-fn]
-// [spec:foma:sem:iface.print-net-fn]
-pub(crate) fn print_net(net: &mut Fsm, filename: Option<&str>) -> i32 {
+// [spec:foma:sem:iface.print-net-fn+1]
+pub(crate) fn print_net(net: &mut Fsm, filename: Option<&str>) {
     let mut out: Output = match filename {
         None => Output::Stdout(std::io::stdout()),
         Some(name) => match File::create(name) {
@@ -165,7 +165,6 @@ pub(crate) fn print_net(net: &mut Fsm, filename: Option<&str>) -> i32 {
         i += 1;
     }
     // fclose only when filename != NULL; free finals. All drop at scope end.
-    0
 }
 
 // [spec:foma:def:iface.print-mem-size-fn]
@@ -204,10 +203,10 @@ pub(crate) fn print_mem_size(net: &Fsm) {
 }
 
 // [spec:foma:def:iface.print-stats-fn]
-// [spec:foma:sem:iface.print-stats-fn]
+// [spec:foma:sem:iface.print-stats-fn+1]
 // [spec:foma:def:foma.print-stats-fn]
-// [spec:foma:sem:foma.print-stats-fn]
-pub fn print_stats(net: &Fsm) -> i32 {
+// [spec:foma:sem:foma.print-stats-fn+1]
+pub fn print_stats(net: &Fsm) {
     print_mem_size(net);
     if net.statecount == 1 {
         print!("1 state, ");
@@ -232,12 +231,11 @@ pub fn print_stats(net: &Fsm) -> i32 {
         print!("{} paths", net.pathcount);
     }
     print!(".\n");
-    0
 }
 
 // [spec:foma:def:iface.print-sigma-fn]
-// [spec:foma:sem:iface.print-sigma-fn]
-pub(crate) fn print_sigma<W: std::io::Write + ?Sized>(sigma: &[Sigma], out: &mut W) -> i32 {
+// [spec:foma:sem:iface.print-sigma-fn+1]
+pub(crate) fn print_sigma<W: std::io::Write + ?Sized>(sigma: &[Sigma], out: &mut W) {
     let mut size = 0;
     write!(out, "Sigma:").expect("writing sigma");
     for node in sigma {
@@ -254,12 +252,11 @@ pub(crate) fn print_sigma<W: std::io::Write + ?Sized>(sigma: &[Sigma], out: &mut
     }
     write!(out, "\n").expect("writing sigma");
     write!(out, "Size: {}.\n", size).expect("writing sigma");
-    1
 }
 
 // [spec:foma:def:iface.print-dot-fn]
-// [spec:foma:sem:iface.print-dot-fn+1]
-pub(crate) fn print_dot(net: &mut Fsm, filename: Option<&str>) -> i32 {
+// [spec:foma:sem:iface.print-dot-fn+2]
+pub(crate) fn print_dot(net: &mut Fsm, filename: Option<&str>) {
     fsm_count(net);
     let mut finals = vec![0i16; net.statecount as usize];
     let mut i = 0usize;
@@ -280,7 +277,7 @@ pub(crate) fn print_dot(net: &mut Fsm, filename: Option<&str>) -> i32 {
             Err(_) => {
                 eprint!("{}: ", name);
                 perror("Error opening dot file.");
-                return 1;
+                return;
             }
         },
         None => Output::Stdout(std::io::stdout()),
@@ -352,14 +349,13 @@ pub(crate) fn print_dot(net: &mut Fsm, filename: Option<&str>) -> i32 {
     // free(finals); free(printed).
     write!(dotfile, "}}\n").expect("writing dot graph");
     // fclose only when filename != NULL — dropped at scope end.
-    1
 }
 
 // [spec:foma:def:iface.view-net-fn]
-// [spec:foma:sem:iface.view-net-fn]
+// [spec:foma:sem:iface.view-net-fn+1]
 // [spec:foma:def:foma.view-net-fn]
-// [spec:foma:sem:foma.view-net-fn]
-pub(crate) fn view_net(net: &mut Fsm) -> i32 {
+// [spec:foma:sem:foma.view-net-fn+1]
+pub(crate) fn view_net(net: &mut Fsm) {
     // DEVIATION from C: no tempnam(); a unique temp path is built under the system
     // temp dir from the pid + a per-thread counter (observably a unique file).
     fn tempnam_foma() -> String {
@@ -406,5 +402,4 @@ pub(crate) fn view_net(net: &mut Fsm) -> i32 {
         print!("Error opening viewer.\n");
     }
     // free(pngname); free(dotname) — temp files are never deleted (as in C).
-    1
 }

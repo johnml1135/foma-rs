@@ -273,21 +273,20 @@ pub fn fsm_sigma_pairs_net(net: Box<Fsm>) -> Box<Fsm> {
 }
 
 // [spec:foma:def:structures.fsm-sigma-destroy-fn]
-// [spec:foma:sem:structures.fsm-sigma-destroy-fn]
+// [spec:foma:sem:structures.fsm-sigma-destroy-fn+1]
 // [spec:foma:def:fomalib.fsm-sigma-destroy-fn]
-// [spec:foma:sem:fomalib.fsm-sigma-destroy-fn]
-pub fn fsm_sigma_destroy(sigma: Vec<Sigma>) -> i32 {
+// [spec:foma:sem:fomalib.fsm-sigma-destroy-fn+1]
+pub fn fsm_sigma_destroy(sigma: Vec<Sigma>) {
     /* per node: free(symbol), free(node) — the Vec (and its owned symbols)
     is dropped when this consumed argument goes out of scope */
     drop(sigma);
-    1
 }
 
 // [spec:foma:def:structures.fsm-destroy-fn]
-// [spec:foma:sem:structures.fsm-destroy-fn]
+// [spec:foma:sem:structures.fsm-destroy-fn+1]
 // [spec:foma:def:fomalib.fsm-destroy-fn]
-// [spec:foma:sem:fomalib.fsm-destroy-fn]
-pub fn fsm_destroy(net: Box<Fsm>) -> i32 {
+// [spec:foma:sem:fomalib.fsm-destroy-fn+1]
+pub fn fsm_destroy(net: Box<Fsm>) {
     /* C: returns 0 without doing anything when net == NULL; a Box argument
     is never NULL — NULL-able callers keep the check at the call site */
     let mut net = net;
@@ -301,7 +300,6 @@ pub fn fsm_destroy(net: Box<Fsm>) -> i32 {
         net.states = Vec::new();
     }
     /* free(net) — drop */
-    1
 }
 
 // [spec:foma:def:structures.fsm-create-fn]
@@ -1782,11 +1780,11 @@ mod tests {
         assert_eq!(net2.name, long);
     }
 
-    // [spec:foma:sem:structures.fsm-sigma-destroy-fn/test]
-    // [spec:foma:sem:fomalib.fsm-sigma-destroy-fn/test]
+    // [spec:foma:sem:structures.fsm-sigma-destroy-fn+1/test]
+    // [spec:foma:sem:fomalib.fsm-sigma-destroy-fn+1/test]
     #[test]
-    fn sigma_destroy_always_returns_1() {
-        assert_eq!(fsm_sigma_destroy(Vec::new()), 1);
+    fn sigma_destroy_drops_the_list() {
+        fsm_sigma_destroy(Vec::new());
         let list = vec![
             Sigma {
                 number: 3,
@@ -1797,19 +1795,19 @@ mod tests {
                 symbol: "b".to_string(),
             },
         ];
-        assert_eq!(fsm_sigma_destroy(list), 1);
+        fsm_sigma_destroy(list);
     }
 
-    // [spec:foma:sem:structures.fsm-destroy-fn/test]
-    // [spec:foma:sem:fomalib.fsm-destroy-fn/test]
+    // [spec:foma:sem:structures.fsm-destroy-fn+1/test]
+    // [spec:foma:sem:fomalib.fsm-destroy-fn+1/test]
     #[test]
-    fn destroy_returns_1() {
-        assert_eq!(fsm_destroy(fsm_empty_set()), 1);
+    fn destroy_frees_the_net() {
+        fsm_destroy(fsm_empty_set());
         let mut net = fsm_empty_set();
         net.medlookup = Some(Box::new(crate::types::Medlookup {
             confusion_matrix: vec![1, 2, 3],
         }));
-        assert_eq!(fsm_destroy(net), 1);
+        fsm_destroy(net);
     }
 
     // [spec:foma:sem:structures.fsm-isuniversal-fn+1/test]

@@ -1240,7 +1240,7 @@
 > [spec:foma:def:foma.print-stats-fn]
 > int print_stats(struct fsm *net)
 
-> [spec:foma:sem:foma.print-stats-fn]
+> [spec:foma:sem:foma.print-stats-fn+1]
 > Implemented in foma/iface.c. First print_mem_size(net): estimates memory as the sum over
 > sigma entries of strlen(symbol)+1+sizeof(struct sigma), plus sizeof(struct fsm) +
 > sizeof(struct fsm_state) * net->linecount, printed as "%i bytes. " under 1024, else
@@ -1249,7 +1249,7 @@
 > count: 1 -> "1 path"; PATHCOUNT_CYCLIC (-1) -> "Cyclic"; PATHCOUNT_OVERFLOW (-2) ->
 > "more than <LLONG_MAX> paths"; PATHCOUNT_UNKNOWN (-3) -> "unknown number of paths";
 > otherwise "%lld paths"; then ".\n". Reads the cached statecount/arccount/pathcount fields —
-> no recount — and always returns 0.
+> no recount. Returns nothing (the C `int` return, always 0, carries no information).
 
 > [spec:foma:def:foma.purge-quantifier-fn]
 > void purge_quantifier (char *string)
@@ -1292,12 +1292,12 @@
 > [spec:foma:def:foma.stack-clear-fn]
 > int stack_clear()
 
-> [spec:foma:sem:foma.stack-clear-fn]
+> [spec:foma:sem:foma.stack-clear-fn+1]
 > Implemented in foma/stack.c. Destroys every real entry from the bottom up: for each entry
 > whose next != NULL it apply_clear()s / apply_med_clear()s any cached handles, advances
 > main_stack to the next entry, fsm_destroy()s the entry's fsm (NULL-safe) and free()s the
-> entry. Finally frees the trailing sentinel and re-creates an empty stack via stack_init(),
-> returning its result (always 1).
+> entry. Finally frees the trailing sentinel and re-creates an empty stack via stack_init().
+> Returns nothing (the C `int` return, always 1, carries no information).
 
 > [spec:foma:def:foma.stack-entry]
 > struct stack_entry {
@@ -1360,12 +1360,12 @@
 > [spec:foma:def:foma.stack-init-fn]
 > int stack_init()
 
-> [spec:foma:sem:foma.stack-init-fn]
+> [spec:foma:sem:foma.stack-init-fn+1]
 > Implemented in foma/stack.c. mallocs a single sentinel stack_entry {number = -1, fsm = NULL,
 > next = NULL, previous = NULL} and assigns it to the global main_stack, representing the
 > empty stack (ah/amedh are left uninitialized in the sentinel and never read there). Returns
-> 1. Does not free any existing stack — calling it over a live stack leaks the old list (only
-> stack_clear calls it safely).
+> nothing (the C `int` return, always 1, carries no information). Does not free any existing
+> stack — calling it over a live stack leaks the old list (only stack_clear calls it safely).
 
 > [spec:foma:def:foma.stack-isempty-fn]
 > int stack_isempty()
@@ -1392,8 +1392,9 @@
 > [spec:foma:def:foma.stack-print-fn]
 > int stack_print()
 
-> [spec:foma:sem:foma.stack-print-fn]
-> Implemented in foma/stack.c. Stub: does nothing and returns 1 unconditionally.
+> [spec:foma:sem:foma.stack-print-fn+1]
+> Implemented in foma/stack.c. Stub: does nothing and returns nothing (the C `int` return,
+> always 1, carries no information).
 
 > [spec:foma:def:foma.stack-rotate-fn]
 > int stack_rotate()
@@ -1454,7 +1455,7 @@
 > [spec:foma:def:foma.view-net-fn]
 > int view_net(struct fsm *net)
 
-> [spec:foma:sem:foma.view-net-fn]
+> [spec:foma:sem:foma.view-net-fn+1]
 > foma/foma.c declares a non-static `int view_net(struct fsm *net)` but never calls it; the
 > only definition is file-STATIC in foma/iface.c, so the external symbol never exists and any
 > other translation unit calling this prototype would fail to link. The iface.c implementation
@@ -1467,7 +1468,8 @@
 > "dot -Tpng <dot> > <png>.png " then "/usr/bin/open <png>.png 2>/dev/null &"; elsewhere
 > "dot -Tpng <dot> > <png> " then "/usr/bin/xdg-open <png> 2>/dev/null &". A -1 return from
 > system() prints "Error writing tempfile.\n" or "Error opening viewer.\n" respectively.
-> Frees pngname and dotname (the temp files themselves are never deleted) and returns 1.
+> Frees pngname and dotname (the temp files themselves are never deleted). Returns nothing (the C
+> `int` return, always 1, carries no information).
 > Requires the Graphviz `dot` binary on PATH.
 
 > [spec:foma:def:foma.xprintf-fn]

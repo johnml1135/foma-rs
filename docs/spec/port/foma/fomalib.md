@@ -1120,10 +1120,12 @@
 > [spec:foma:def:fomalib.fsm-destroy-fn]
 > FEXPORT int fsm_destroy(struct fsm *net)
 
-> [spec:foma:sem:fomalib.fsm-destroy-fn]
-> Frees a network and everything it owns. Returns 0 if net is NULL. Otherwise frees
+> [spec:foma:sem:fomalib.fsm-destroy-fn+1]
+> Frees a network and everything it owns. Does nothing if net is NULL (a NULL-able caller keeps the
+> guard at the call site; a Box argument is never NULL). Otherwise frees
 > medlookup->confusion_matrix and medlookup when present, destroys the sigma list (freeing each node
-> and its symbol string), frees the state array if non-NULL, frees the struct itself, returns 1.
+> and its symbol string), frees the state array if non-NULL, frees the struct itself. Returns nothing
+> (the C `int` return, always 1 on a non-NULL net, carries no information).
 
 > [spec:foma:def:fomalib.fsm-determinize-fn]
 > fsm *fsm_determinize(struct fsm *net)
@@ -2229,9 +2231,10 @@
 > [spec:foma:def:fomalib.fsm-sigma-destroy-fn]
 > FEXPORT int fsm_sigma_destroy(struct sigma *sigma)
 
-> [spec:foma:sem:fomalib.fsm-sigma-destroy-fn]
+> [spec:foma:sem:fomalib.fsm-sigma-destroy-fn+1]
 > Frees an entire sigma linked list: for each node, frees the symbol string if non-NULL (and
-> NULLs it) then frees the node. NULL input is a safe no-op. Always returns 1.
+> NULLs it) then frees the node. NULL input is a safe no-op. Returns nothing (the C `int` return,
+> always 1, carries no information).
 
 > [spec:foma:def:fomalib.fsm-sigma-net-fn]
 > fsm *fsm_sigma_net(struct fsm *net)

@@ -230,16 +230,15 @@ impl Session {
     }
 
     // [spec:foma:def:stack.stack-init-fn]
-    // [spec:foma:sem:stack.stack-init-fn]
+    // [spec:foma:sem:stack.stack-init-fn+1]
     // [spec:foma:def:foma.stack-init-fn]
-    // [spec:foma:sem:foma.stack-init-fn]
-    pub fn stack_init(&mut self) -> i32 {
+    // [spec:foma:sem:foma.stack-init-fn+1]
+    pub fn stack_init(&mut self) {
         // malloc a fresh sentinel {number = -1, fsm = NULL, next = NULL,
         // previous = NULL} (ah/amedh left uninitialized in C; None here — never
         // read on the sentinel). Does not free any previous list (leaks, as in C).
         let idx = self.arena_alloc_sentinel(None);
         self.set_main_stack(idx);
-        1
     }
 
     // [spec:foma:def:stack.stack-add-fn]
@@ -461,10 +460,10 @@ impl Session {
     }
 
     // [spec:foma:def:stack.stack-clear-fn]
-    // [spec:foma:sem:stack.stack-clear-fn]
+    // [spec:foma:sem:stack.stack-clear-fn+1]
     // [spec:foma:def:foma.stack-clear-fn]
-    // [spec:foma:sem:foma.stack-clear-fn]
-    pub fn stack_clear(&mut self) -> i32 {
+    // [spec:foma:sem:foma.stack-clear-fn+1]
+    pub fn stack_clear(&mut self) {
         let mut stack_ptr = self.main_stack();
         while let Some(next) = self.e_next(stack_ptr) {
             let ah = self.take_ah(stack_ptr);
@@ -522,12 +521,11 @@ impl Session {
     }
 
     // [spec:foma:def:stack.stack-print-fn]
-    // [spec:foma:sem:stack.stack-print-fn]
+    // [spec:foma:sem:stack.stack-print-fn+1]
     // [spec:foma:def:foma.stack-print-fn]
-    // [spec:foma:sem:foma.stack-print-fn]
-    pub fn stack_print(&self) -> i32 {
-        // No-op stub: reads/writes no state, prints nothing, returns 1.
-        1
+    // [spec:foma:sem:foma.stack-print-fn+1]
+    pub fn stack_print(&self) {
+        // No-op stub: reads/writes no state, prints nothing.
     }
 }
 
@@ -553,8 +551,8 @@ mod tests {
         session.stack_entry_fsm(bottom, |f| f.name.clone())
     }
 
-    // [spec:foma:sem:stack.stack-init-fn/test]
-    // [spec:foma:sem:foma.stack-init-fn/test]
+    // [spec:foma:sem:stack.stack-init-fn+1/test]
+    // [spec:foma:sem:foma.stack-init-fn+1/test]
     #[test]
     fn stack_init_creates_fresh_empty_sentinel() {
         let mut session = Session::new();
@@ -568,7 +566,7 @@ mod tests {
         // Re-init on a populated stack abandons the old list (leak, as in C)
         // and starts empty again.
         add_named(&mut session, "a", "old");
-        assert_eq!(session.stack_init(), 1);
+        session.stack_init();
         assert_eq!(session.stack_size(), 0);
         assert!(session.stack_isempty());
     }
@@ -780,19 +778,19 @@ mod tests {
         assert_eq!(top, session.stack_find_top().unwrap());
     }
 
-    // [spec:foma:sem:stack.stack-print-fn/test]
-    // [spec:foma:sem:foma.stack-print-fn/test]
+    // [spec:foma:sem:stack.stack-print-fn+1/test]
+    // [spec:foma:sem:foma.stack-print-fn+1/test]
     #[test]
-    fn stack_print_is_a_noop_returning_1() {
+    fn stack_print_is_a_noop() {
         let mut session = Session::new();
-        assert_eq!(session.stack_print(), 1);
+        session.stack_print();
         add_named(&mut session, "a", "x");
-        assert_eq!(session.stack_print(), 1);
+        session.stack_print();
         assert_eq!(session.stack_size(), 1);
     }
 
-    // [spec:foma:sem:stack.stack-clear-fn/test]
-    // [spec:foma:sem:foma.stack-clear-fn/test]
+    // [spec:foma:sem:stack.stack-clear-fn+1/test]
+    // [spec:foma:sem:foma.stack-clear-fn+1/test]
     #[test]
     fn stack_clear_destroys_all_entries_and_reinits() {
         let mut session = Session::new();
@@ -802,7 +800,7 @@ mod tests {
         // apply_med_clear paths.
         session.stack_get_ah().unwrap();
         session.stack_get_med_ah().unwrap();
-        assert_eq!(session.stack_clear(), 1);
+        session.stack_clear();
         assert!(session.stack_isempty());
         assert_eq!(session.stack_size(), 0);
         assert_eq!(session.e_number(session.main_stack()), -1);
