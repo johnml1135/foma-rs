@@ -20,7 +20,7 @@ use std::cell::{Cell, RefCell};
 use std::io::{self, Write};
 use std::process;
 
-use foma::define::{add_defined, add_defined_function, find_defined, remove_defined};
+use foma::define::{Defined, add_defined, add_defined_function, find_defined, remove_defined};
 use foma::iface::*;
 use foma::io::file_to_mem;
 use foma::regex::fsm_parse_regex;
@@ -710,13 +710,13 @@ fn compile_regex(session: &mut Session, pmode: i32, defname: &str, body: &str) {
             } else {
                 let olddef = add_defined(&mut session.defines, Some(tempnet), defname);
                 if verbose {
-                    if olddef == -1 {
+                    if olddef == Defined::NameTooLong {
                         println!(
                             "Network name '{}' should consist of at most {} characters.",
                             defname, FSM_NAME_LEN
                         );
                     } else {
-                        if olddef == 1 {
+                        if olddef == Defined::Redefined {
                             print!("redefined {}: ", defname);
                         } else {
                             print!("defined {}: ", defname);
@@ -741,7 +741,9 @@ fn define_top_of_stack(session: &mut Session, name: &str) {
     let verbose = session.opts.verbose;
     let olddef = add_defined(&mut session.defines, net, name2);
     if verbose {
-        if olddef != 0 {
+        // C: `olddef != 0` — a NameTooLong (-1) net here also printed "redefined",
+        // a quirk preserved by testing against New rather than Redefined alone.
+        if olddef != Defined::New {
             print!("redefined {}: ", name2);
         } else {
             print!("defined {}: ", name2);

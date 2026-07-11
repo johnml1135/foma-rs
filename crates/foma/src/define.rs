@@ -10,6 +10,32 @@ use crate::types::{DefinedFunctions, DefinedNetworks, FSM_NAME_LEN, Fsm};
 // the top of define.c (extern'd by iface.c/foma.c) live on `Session` now
 // (`session.defines` / `session.defines_f`, init'd by `Session::new`).
 
+/// Outcome of adding a definition (`add_defined` / `add_defined_function`).
+/// Replaces C's `-1`/`0`/`1` status ints: the verbose CLI printer switches on
+/// the variant instead of a magic number.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Defined {
+    /// A fresh definition was stored (C returned 0), or the no-op when the
+    /// supplied net is `None`.
+    New,
+    /// An existing definition of the same name (+ arity, for functions) was
+    /// replaced in place (C returned 1).
+    Redefined,
+    /// The name exceeded `FSM_NAME_LEN` and nothing was stored (C returned -1).
+    /// Only `add_defined` produces this — functions have no length gate.
+    NameTooLong,
+}
+
+/// Outcome of removing a definition (`remove_defined`). Replaces C's `0`/`1`
+/// success/absent status int.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Undefined {
+    /// The definition was removed (C returned 0); also the undefine-all path.
+    Removed,
+    /// No definition of that name existed (C returned 1).
+    NotFound,
+}
+
 /* Find a defined symbol from the symbol table */
 /* Return the corresponding FSM                */
 // [spec:foma:def:define.find-defined-fn]
@@ -57,15 +83,14 @@ pub fn defined_functions_init() -> Box<DefinedFunctions> {
     })
 }
 
-/* Removes a defined network from the list                 */
-/* Returns 0 on success, 1 if the definition did not exist */
-/* Undefines all if NULL is passed as the string argument  */
+/* Removes a defined network from the list.                */
+/* Undefines all if None is passed as the string argument. */
 
 // [spec:foma:def:define.remove-defined-fn]
 // [spec:foma:sem:define.remove-defined-fn]
 // [spec:foma:def:fomalib.remove-defined-fn]
 // [spec:foma:sem:fomalib.remove-defined-fn]
-pub fn remove_defined(def: &mut DefinedNetworks, string: Option<&str>) -> i32 {
+pub fn remove_defined(def: &mut DefinedNetworks, string: Option<&str>) -> Undefined {
     /* Undefine all */
     let Some(string) = string else {
         let mut d: Option<&mut DefinedNetworks> = Some(def);
@@ -79,23 +104,23 @@ pub fn remove_defined(def: &mut DefinedNetworks, string: Option<&str>) -> i32 {
             node.name = None;
             d = node.next.as_deref_mut();
         }
-        return 0;
+        return Undefined::Removed;
     };
     /* C scans once tracking d and d_prev; here: the same existence scan,
     then the head and non-head cases through fresh borrows */
-    let mut exists = 0;
+    let mut exists = false;
     {
         let mut d = Some(&*def);
         while let Some(node) = d {
             if node.name.as_deref() == Some(string) {
-                exists = 1;
+                exists = true;
                 break;
             }
             d = node.next.as_deref();
         }
     }
-    if exists == 0 {
-        return 1;
+    if !exists {
+        return Undefined::NotFound;
     }
     if def.name.as_deref() == Some(string) {
         /* d == def */
@@ -145,7 +170,7 @@ pub fn remove_defined(def: &mut DefinedNetworks, string: Option<&str>) -> i32 {
             d_prev = nextnode;
         }
     }
-    0
+    Undefined::Removed
 }
 
 /* Finds defined regex "function" based on name, numargs */
@@ -181,7 +206,7 @@ pub fn add_defined_function(
     name: &str,
     regex: &str,
     numargs: i32,
-) -> i32 {
+) -> Defined {
     let mut d = Some(&mut *deff);
     while let Some(node) = d {
         if node.name.as_deref() == Some(name) && node.numargs == numargs {
@@ -191,7 +216,7 @@ pub fn add_defined_function(
                 /* literal C message, including the unbalanced trailing ')' */
                 tracing::info!("redefined {}@{})", name, numargs);
             }
-            return 1;
+            return Defined::Redefined;
         }
         d = node.next.as_deref_mut();
     }
@@ -211,24 +236,23 @@ pub fn add_defined_function(
     d.name = Some(name.to_string()); /* strdup(name) */
     d.regex = Some(regex.to_string()); /* strdup(regex) */
     d.numargs = numargs;
-    0
+    Defined::New
 }
 
-/* Add a network to list of defined networks */
-/* Returns 0 on success or 1 on redefinition or -1 if name is too long */
-/* Always maintain head of list at same ptr */
+/* Add a network to list of defined networks. */
+/* Always maintain head of list at same ptr.  */
 
 // [spec:foma:def:define.add-defined-fn]
 // [spec:foma:sem:define.add-defined-fn]
 // [spec:foma:def:fomalib.add-defined-fn]
 // [spec:foma:sem:fomalib.add-defined-fn]
-pub fn add_defined(def: &mut DefinedNetworks, net: Option<Box<Fsm>>, string: &str) -> i32 {
+pub fn add_defined(def: &mut DefinedNetworks, net: Option<Box<Fsm>>, string: &str) -> Defined {
     let mut net = match net {
-        None => return 0,
+        None => return Defined::New,
         Some(net) => net,
     };
     if string.len() > FSM_NAME_LEN {
-        return -1;
+        return Defined::NameTooLong;
     }
 
     fsm_count(&mut net);
@@ -242,7 +266,7 @@ pub fn add_defined(def: &mut DefinedNetworks, net: Option<Box<Fsm>>, string: &st
             /* free(d->name) */
             node.net = Some(net);
             node.name = Some(string.to_string()); /* strdup(string) */
-            return 1;
+            return Defined::Redefined;
         }
         d = node.next.as_deref_mut();
     }
@@ -260,7 +284,7 @@ pub fn add_defined(def: &mut DefinedNetworks, net: Option<Box<Fsm>>, string: &st
     };
     d.name = Some(string.to_string()); /* strdup(string) */
     d.net = Some(net);
-    0
+    Defined::New
 }
 
 #[cfg(test)]
@@ -318,17 +342,20 @@ mod tests {
         let mut def = defined_networks_init();
         /* First add fills the dummy head; subsequent adds splice in
         immediately after the head, so a,b,c inserts as [a, c, b]. */
-        assert_eq!(add_defined(&mut def, Some(fsm_symbol("A")), "a"), 0);
-        assert_eq!(add_defined(&mut def, Some(fsm_symbol("B")), "b"), 0);
-        assert_eq!(add_defined(&mut def, Some(fsm_symbol("C")), "c"), 0);
+        assert_eq!(add_defined(&mut def, Some(fsm_symbol("A")), "a"), Defined::New);
+        assert_eq!(add_defined(&mut def, Some(fsm_symbol("B")), "b"), Defined::New);
+        assert_eq!(add_defined(&mut def, Some(fsm_symbol("C")), "c"), Defined::New);
         assert_eq!(net_names(&def), vec!["a", "c", "b"]);
 
         /* find_defined returns the registry's own net (borrowed). */
         assert!(has_sym(find_defined(&mut def, "b").unwrap(), "B"));
         assert!(find_defined(&mut def, "zzz").is_none());
 
-        /* Redefinition returns 1 and replaces the net in place. */
-        assert_eq!(add_defined(&mut def, Some(fsm_symbol("A2")), "a"), 1);
+        /* Redefinition replaces the net in place. */
+        assert_eq!(
+            add_defined(&mut def, Some(fsm_symbol("A2")), "a"),
+            Defined::Redefined
+        );
         assert!(has_sym(find_defined(&mut def, "a").unwrap(), "A2"));
         assert_eq!(
             net_names(&def),
@@ -336,17 +363,23 @@ mod tests {
             "redefinition adds no node"
         );
 
-        /* net == None is a no-op returning 0. */
-        assert_eq!(add_defined(&mut def, None, "q"), 0);
+        /* net == None is a no-op reported as New. */
+        assert_eq!(add_defined(&mut def, None, "q"), Defined::New);
         assert!(find_defined(&mut def, "q").is_none());
 
-        /* Name longer than FSM_NAME_LEN (40) returns -1 without storing. */
+        /* Name longer than FSM_NAME_LEN (40) is rejected without storing. */
         let long = "x".repeat(41);
-        assert_eq!(add_defined(&mut def, Some(fsm_symbol("Z")), &long), -1);
+        assert_eq!(
+            add_defined(&mut def, Some(fsm_symbol("Z")), &long),
+            Defined::NameTooLong
+        );
         assert!(find_defined(&mut def, &long).is_none());
         /* Exactly 40 bytes is accepted. */
         let ok40 = "y".repeat(40);
-        assert_eq!(add_defined(&mut def, Some(fsm_symbol("Z")), &ok40), 0);
+        assert_eq!(
+            add_defined(&mut def, Some(fsm_symbol("Z")), &ok40),
+            Defined::New
+        );
         assert!(find_defined(&mut def, &ok40).is_some());
     }
 
@@ -361,15 +394,15 @@ mod tests {
         /* list order: a, c, b */
 
         /* Remove a non-head node (predecessor splices it out). */
-        assert_eq!(remove_defined(&mut def, Some("c")), 0);
+        assert_eq!(remove_defined(&mut def, Some("c")), Undefined::Removed);
         assert_eq!(net_names(&def), vec!["a", "b"]);
-        /* Removing an absent name returns 1. */
-        assert_eq!(remove_defined(&mut def, Some("zzz")), 1);
+        /* Removing an absent name reports NotFound. */
+        assert_eq!(remove_defined(&mut def, Some("zzz")), Undefined::NotFound);
         /* Remove the head when it has a successor: successor moves into head. */
-        assert_eq!(remove_defined(&mut def, Some("a")), 0);
+        assert_eq!(remove_defined(&mut def, Some("a")), Undefined::Removed);
         assert_eq!(net_names(&def), vec!["b"]);
         /* Remove the head when it is the only node: back to empty dummy. */
-        assert_eq!(remove_defined(&mut def, Some("b")), 0);
+        assert_eq!(remove_defined(&mut def, Some("b")), Undefined::Removed);
         assert!(net_names(&def).is_empty());
         assert!(def.name.is_none() && def.net.is_none() && def.next.is_none());
 
@@ -379,7 +412,7 @@ mod tests {
         add_defined(&mut def2, Some(fsm_symbol("A")), "a");
         add_defined(&mut def2, Some(fsm_symbol("B")), "b");
         assert_eq!(node_count(&def2), 2);
-        assert_eq!(remove_defined(&mut def2, None), 0);
+        assert_eq!(remove_defined(&mut def2, None), Undefined::Removed);
         assert_eq!(node_count(&def2), 2, "nodes remain after undefine-all");
         assert!(net_names(&def2).is_empty(), "payloads cleared");
         assert!(find_defined(&mut def2, "a").is_none());
@@ -394,18 +427,27 @@ mod tests {
         let opts = &FomaOptions::default();
         let mut deff = defined_functions_init();
         /* (name, numargs) is the key: same name, different arity is a new node. */
-        assert_eq!(add_defined_function(opts, &mut deff, "@f", "a b", 2), 0);
-        assert_eq!(add_defined_function(opts, &mut deff, "@f", "c d", 1), 0);
+        assert_eq!(
+            add_defined_function(opts, &mut deff, "@f", "a b", 2),
+            Defined::New
+        );
+        assert_eq!(
+            add_defined_function(opts, &mut deff, "@f", "c d", 1),
+            Defined::New
+        );
         assert_eq!(find_defined_function(&deff, "@f", 2), Some("a b"));
         assert_eq!(find_defined_function(&deff, "@f", 1), Some("c d"));
         /* Arity mismatch / unknown name are not found. */
         assert_eq!(find_defined_function(&deff, "@f", 3), None);
         assert_eq!(find_defined_function(&deff, "@g", 2), None);
 
-        /* Redefinition (same name+numargs) replaces the regex and returns 1.
-        Drive the g_verbose "redefined %s@%i)" message path (stderr, not
-        asserted here). */
-        assert_eq!(add_defined_function(opts, &mut deff, "@f", "x y", 2), 1);
+        /* Redefinition (same name+numargs) replaces the regex and reports
+        Redefined. Drive the g_verbose "redefined %s@%i)" message path (stderr,
+        not asserted here). */
+        assert_eq!(
+            add_defined_function(opts, &mut deff, "@f", "x y", 2),
+            Defined::Redefined
+        );
         assert_eq!(find_defined_function(&deff, "@f", 2), Some("x y"));
         /* The arity-1 overload is untouched. */
         assert_eq!(find_defined_function(&deff, "@f", 1), Some("c d"));

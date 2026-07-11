@@ -881,7 +881,7 @@ fn link_rewritesets(mut nodes: Vec<Box<RewriteSet>>) -> Option<Box<RewriteSet>> 
 mod tests {
     use crate::constructions::{fsm_count, fsm_equivalent};
     use crate::define::{
-        add_defined, add_defined_function, defined_functions_init, defined_networks_init,
+        Defined, add_defined, add_defined_function, defined_functions_init, defined_networks_init,
     };
     use crate::options::FomaOptions;
     use crate::topsort::fsm_topsort;
@@ -1023,7 +1023,7 @@ mod tests {
         let opts = &FomaOptions::default();
         let mut nets = defined_networks_init();
         let def = super::fsm_parse_regex(opts, "x y", None, None).unwrap();
-        assert_eq!(add_defined(&mut nets, Some(def), "Foo"), 0);
+        assert_eq!(add_defined(&mut nets, Some(def), "Foo"), Defined::New);
         // With the table: "Foo" compiles to the defined net [x y]
         // (C foma: 3 states, 2 arcs, 1 path).
         let net = super::fsm_parse_regex(opts, "Foo", Some(&mut nets), None).unwrap();
