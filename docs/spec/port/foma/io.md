@@ -228,11 +228,8 @@
 > return NULL). Records are separated by one or more blank lines; each record is either
 > one line (an identity word) or two consecutive lines (an upper/lower transducer pair) —
 > two adjacent non-blank lines are always consumed as a pair.
-> Loop: skip consecutive '\n' characters; take the next line with
-> `[spec:foma:sem:io.spacedtext-get-next-line-fn]` as t1 (NULL → done; empty → skip);
-> take the following line as t2.
-> If t2 is NULL or empty: t1 is a single word; for each space-separated token
-> (`[spec:foma:sem:io.spacedtext-get-next-token-fn]`) add token:token to the trie, except
+> Skip blank lines; take the next line as t1 (none → done); look at the following line as t2.
+> If t2 is missing or blank: t1 is a single word; for each whitespace-separated token add token:token to the trie, except
 > "0" adds "@_EPSILON_SYMBOL_@":"@_EPSILON_SYMBOL_@" and "%0" adds "0":"0"; then
 > fsm_trie_end_word.
 > Otherwise tokenize t1 and t2 in lockstep until both are exhausted; per side, a NULL
@@ -458,24 +455,3 @@
 > `[spec:foma:sem:io.foma-net-print-fn]`. gzclose; return 1. Reload with
 > `[spec:foma:sem:io.load-defined-fn]` recovers the names from the stored nets.
 
-> [spec:foma:def:io.spacedtext-get-next-line-fn]
-> char *spacedtext_get_next_line(char **text)
-
-> [spec:foma:sem:io.spacedtext-get-next-line-fn]
-> Destructive line splitter over an in-memory buffer; *text is the read cursor. If
-> **text == '\0' return NULL. Otherwise remember the current position, scan forward to
-> the next '\n' or '\0', overwrite that character with '\0' (a found '\n' is destroyed),
-> advance *text to the character after the '\n' — or leave it on the terminating '\0' —
-> and return the pointer to the now NUL-terminated line, which may be empty.
-
-> [spec:foma:def:io.spacedtext-get-next-token-fn]
-> char *spacedtext_get_next_token(char **text)
-
-> [spec:foma:sem:io.spacedtext-get-next-token-fn]
-> Destructive space-separated token splitter within one line; *text is the read cursor.
-> If **text is '\0' or '\n' (tested before any space skipping) return NULL. Otherwise
-> skip a run of ' ' characters, record the token start, scan to the next ' ', '\n' or
-> '\0', overwrite that terminator with '\0', and advance *text past a ' ' terminator or
-> onto the (now overwritten) '\n'/'\0' position, so the next call returns NULL at line
-> end. Returns the token pointer. Quirk: trailing spaces before the line end yield one
-> final empty-string token.

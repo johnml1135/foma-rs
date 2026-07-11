@@ -140,24 +140,6 @@ fn parse_leading_i32(s: &str) -> i32 {
     parse_leading_i64(s) as i32
 }
 
-/* strlen from a byte index into a NUL-terminated buffer image. */
-fn cstrlen(buf: &[u8], idx: usize) -> usize {
-    let mut n = 0usize;
-    while idx + n < buf.len() && buf[idx + n] != b'\0' {
-        n += 1;
-    }
-    n
-}
-
-/* Extract the NUL-terminated C string starting at byte index `idx` as an owned
-String (owned so the borrow of `buf` ends before the next destructive token
-call).
-DEVIATION from C (lossy decode of non-UTF-8; C keeps the raw bytes). */
-fn cstr_at(buf: &[u8], idx: usize) -> String {
-    let len = cstrlen(buf, idx);
-    String::from_utf8_lossy(&buf[idx..idx + len]).into_owned()
-}
-
 /* ------------------------------------------------------------------ */
 /* Functions                                                           */
 /* ------------------------------------------------------------------ */
@@ -567,137 +549,66 @@ pub fn io_free(mut iobh: Box<IoBufHandle>) {
     /* free(iobh) — dropped */
 }
 
-// [spec:foma:def:io.spacedtext-get-next-line-fn]
-// [spec:foma:sem:io.spacedtext-get-next-line-fn]
-// C threads the buffer through a `char **text` cursor; here the buffer and the
-// cursor index are separate arguments and a matched line is a start index.
-pub fn spacedtext_get_next_line(text: &mut [u8], cursor: &mut usize) -> Option<usize> {
-    let ret = *cursor;
-    if text[*cursor] == b'\0' {
-        return None;
-    }
-    let mut t = *cursor;
-    while text[t] != b'\0' && text[t] != b'\n' {
-        t += 1;
-    }
-    if text[t] == b'\0' {
-        *cursor = t;
-    } else {
-        *cursor = t + 1;
-    }
-    text[t] = b'\0';
-    Some(ret)
-}
-
-// [spec:foma:def:io.spacedtext-get-next-token-fn]
-// [spec:foma:sem:io.spacedtext-get-next-token-fn]
-pub fn spacedtext_get_next_token(text: &mut [u8], cursor: &mut usize) -> Option<usize> {
-    if text[*cursor] == b'\0' || text[*cursor] == b'\n' {
-        return None;
-    }
-    while text[*cursor] == b' ' {
-        *cursor += 1;
-    }
-    let ret = *cursor;
-    let mut t = *cursor;
-    while text[t] != b'\0' && text[t] != b'\n' && text[t] != b' ' {
-        t += 1;
-    }
-    if text[t] == b'\0' || text[t] == b'\n' {
-        *cursor = t;
-    } else {
-        *cursor = t + 1;
-    }
-    text[t] = b'\0';
-    Some(ret)
-}
-
 // [spec:foma:def:io.fsm-read-spaced-text-file-fn]
 // [spec:foma:sem:io.fsm-read-spaced-text-file-fn]
 // [spec:foma:def:fomalib.fsm-read-spaced-text-file-fn]
 // [spec:foma:sem:fomalib.fsm-read-spaced-text-file-fn]
 pub fn fsm_read_spaced_text_file(filename: &str) -> Option<Box<Fsm>> {
-    let mut text = match file_to_mem(filename) {
+    let text = match file_to_mem(filename) {
         Err(_) => return None,
         Ok(t) => t,
     };
+    /* file_to_mem appends a trailing NUL; drop it and read the words as text. */
+    let body = String::from_utf8_lossy(&text[..text.len() - 1]);
     let mut th = fsm_trie_init();
-    let mut cursor = 0usize;
-    loop {
-        /* skip consecutive '\n' */
-        while text[cursor] != b'\0' && text[cursor] == b'\n' {
-            cursor += 1;
-        }
-        let t1 = match spacedtext_get_next_line(&mut text, &mut cursor) {
-            None => break,
-            Some(idx) => idx,
-        };
-        if cstrlen(&text, t1) == 0 {
-            continue;
-        }
-        let t2 = spacedtext_get_next_line(&mut text, &mut cursor);
-        // Some(idx) with a non-empty line drives the two-tape branch; None or an
-        // empty line drives the single-tape branch.
-        let t2 = t2.filter(|&idx| cstrlen(&text, idx) != 0);
-        if t2.is_none() {
-            let mut l1 = t1;
-            loop {
-                let insym_i = match spacedtext_get_next_token(&mut text, &mut l1) {
-                    None => break,
-                    Some(idx) => idx,
-                };
-                let insym = cstr_at(&text, insym_i);
-                if insym == "0" {
-                    fsm_trie_symbol(&mut th, "@_EPSILON_SYMBOL_@", "@_EPSILON_SYMBOL_@");
-                } else if insym == "%0" {
-                    fsm_trie_symbol(&mut th, "0", "0");
-                } else {
-                    fsm_trie_symbol(&mut th, &insym, &insym);
-                }
-            }
-            fsm_trie_end_word(&mut th);
-        } else {
-            let t2 = t2.expect("t2 is Some in the two-tape branch");
-            let mut l1 = t1;
-            let mut l2 = t2;
-            loop {
-                let insym_i = spacedtext_get_next_token(&mut text, &mut l1);
-                let outsym_i = spacedtext_get_next_token(&mut text, &mut l2);
-                if insym_i.is_none() && outsym_i.is_none() {
-                    break;
-                }
-                let insym: String = match insym_i {
-                    None => "@_EPSILON_SYMBOL_@".to_string(),
-                    Some(idx) => {
-                        let s = cstr_at(&text, idx);
-                        if s == "0" {
-                            "@_EPSILON_SYMBOL_@".to_string()
-                        } else if s == "%0" {
-                            "0".to_string()
-                        } else {
-                            s
-                        }
-                    }
-                };
-                let outsym: String = match outsym_i {
-                    None => "@_EPSILON_SYMBOL_@".to_string(),
-                    Some(idx) => {
-                        let s = cstr_at(&text, idx);
-                        if s == "0" {
-                            "@_EPSILON_SYMBOL_@".to_string()
-                        } else if s == "%0" {
-                            "0".to_string()
-                        } else {
-                            s
-                        }
-                    }
-                };
-                fsm_trie_symbol(&mut th, &insym, &outsym);
-            }
-            fsm_trie_end_word(&mut th);
+
+    /* A record is one line (a single-tape word) or two consecutive non-blank
+    lines (an upper:lower two-tape word); blank lines separate records. Within a
+    line, whitespace-separated tokens are the word's symbols, where "0" is
+    epsilon and "%0" is a literal "0". */
+    fn sym(tok: &str) -> &str {
+        match tok {
+            "0" => "@_EPSILON_SYMBOL_@",
+            "%0" => "0",
+            other => other,
         }
     }
-    /* free(textorig) — dropped */
+
+    let mut lines = body.lines().peekable();
+    loop {
+        while lines.peek() == Some(&"") {
+            lines.next();
+        }
+        let upper = match lines.next() {
+            None => break,
+            Some(l) => l,
+        };
+        let two_tape = matches!(lines.peek(), Some(l) if !l.is_empty());
+        if two_tape {
+            let lower = lines.next().expect("peeked a non-empty lower line");
+            let mut ins = upper.split_whitespace();
+            let mut outs = lower.split_whitespace();
+            loop {
+                let (i, o) = (ins.next(), outs.next());
+                if i.is_none() && o.is_none() {
+                    break;
+                }
+                let insym = i.map(sym).unwrap_or("@_EPSILON_SYMBOL_@");
+                let outsym = o.map(sym).unwrap_or("@_EPSILON_SYMBOL_@");
+                fsm_trie_symbol(&mut th, insym, outsym);
+            }
+        } else {
+            /* a single blank separator line, if present, belongs to this record */
+            if lines.peek() == Some(&"") {
+                lines.next();
+            }
+            for tok in upper.split_whitespace() {
+                let s = sym(tok);
+                fsm_trie_symbol(&mut th, s, s);
+            }
+        }
+        fsm_trie_end_word(&mut th);
+    }
     Some(fsm_trie_done(th))
 }
 
@@ -706,32 +617,19 @@ pub fn fsm_read_spaced_text_file(filename: &str) -> Option<Box<Fsm>> {
 // [spec:foma:def:fomalib.fsm-read-text-file-fn]
 // [spec:foma:sem:fomalib.fsm-read-text-file-fn]
 pub fn fsm_read_text_file(filename: &str) -> Option<Box<Fsm>> {
-    let mut text = match file_to_mem(filename) {
+    let text = match file_to_mem(filename) {
         Err(_) => return None,
         Ok(t) => t,
     };
-    let mut textp1 = 0usize;
+    /* file_to_mem appends a trailing NUL; drop it and add each non-empty line
+    as a word (its characters become the arc symbols). */
+    let body = String::from_utf8_lossy(&text[..text.len() - 1]);
     let mut th = fsm_trie_init();
-    let mut lastword = 0i32;
-    while lastword == 0 {
-        let mut textp2 = textp1;
-        while text[textp2] != b'\n' && text[textp2] != b'\0' {
-            textp2 += 1;
+    for line in body.lines() {
+        if !line.is_empty() {
+            fsm_trie_add_word(&mut th, line);
         }
-        if text[textp2] == b'\0' {
-            lastword = 1;
-            if textp2 == textp1 {
-                break;
-            }
-        }
-        text[textp2] = b'\0';
-        if cstrlen(&text, textp1) > 0 {
-            let word = cstr_at(&text, textp1);
-            fsm_trie_add_word(&mut th, &word);
-        }
-        textp1 = textp2 + 1;
     }
-    /* free(text) — dropped */
     Some(fsm_trie_done(th))
 }
 
@@ -1855,41 +1753,6 @@ mod tests {
         /* >5 fields: the growable Vec absorbs the overrun (DEVIATION) */
         assert_eq!(explode_line("1 2 3 4 5 6", &mut v), 6);
         assert_eq!(v, vec![1, 2, 3, 4, 5, 6]);
-    }
-
-    // [spec:foma:sem:io.spacedtext-get-next-line-fn/test]
-    #[test]
-    fn spacedtext_get_next_line_splits_destructively() {
-        let mut text = b"ab\ncd\0".to_vec();
-        let mut cur = 0usize;
-        let i1 = spacedtext_get_next_line(&mut text, &mut cur).unwrap();
-        assert_eq!(cstr_at(&text, i1), "ab");
-        assert_eq!(cur, 3);
-        let i2 = spacedtext_get_next_line(&mut text, &mut cur).unwrap();
-        assert_eq!(cstr_at(&text, i2), "cd");
-        assert_eq!(cur, 5);
-        /* on the terminating '\0' → None */
-        assert!(spacedtext_get_next_line(&mut text, &mut cur).is_none());
-    }
-
-    // [spec:foma:sem:io.spacedtext-get-next-token-fn/test]
-    #[test]
-    fn spacedtext_get_next_token_and_trailing_empty() {
-        let mut text = b"a bb\0".to_vec();
-        let mut cur = 0usize;
-        let t1 = spacedtext_get_next_token(&mut text, &mut cur).unwrap();
-        assert_eq!(cstr_at(&text, t1), "a");
-        let t2 = spacedtext_get_next_token(&mut text, &mut cur).unwrap();
-        assert_eq!(cstr_at(&text, t2), "bb");
-        assert!(spacedtext_get_next_token(&mut text, &mut cur).is_none());
-        /* trailing spaces before the line end yield one final empty token */
-        let mut t = b"a  \0".to_vec();
-        let mut c = 0usize;
-        let q1 = spacedtext_get_next_token(&mut t, &mut c).unwrap();
-        assert_eq!(cstr_at(&t, q1), "a");
-        let q2 = spacedtext_get_next_token(&mut t, &mut c).unwrap();
-        assert_eq!(cstr_at(&t, q2), "");
-        assert!(spacedtext_get_next_token(&mut t, &mut c).is_none());
     }
 
     // [spec:foma:sem:io.foma-net-print-fn+1/test]
