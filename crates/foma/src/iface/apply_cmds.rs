@@ -135,7 +135,7 @@ pub fn iface_apply_file(
             inword.pop();
         }
 
-        let _ = write!(outfile, "\n{}\n", inword);
+        write!(outfile, "\n{}\n", inword).expect("writing apply-file output");
         let result = if direction == AP_D {
             session.stack_entry_ah(ah, |h| apply_down(h, Some(&inword)))
         } else {
@@ -144,12 +144,12 @@ pub fn iface_apply_file(
 
         let result = match result {
             None => {
-                let _ = write!(outfile, "???\n");
+                write!(outfile, "???\n").expect("writing apply-file output");
                 continue;
             }
             Some(r) => r,
         };
-        let _ = write!(outfile, "{}\n", result);
+        write!(outfile, "{}\n", result).expect("writing apply-file output");
         loop {
             let result = if direction == AP_D {
                 session.stack_entry_ah(ah, |h| apply_down(h, None))
@@ -159,7 +159,7 @@ pub fn iface_apply_file(
             match result {
                 None => break,
                 Some(r) => {
-                    let _ = write!(outfile, "{}\n", r);
+                    write!(outfile, "{}\n", r).expect("writing apply-file output");
                 }
             }
         }
@@ -666,7 +666,7 @@ pub fn iface_words_file(session: &mut Session, filename: &str, r#type: i32) {
             match result {
                 None => break,
                 Some(r) => {
-                    let _ = write!(outfile, "{}\n", r);
+                    write!(outfile, "{}\n", r).expect("writing words-file output");
                 }
             }
         }
@@ -741,10 +741,10 @@ pub fn iface_pairs_call(session: &mut Session, limit: i32, random: i32) {
             iface_split_result(&mut result, &mut upper, &mut lower);
             // printf("%s\t%s\n", upper, lower) — raw bytes (may be UTF-8-corrupted).
             let mut out = std::io::stdout();
-            let _ = out.write_all(&upper);
-            let _ = out.write_all(b"\t");
-            let _ = out.write_all(&lower);
-            let _ = out.write_all(b"\n");
+            out.write_all(&upper).expect("writing pairs output");
+            out.write_all(b"\t").expect("writing pairs output");
+            out.write_all(&lower).expect("writing pairs output");
+            out.write_all(b"\n").expect("writing pairs output");
             i -= 1;
         }
         session.stack_entry_ah(ah, |h| apply_set_space_symbol(h, " "));
@@ -821,10 +821,10 @@ pub fn iface_pairs_file(session: &mut Session, filename: &str) {
             let mut upper = Vec::new();
             let mut lower = Vec::new();
             iface_split_result(&mut result, &mut upper, &mut lower);
-            let _ = outfile.write_all(&upper);
-            let _ = outfile.write_all(b"\t");
-            let _ = outfile.write_all(&lower);
-            let _ = outfile.write_all(b"\n");
+            outfile.write_all(&upper).expect("writing pairs to file");
+            outfile.write_all(b"\t").expect("writing pairs to file");
+            outfile.write_all(&lower).expect("writing pairs to file");
+            outfile.write_all(b"\n").expect("writing pairs to file");
         }
         session.stack_entry_ah(ah, |h| apply_set_space_symbol(h, " "));
         session.stack_entry_ah(ah, |h| apply_set_epsilon(h, "0"));
