@@ -222,7 +222,7 @@
 > [spec:foma:def:io.fsm-read-spaced-text-file-fn]
 > struct fsm *fsm_read_spaced_text_file(char *filename)
 
-> [spec:foma:sem:io.fsm-read-spaced-text-file-fn]
+> [spec:foma:sem:io.fsm-read-spaced-text-file-fn+1]
 > Reads a spaced-text word list into a trie and returns fsm_trie_done(th) (deterministic,
 > minimized). Loads the whole file with `[spec:foma:sem:io.file-to-mem-fn+1]` (error →
 > return NULL). Records are separated by one or more blank lines; each record is either
@@ -235,18 +235,27 @@
 > Otherwise tokenize t1 and t2 in lockstep until both are exhausted; per side, a NULL
 > token (shorter line) or "0" becomes "@_EPSILON_SYMBOL_@" and "%0" becomes "0"; add each
 > in:out pair with fsm_trie_symbol, then fsm_trie_end_word.
-> Frees the file buffer before returning.
+> Tokens split on any whitespace and never come back empty; C split on ' ' only, so a
+> tab stayed inside a symbol and two or more trailing spaces yielded a final
+> empty-string token (an ""-labelled arc). Both "\n" and "\r\n" line endings are
+> recognized, so a lone "\r" line is blank (a record separator); in C it was a
+> one-character non-blank line. Interior NUL bytes are ordinary symbol characters; C
+> stopped reading at the first '\0'.
 
 > [spec:foma:def:io.fsm-read-text-file-fn]
 > struct fsm *fsm_read_text_file(char *filename)
 
-> [spec:foma:sem:io.fsm-read-text-file-fn]
+> [spec:foma:sem:io.fsm-read-text-file-fn+1]
 > Reads a plain word list, one word per line, into a trie. Loads the file with
-> `[spec:foma:sem:io.file-to-mem-fn+1]` (error → return None), then splits the buffer on
-> '\n' in place: each non-empty line is added with fsm_trie_add_word; empty lines are
-> skipped; a final segment without a trailing newline is included; iteration stops at the
-> terminating '\0'. Frees the buffer and returns fsm_trie_done(th) — the deterministic
-> minimal automaton accepting exactly the listed words.
+> `[spec:foma:sem:io.file-to-mem-fn+1]` (error → return None), decodes it as UTF-8
+> (invalid sequences lossily replaced), and iterates its lines: each non-empty line is
+> added with fsm_trie_add_word; empty lines are skipped; a final segment without a
+> trailing newline is included. Returns fsm_trie_done(th) — the deterministic minimal
+> automaton accepting exactly the listed words.
+> Both "\n" and "\r\n" line endings are recognized, and "\r\n" contributes no '\r' to
+> the word; C split on '\n' only, so CRLF input produced words with a trailing '\r'
+> symbol. Interior NUL bytes are ordinary word characters; C stopped reading at the
+> first '\0'.
 
 > [spec:foma:def:io.fsm-write-binary-file-fn]
 > int fsm_write_binary_file(struct fsm *net, char *filename)

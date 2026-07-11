@@ -2166,6 +2166,50 @@ mod tests {
         assert_eq!(drain_down(&net, "0"), vec!["0".to_string()]);
     }
 
+    // [spec:foma:sem:io.fsm-read-text-file-fn+1/test]
+    // [spec:foma:sem:fomalib.fsm-read-text-file-fn+1/test]
+    #[test]
+    fn read_text_file_crlf_and_interior_nul() {
+        /* CRLF endings contribute no '\r' to the word (C kept it) */
+        let f = Scratch::new("crlf");
+        {
+            let mut file = File::create(f.path()).unwrap();
+            file.write_all(b"cat\r\ndog\r\n").unwrap();
+        }
+        let net = fsm_read_text_file(f.path()).unwrap();
+        assert_eq!(drain_down(&net, "cat"), vec!["cat".to_string()]);
+        assert_eq!(drain_down(&net, "dog"), vec!["dog".to_string()]);
+        assert!(drain_down(&net, "cat\r").is_empty());
+
+        /* an interior NUL is an ordinary word character (C stopped reading there) */
+        let g = Scratch::new("nul");
+        {
+            let mut file = File::create(g.path()).unwrap();
+            file.write_all(b"a\0b\nc\n").unwrap();
+        }
+        let net = fsm_read_text_file(g.path()).unwrap();
+        assert_eq!(drain_down(&net, "a\u{0}b"), vec!["a\u{0}b".to_string()]);
+        assert_eq!(drain_down(&net, "c"), vec!["c".to_string()]);
+        assert!(drain_down(&net, "a").is_empty());
+    }
+
+    // [spec:foma:sem:io.fsm-read-spaced-text-file-fn+1/test]
+    // [spec:foma:sem:fomalib.fsm-read-spaced-text-file-fn+1/test]
+    #[test]
+    fn read_spaced_text_file_whitespace_and_crlf() {
+        /* tabs split symbols like spaces (C split on ' ' only), and a "\r\n"
+        line is a blank record separator (in C a one-char "\r" line) */
+        let f = Scratch::new("spacedws");
+        {
+            let mut file = File::create(f.path()).unwrap();
+            file.write_all(b"a\tb\r\nc d\r\n\r\ne\r\n").unwrap();
+        }
+        let net = fsm_read_spaced_text_file(f.path()).unwrap();
+        assert_eq!(drain_down(&net, "ab"), vec!["cd".to_string()]);
+        assert_eq!(drain_down(&net, "e"), vec!["e".to_string()]);
+        assert!(drain_down(&net, "a\tb").is_empty());
+    }
+
     // [spec:foma:sem:io.fsm-read-spaced-text-file-fn/test]
     // [spec:foma:sem:io.fsm-read-text-file-fn/test]
     #[test]

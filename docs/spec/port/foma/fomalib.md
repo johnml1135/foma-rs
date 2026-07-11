@@ -2121,28 +2121,35 @@
 > [spec:foma:def:fomalib.fsm-read-spaced-text-file-fn]
 > fsm *fsm_read_spaced_text_file(char *filename)
 
-> [spec:foma:sem:fomalib.fsm-read-spaced-text-file-fn]
-> Builds a network from a text file of space-separated symbol lines using the trie API
+> [spec:foma:sem:fomalib.fsm-read-spaced-text-file-fn+1]
+> Builds a network from a text file of whitespace-separated symbol lines using the trie API
 > (`[spec:foma:sem:fomalib.fsm-trie-init-fn]` etc.). Reads the whole file with file_to_mem
 > (NULL on open error or BOM). Loop: skip blank lines, take one line t1; if the immediately
-> following line t2 is missing or empty, t1 is a one-tape word — each space-separated token
+> following line t2 is missing or empty, t1 is a one-tape word — each whitespace-separated token
 > becomes a sym:sym trie step, where token "0" means EPSILON:EPSILON and "%0" means the
 > literal symbol "0"; otherwise (t1, t2) is an upper/lower pair — tokens are consumed
 > pairwise from both lines, the shorter line padding with "@_EPSILON_SYMBOL_@" ("0" → epsilon,
 > "%0" → literal "0" on each side independently), each pair becoming one in:out trie step.
-> After each word/pair, fsm_trie_end_word. Frees the buffer and returns fsm_trie_done (the
+> After each word/pair, fsm_trie_end_word. Returns fsm_trie_done (the
 > determinized-by-construction trie net). Duplicate words merge; the result is an acyclic
 > trie-shaped machine.
+> Tokens split on any whitespace and never come back empty; C split on ' ' only (tabs
+> stayed inside a symbol, trailing spaces could yield an empty-string token). "\r\n"
+> line endings are recognized alongside "\n", so a lone "\r" line is blank; in C it was
+> non-blank. Interior NUL bytes are ordinary symbol characters; C stopped at the first '\0'.
 
 > [spec:foma:def:fomalib.fsm-read-text-file-fn]
 > fsm *fsm_read_text_file(char *filename)
 
-> [spec:foma:sem:fomalib.fsm-read-text-file-fn]
+> [spec:foma:sem:fomalib.fsm-read-text-file-fn+1]
 > Builds an acceptor from a word list: reads the whole file with file_to_mem (NULL on open
-> error or BOM), splits it destructively at every '\n', and for each nonempty line calls
+> error or BOM), splits it into lines, and for each nonempty line calls
 > fsm_trie_add_word (`[spec:foma:sem:fomalib.fsm-trie-add-word-fn]`) — each word contributes a
 > path of sym:sym arcs, one per UTF-8 character. A final line without trailing newline is
-> included. Frees the buffer and returns fsm_trie_done(th), the trie of all words.
+> included. Returns fsm_trie_done(th), the trie of all words.
+> Both "\n" and "\r\n" line endings are recognized ("\r\n" contributes no '\r' to the
+> word); C split at '\n' only, keeping the '\r' in the word on CRLF input. Interior NUL
+> bytes are ordinary word characters; C stopped reading at the first '\0'.
 
 > [spec:foma:def:fomalib.fsm-reverse-fn]
 > fsm *fsm_reverse(struct fsm *net)
