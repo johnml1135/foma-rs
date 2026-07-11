@@ -733,10 +733,10 @@ pub fn iface_pairs_call(session: &mut Session, limit: i32, random: i32) {
                 None => break,
                 Some(r) => r,
             };
-            let mut result = result.into_bytes();
+            let result = result.into_bytes();
             let mut upper = Vec::new();
             let mut lower = Vec::new();
-            iface_split_result(&mut result, &mut upper, &mut lower);
+            iface_split_result(&result, &mut upper, &mut lower);
             // printf("%s\t%s\n", upper, lower) — raw bytes (may be UTF-8-corrupted).
             let mut out = std::io::stdout();
             out.write_all(&upper).expect("writing pairs output");
@@ -815,10 +815,10 @@ pub fn iface_pairs_file(session: &mut Session, filename: &str) {
                 None => break,
                 Some(r) => r,
             };
-            let mut result = result.into_bytes();
+            let result = result.into_bytes();
             let mut upper = Vec::new();
             let mut lower = Vec::new();
-            iface_split_result(&mut result, &mut upper, &mut lower);
+            iface_split_result(&result, &mut upper, &mut lower);
             outfile.write_all(&upper).expect("writing pairs to file");
             outfile.write_all(b"\t").expect("writing pairs to file");
             outfile.write_all(&lower).expect("writing pairs to file");

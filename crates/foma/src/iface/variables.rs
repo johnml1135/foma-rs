@@ -268,55 +268,39 @@ pub fn iface_set_variable(session: &mut Session, name: &str, value: &str) {
     print!("*There is no global variable '{}'.\n", name);
 }
 
-// [spec:foma:def:iface.iface-split-string-fn]
-// [spec:foma:sem:iface.iface-split-string-fn]
-pub fn iface_split_string(result: &[u8], string: &mut Vec<u8>) {
-    let space = 1u8;
-    let epsilon = 2u8;
-    let separator = 3u8;
-    /* Simulate: SEPARATOR \SPACE+ @-> 0 .o. SPACE|SEPARATOR|EPSILON -> 0 */
-    /*           to extract only the upper side of `result`.             */
-    // Two-state filter (C's goto zero/one). End-of-Vec is the NUL terminator.
-    let mut i = 0usize;
-    let mut state = 0; // 0 = "zero" (initial), 1 = "one"
-    loop {
-        let c = result.get(i).copied().unwrap_or(0);
-        if state == 0 {
-            if c == 0 {
-                break;
-            } else if c == space || c == epsilon {
-                i += 1;
-            } else if c == separator {
-                i += 1;
-                state = 1;
-            } else {
-                string.push(c); // strncat(string, result+i, 1)
-                i += 1;
-            }
-        } else if c == 0 {
-            break;
-        } else if c == space {
-            i += 1;
-            state = 0;
-        } else {
-            i += 1;
-        }
-    }
-}
-
 // [spec:foma:def:iface.iface-split-result-fn]
 // [spec:foma:sem:iface.iface-split-result-fn]
-pub fn iface_split_result(result: &mut Vec<u8>, upper: &mut Vec<u8>, lower: &mut Vec<u8>) {
+pub fn iface_split_result(result: &[u8], upper: &mut Vec<u8>, lower: &mut Vec<u8>) {
     upper.clear();
     lower.clear();
-    /* Split string into upper by filtering the input side, and lower by the */
-    /* same filter but on the reversed string.                               */
-    iface_split_string(result, upper);
-    // Extract the lower side by running the same "take the upper" filter over
-    // the reversed bytes, then reverse the extracted piece back. The reversal
-    // is symmetric (reverse → split → un-reverse), so it round-trips cleanly.
-    result.reverse();
-    iface_split_string(result, lower);
-    lower.reverse();
-    result.reverse();
+    const SPACE: u8 = 1;
+    const EPSILON: u8 = 2;
+    const SEPARATOR: u8 = 3;
+    /* `result` is a SPACE-delimited sequence of symbol pairs. In each segment
+    the bytes before the SEPARATOR are the upper side and those after are the
+    lower; a segment with no SEPARATOR is an identity symbol that belongs to
+    BOTH sides. EPSILON markers contribute nothing. (C got the lower side by
+    reversing the whole buffer and reusing the upper-side filter — this reads
+    both sides directly in one forward pass.) */
+    let push_syms = |dst: &mut Vec<u8>, bytes: &[u8]| {
+        dst.extend(
+            bytes
+                .iter()
+                .copied()
+                .filter(|&b| b != EPSILON && b != SEPARATOR),
+        );
+    };
+    let end = result.iter().position(|&b| b == 0).unwrap_or(result.len());
+    for seg in result[..end].split(|&b| b == SPACE) {
+        match seg.iter().position(|&b| b == SEPARATOR) {
+            Some(k) => {
+                push_syms(upper, &seg[..k]);
+                push_syms(lower, &seg[k + 1..]);
+            }
+            None => {
+                push_syms(upper, seg);
+                push_syms(lower, seg);
+            }
+        }
+    }
 }

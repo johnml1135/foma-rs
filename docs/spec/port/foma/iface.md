@@ -721,26 +721,11 @@
 
 > [spec:foma:sem:iface.iface-split-result-fn]
 > Helper for the pairs commands: splits an apply result encoded with space='\001', epsilon='\002',
-> separator='\003' into freshly allocated upper and lower strings. Allocates *upper and *lower with
-> calloc(strlen(result), 1) each — latent bug: no +1 for the NUL terminator, so if nothing is
-> filtered out (result contains no \001/\002/\003 bytes) the terminator writes one byte past the
-> allocation. Then: iface_split_string(result, *upper) extracts the upper side; the result bytes are
-> reversed in place; iface_split_string(result, *lower) — on the reversed bytes the same
-> upper-side filter extracts the lower symbols (in each reversed "u\003l" pair the lower symbol now
-> precedes the separator); *lower is reversed back to restore its order, and result is reversed back to
-> restore the caller's buffer. The reversal round-trips (reverse → split → un-reverse). Caller frees *upper/*lower.
-
-> [spec:foma:def:iface.iface-split-string-fn]
-> void iface_split_string(char *result, char *string)
-
-> [spec:foma:sem:iface.iface-split-string-fn]
-> Two-state filter that appends to `string` (must be a pre-zeroed buffer) the upper side of `result`,
-> a pairs-encoded apply output using bytes '\001' (space), '\002' (epsilon), '\003' (separator). It
-> simulates "SEPARATOR \SPACE+ @-> 0 .o. SPACE|SEPARATOR|EPSILON -> 0". State ZERO (initial): NUL →
-> stop; '\001' or '\002' → skip, stay ZERO; '\003' → skip, go to state ONE; any other byte → append
-> that one byte (strncat of 1) to `string`, stay ZERO. State ONE: NUL → stop; '\001' → skip, go to
-> ZERO; anything else → skip, stay ONE. Net effect: for each space-separated "u\003l" pair only u is
-> kept; bare symbols are kept whole; epsilons and separators vanish.
+> separator='\003' into the upper and lower strings (cleared first). The result is a
+> space-delimited sequence of symbol pairs; within each pair the bytes before the '\003' separator
+> are the upper side and those after are the lower. A pair with no separator is a bare (identity)
+> symbol and its bytes are appended to BOTH sides. '\002' epsilon markers (and the '\003'
+> separators) contribute nothing. Reads to the first NUL or the buffer end.
 
 > [spec:foma:def:iface.iface-stack-check-fn]
 > int iface_stack_check (int size)
