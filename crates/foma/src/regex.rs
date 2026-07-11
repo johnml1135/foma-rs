@@ -169,10 +169,9 @@ fn build_net(
             Some(fsm_symbol(s))
         }
         XreExpr::Curly(s) => {
-            /* regex.l {BRACED}: fsm_explode(yytext) where yytext is the full
-            `{...}` match. nfst-xre already stripped the braces, and
-            fsm_explode expects them (it skips bytes[1..len-1]), so re-add. */
-            Some(crate::constructions::fsm_explode(&format!("{{{}}}", s)))
+            /* regex.l {BRACED}: nfst-xre delivers the braces' interior, which
+            is exactly fsm_explode's payload */
+            Some(crate::constructions::fsm_explode(s))
         }
         XreExpr::Epsilon => Some(fsm_empty_string()),
         XreExpr::Any => Some(fsm_identity()),

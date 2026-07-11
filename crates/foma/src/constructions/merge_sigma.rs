@@ -68,7 +68,7 @@ pub fn copy_mergesigma(mergesigma: Option<&Mergesigma>) -> Vec<Sigma> {
     while let Some(m) = mergesigma {
         new_sigma.push(Sigma {
             number: m.number,
-            symbol: m.symbol.clone().unwrap_or_default().into(),
+            symbol: m.symbol.clone().unwrap_or_default(),
         });
         mergesigma = m.next.as_deref();
     }

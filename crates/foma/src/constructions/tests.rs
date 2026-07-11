@@ -830,20 +830,23 @@ fn fsm_escape_skips_the_first_byte() {
     assert_eq!(down(&fsm_escape("\\+"), "+"), ws(&["+"]));
 }
 
-// [spec:foma:sem:constructions.fsm-explode-fn/test]
-// [spec:foma:sem:fomalib.fsm-explode-fn/test]
+// [spec:foma:sem:constructions.fsm-explode-fn+1/test]
+// [spec:foma:sem:fomalib.fsm-explode-fn+1/test]
 #[test]
-fn fsm_explode_spells_out_delimited_payload() {
-    // Drops the first and last byte (the braces), one arc per UTF-8 char.
-    let net = fsm_explode("{cat}");
+fn fsm_explode_spells_out_payload() {
+    // One arc per UTF-8 char of the payload (no delimiters, unlike C).
+    let net = fsm_explode("cat");
     assert_eq!(words(&net), ws(&["cat"]));
     assert_eq!(
         syms(&net),
         ws(&["a", "c", "t"]),
         "each char enters the sigma"
     );
-    // Empty payload ("{}") yields the single-state empty-string machine.
-    assert_eq!(words(&fsm_explode("{}")), ws(&[""]));
+    // Empty payload yields the single-state empty-string machine.
+    assert_eq!(words(&fsm_explode("")), ws(&[""]));
+    // Multi-byte chars are whole symbols, wherever they sit in the payload.
+    assert_eq!(words(&fsm_explode("éxé")), ws(&["éxé"]));
+    assert_eq!(syms(&fsm_explode("éxé")), ws(&["x", "é"]));
 }
 
 // [spec:foma:sem:constructions.fsm-universal-fn/test]

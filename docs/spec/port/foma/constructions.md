@@ -559,17 +559,18 @@
 > [spec:foma:def:constructions.fsm-explode-fn]
 > struct fsm *fsm_explode(char *symbol)
 
-> [spec:foma:sem:constructions.fsm-explode-fn]
-> Builds a linear chain automaton spelling out the characters of `symbol`,
-> excluding the first and last byte of the string (assumed to be enclosing
-> delimiters, e.g. the braces of {abc}): the payload is symbol[1..strlen-2].
-> Iterates over the payload one UTF-8 character at a time (each character is
-> utf8skip+1 bytes, copied out as one symbol and freed after use); the k-th
-> character becomes an arc from state k-1 to state k labeled c:c, added by name
-> via the construct API (each distinct character enters the sigma). State 0 is
-> initial; the state after the last character is final. A two-byte input (empty
-> payload) yields the single-state empty-string machine (state 0 initial and
-> final). Returns the constructed net; the input string is not modified or freed.
+> [spec:foma:sem:constructions.fsm-explode-fn+1]
+> Builds a linear chain automaton spelling out the characters of `symbol`.
+> Iterates over `symbol` one UTF-8 character at a time; the k-th character
+> becomes an arc from state k-1 to state k labeled c:c, added by name via the
+> construct API (each distinct character enters the sigma). State 0 is initial;
+> the state after the last character is final. An empty input yields the
+> single-state empty-string machine (state 0 initial and final). Returns the
+> constructed net.
+> The parameter is the payload itself; C received the brace-enclosed form
+> ({abc}) and stripped the first and last byte, so callers had to re-wrap
+> already-stripped text only for it to be unwrapped again — and a short or
+> non-delimited string indexed out of bounds.
 
 > [spec:foma:def:constructions.fsm-flatten-fn]
 > struct fsm *fsm_flatten(struct fsm *net, struct fsm *epsilon)

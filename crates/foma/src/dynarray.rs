@@ -25,6 +25,7 @@ use crate::types::{
     EPSILON, Fsm, FsmConstructHandle, FsmReadHandle, FsmSigmaHash, FsmSigmaList, FsmState,
     FsmStateList, FsmTransList, IDENTITY, PATHCOUNT_UNKNOWN, Sigma, UNK, UNKNOWN,
 };
+use smol_str::SmolStr;
 
 /* C: #define INITIAL_SIZE 16384 */
 pub const INITIAL_SIZE: usize = 16384;
@@ -588,20 +589,20 @@ pub fn fsm_construct_copy_sigma(handle: &mut FsmConstructHandle, sigma: &[Sigma]
         }
         /* Insert into list */
         /* C shares one strdup between the list slot and the hash node;
-        owned copies here (observably equivalent) */
-        let symdup = symbol.to_string();
-        handle.fsm_sigma_list[symnum as usize].symbol = Some(symdup.clone().into());
+        cheap SmolStr clones of one copy here (observably equivalent) */
+        let symdup: SmolStr = symbol.into();
+        handle.fsm_sigma_list[symnum as usize].symbol = Some(symdup.clone());
 
         /* Insert into hashtable */
         let hash = fsm_construct_hash_sym(symbol);
         let fh = &mut handle.fsm_sigma_hash[hash as usize];
         if fh.symbol.is_none() {
-            fh.symbol = Some(symdup.into());
+            fh.symbol = Some(symdup);
             fh.sym = symnum as i16;
         } else {
             /* calloc'd chain node spliced directly after the head */
             let newfh = Box::new(FsmSigmaHash {
-                symbol: Some(symdup.into()),
+                symbol: Some(symdup),
                 sym: symnum as i16,
                 next: fh.next.take(),
             });
@@ -654,20 +655,20 @@ pub fn fsm_construct_add_symbol(handle: &mut FsmConstructHandle, symbol: &str) -
     }
     /* Insert into list */
     /* C shares one strdup between the list slot and the hash node;
-    owned copies here (observably equivalent) */
-    let symdup = symbol.to_string();
-    handle.fsm_sigma_list[symnum as usize].symbol = Some(symdup.clone().into());
+    cheap SmolStr clones of one copy here (observably equivalent) */
+    let symdup: SmolStr = symbol.into();
+    handle.fsm_sigma_list[symnum as usize].symbol = Some(symdup.clone());
 
     /* Insert into hashtable */
     let hash = fsm_construct_hash_sym(symbol);
     let fh = &mut handle.fsm_sigma_hash[hash as usize];
     if fh.symbol.is_none() {
-        fh.symbol = Some(symdup.into());
+        fh.symbol = Some(symdup);
         fh.sym = symnum as i16;
     } else {
         /* calloc'd chain node spliced directly after the head */
         let newfh = Box::new(FsmSigmaHash {
-            symbol: Some(symdup.into()),
+            symbol: Some(symdup),
             sym: symnum as i16,
             next: fh.next.take(),
         });

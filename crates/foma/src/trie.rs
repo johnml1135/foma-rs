@@ -41,7 +41,7 @@ pub fn fsm_trie_init() -> Box<FsmTrieHandle> {
         trie_cursor: 0,
         /* calloc(1, ...) zeroes the rest of the handle */
         used_states: 0,
-        sh_hash: Some(sh_init()),
+        sh_hash: sh_init(),
     });
     th
 }
@@ -51,7 +51,6 @@ pub fn fsm_trie_init() -> Box<FsmTrieHandle> {
 // [spec:foma:def:fomalib.fsm-trie-done-fn]
 // [spec:foma:sem:fomalib.fsm-trie-done-fn]
 pub fn fsm_trie_done(th: Box<FsmTrieHandle>) -> Box<Fsm> {
-    let mut th = th;
     let mut newh = fsm_construct_init("name");
     for i in 0..THASH_TABLESIZE as usize {
         let mut thash: Option<&TrieHash> = Some(&th.trie_hash[i]);
@@ -81,11 +80,7 @@ pub fn fsm_trie_done(th: Box<FsmTrieHandle>) -> Box<Fsm> {
     let newnet = fsm_construct_done(newh);
     /* Free all mem: chained overflow nodes and the bucket/state arrays are
     dropped with the handle; sh_done consumes the string-intern hash */
-    sh_done(
-        th.sh_hash
-            .take()
-            .expect("sh_hash present until fsm_trie_done"),
-    );
+    sh_done(th.sh_hash);
     newnet
 }
 
@@ -138,56 +133,21 @@ pub fn fsm_trie_symbol(th: &mut FsmTrieHandle, insym: &str, outsym: &str) {
 
     /* Insert trans, move counter and cursor */
     th.used_states += 1;
-    // DEVIATION from C (insym/outsym are interned aliases into the sh_hash;
-    // owned copies here, per the TrieHash type in types.rs)
+    // DEVIATION from C (insym/outsym alias strings interned in the sh_hash;
+    // cheap clones of the interned copies here, per the TrieHash type in types.rs)
+    let sh = &mut th.sh_hash;
     let thash = &mut th.trie_hash[h as usize];
     if thash.insym.is_none() {
-        thash.insym = Some(
-            sh_find_add_string(
-                th.sh_hash
-                    .as_deref_mut()
-                    .expect("sh_hash present until fsm_trie_done"),
-                insym,
-                1,
-            )
-            .into(),
-        );
-        thash.outsym = Some(
-            sh_find_add_string(
-                th.sh_hash
-                    .as_deref_mut()
-                    .expect("sh_hash present until fsm_trie_done"),
-                outsym,
-                1,
-            )
-            .into(),
-        );
+        thash.insym = Some(sh_find_add_string(sh, insym, 1));
+        thash.outsym = Some(sh_find_add_string(sh, outsym, 1));
         thash.sourcestate = th.trie_cursor;
         thash.targetstate = th.used_states;
     } else {
         let newthash = Box::new(TrieHash {
             /* calloc'd node spliced in right after the head */
             next: thash.next.take(),
-            insym: Some(
-                sh_find_add_string(
-                    th.sh_hash
-                        .as_deref_mut()
-                        .expect("sh_hash present until fsm_trie_done"),
-                    insym,
-                    1,
-                )
-                .into(),
-            ),
-            outsym: Some(
-                sh_find_add_string(
-                    th.sh_hash
-                        .as_deref_mut()
-                        .expect("sh_hash present until fsm_trie_done"),
-                    outsym,
-                    1,
-                )
-                .into(),
-            ),
+            insym: Some(sh_find_add_string(sh, insym, 1)),
+            outsym: Some(sh_find_add_string(sh, outsym, 1)),
             sourcestate: th.trie_cursor,
             targetstate: th.used_states,
         });
@@ -277,7 +237,7 @@ mod tests {
         assert_eq!(th.statesize, TRIE_STATESIZE);
         assert_eq!(th.trie_cursor, 0); // root state is 0
         assert_eq!(th.used_states, 0);
-        assert!(th.sh_hash.is_some()); // per-trie interning table
+        assert_eq!(th.sh_hash.lastvalue, 0); // fresh per-trie interning table
         assert!(th.trie_states.iter().all(|s| !s.is_final));
     }
 

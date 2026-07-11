@@ -1666,7 +1666,7 @@ pub fn apply_create_sigarray(h: &mut ApplyHandle, net: &Fsm) {
             h.has_flags = 1;
             apply_add_flag(h, flag_get_name(symbol));
         }
-        h.sigs[*number as usize].symbol = Some(symbol.clone().into());
+        h.sigs[*number as usize].symbol = Some(symbol.clone());
         h.sigs[*number as usize].length = symbol.len() as i32;
         /* Add sigma entry to trie */
         if *number > IDENTITY {

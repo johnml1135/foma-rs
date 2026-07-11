@@ -354,14 +354,15 @@
 > [spec:foma:def:io.io-net-read-fn]
 > struct fsm *io_net_read(struct io_buf_handle *iobh, char **net_name)
 
-> [spec:foma:sem:io.io-net-read-fn+3]
+> [spec:foma:sem:io.io-net-read-fn+4]
 > Parses one network in the foma text format from the handle's in-memory buffer (format
 > as written by `[spec:foma:sem:io.foma-net-print-fn]`). All lines are read with
 > `[spec:foma:sem:io.io-gets-fn]` into a stack buffer of READ_BUF_SIZE (4096) bytes.
-> Returns the new struct fsm and stores a strdup of the net name into *net_name; returns
+> Returns the new struct fsm, carrying the net name on net->name; returns
 > NULL at end of buffer or on format error (errors print/perror a diagnostic; the fsm is
-> destroyed on the header/props/sigma-header errors but leaked on later ones, and
-> *net_name is left unset on errors before the props line).
+> destroyed on the header/props/sigma-header errors but leaked on later ones). C also
+> stored a strdup of the name into a *net_name out-param — always byte-identical to
+> net->name, so it is not part of the return here.
 > 1. Read a line; if io_gets returned 0, return NULL (normal end of a multi-net stream).
 > Create the net with fsm_create(""). The line must equal "##foma-net 1.0##", else
 > perror("File format error foma!\n"), destroy, NULL.
@@ -369,7 +370,7 @@
 > parsed with sscanf format "%i %i %i %i %i %lld %i %i %i %i %i %i %s" into arity,
 > arccount, statecount, linecount, finalcount, pathcount, is_deterministic, is_pruned,
 > is_minimized, is_epsilon_free, is_loop_free, extras, name; name (empty when the field is
-> absent) is capped at FSM_NAME_LEN (40) into net->name and strdup'd into *net_name. C's sscanf
+> absent) goes into net->name (C capped it at FSM_NAME_LEN (40) and strdup'd it into *net_name). C's sscanf
 > left the buffer holding the whole props line when the name field was absent, so that line
 > became the net name. extras is unpacked as:
 > is_completed = extras & 3; arcs_sorted_in = (extras & 12) >> 2; arcs_sorted_out =

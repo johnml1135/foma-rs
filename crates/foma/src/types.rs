@@ -312,7 +312,8 @@ pub struct FsmTrieHandle {
     pub trie_hash: Vec<TrieHash>,
     pub used_states: u32,
     pub statesize: u32,
-    pub sh_hash: Option<Box<ShHandle>>,
+    /// Per-trie string-intern table; fsm_trie_done consumes it with the handle.
+    pub sh_hash: Box<ShHandle>,
 }
 
 /* Extraction routines */

@@ -631,10 +631,6 @@ pub fn fsm_read_spaced_text_file(filename: &str) -> Option<Box<Fsm>> {
                 fsm_trie_symbol(&mut th, insym, outsym);
             }
         } else {
-            /* a single blank separator line, if present, belongs to this record */
-            if lines.peek() == Some(&"") {
-                lines.next();
-            }
             for tok in upper.split_whitespace() {
                 let s = sym(tok);
                 fsm_trie_symbol(&mut th, s, s);
@@ -712,10 +708,7 @@ pub fn fsm_read_binary_file_multiple(
         io_net_read(&mut handle.iobh)
     };
     match result {
-        Ok(Some((net, _net_name))) => {
-            /* free(net_name) — dropped */
-            Some(net)
-        }
+        Ok(Some(net)) => Some(net),
         // Clean end of stream or a format error: the C returned NULL either way.
         Ok(None) | Err(_) => {
             /* io_free(iobh) — drop the whole handle */
@@ -752,8 +745,7 @@ pub fn fsm_read_binary_file(filename: &str) -> Result<Box<Fsm>, FomaError> {
             "cannot read binary file '{filename}'"
         )));
     }
-    /* *net_name is strdup'd and never freed in C (leak); here it is dropped */
-    let net = io_net_read(&mut iobh).map(|opt| opt.map(|(n, _net_name)| n));
+    let net = io_net_read(&mut iobh);
     io_free(iobh);
     net?.ok_or_else(|| FomaError::Format(format!("malformed foma binary file '{filename}'")))
 }
@@ -780,7 +772,6 @@ pub fn fsm_read_binary_mem(bytes: &[u8]) -> Result<Box<Fsm>, FomaError> {
         io_buf_ptr: 0,
     };
     io_net_read(&mut iobh)?
-        .map(|(net, _net_name)| net)
         .ok_or_else(|| FomaError::Format("malformed foma binary image".to_string()))
 }
 
@@ -812,7 +803,6 @@ pub fn fsm_read_binary_mem_prefix(bytes: &[u8]) -> Result<(Box<Fsm>, usize), Fom
         io_buf_ptr: 0,
     };
     let net = io_net_read(&mut iobh)?
-        .map(|(net, _net_name)| net)
         .ok_or_else(|| FomaError::Format("malformed foma binary image".to_string()))?;
     Ok((net, consumed))
 }
@@ -879,10 +869,11 @@ pub fn load_defined(def: &mut DefinedNetworks, filename: &str) -> Result<(), Fom
     let result = loop {
         match io_net_read(&mut iobh) {
             Ok(None) => break Ok(()),
-            Ok(Some((net, net_name))) => {
-                /* the stored net name is the definition name; add_defined copies
-                it, so the strdup'd net_name is leaked in C (dropped here) */
-                add_defined(def, Some(net), &net_name);
+            Ok(Some(net)) => {
+                /* the stored net name is the definition name; add_defined
+                copies it out of the net */
+                let name = net.name.clone();
+                add_defined(def, Some(net), &name);
             }
             Err(e) => break Err(e),
         }
@@ -927,14 +918,14 @@ pub(crate) fn explode_line(buf: &str, values: &mut Vec<i32>) -> i32 {
 /* / ##states## / ...TRANSITIONS... / ##end## (see foma/io.c for the full note) */
 
 // [spec:foma:def:io.io-net-read-fn]
-// [spec:foma:sem:io.io-net-read-fn+3]
+// [spec:foma:sem:io.io-net-read-fn+4]
 // C signature: struct fsm *io_net_read(io_buf_handle *iobh, char **net_name).
-// Here the net and its name are returned together. `Ok(None)` is a clean end of
-// the buffer (no more nets); `Err` is a structural format error (the C printed a
-// diagnostic and returned NULL — the caller now decides what to report).
-pub fn io_net_read(iobh: &mut IoBufHandle) -> Result<Option<(Box<Fsm>, String)>, FomaError> {
+// The name rides on net.name (C's *net_name out-param was always identical to
+// it). `Ok(None)` is a clean end of the buffer (no more nets); `Err` is a
+// structural format error (the C printed a diagnostic and returned NULL — the
+// caller now decides what to report).
+pub fn io_net_read(iobh: &mut IoBufHandle) -> Result<Option<Box<Fsm>>, FomaError> {
     let mut buf = String::new();
-    let net_name: String;
     let mut lineint: Vec<i32> = Vec::new();
     /* char last_final = '1' (49) in C — a latent typo (an int 0/1 was surely
     intended), kept as-is: it is only consumed when the first states line has 2
@@ -1001,16 +992,10 @@ pub fn io_net_read(iobh: &mut IoBufHandle) -> Result<Option<(Box<Fsm>, String)>,
         if toks.len() > 11 {
             extras = parse_leading_i32(toks[11]);
         }
-        // [spec:foma:sem:io.io-net-read-fn+3] a missing name field yields an empty
+        // [spec:foma:sem:io.io-net-read-fn+4] a missing name field yields an empty
         // name. C's sscanf left the buffer holding the whole props line, so that
         // line became the net name.
-        let name = if toks.len() > 12 {
-            toks[12].to_string()
-        } else {
-            String::new()
-        };
-        net.name = name.clone().into();
-        net_name = name;
+        net.name = toks.get(12).copied().unwrap_or("").into();
     }
     io_gets(iobh, &mut buf);
 
@@ -1168,7 +1153,7 @@ pub fn io_net_read(iobh: &mut IoBufHandle) -> Result<Option<(Box<Fsm>, String)>,
         /* C leaks net here */
         return Err(FomaError::Format("File format error!".to_string()));
     }
-    Ok(Some((net, net_name)))
+    Ok(Some(net))
 }
 
 // [spec:foma:def:io.io-gets-fn]
@@ -1306,7 +1291,7 @@ pub fn net_print_att<W: std::io::Write + ?Sized>(
     let mut sl = sigma_to_list(&net.sigma);
     if sigma_max(&net.sigma) >= 0 {
         /* (sl+0)->symbol = g_att_epsilon */
-        sl[0].symbol = Some(opts.att_epsilon.clone().into());
+        sl[0].symbol = Some(opts.att_epsilon.clone());
     }
     let mut i = 0usize;
     while net.states[i].state_no != -1 {
@@ -1822,8 +1807,8 @@ mod tests {
             io_buf: Some(buf),
             io_buf_ptr: 0,
         };
-        let (net, name) = io_net_read(&mut h).unwrap().unwrap();
-        assert_eq!(name, "test");
+        let net = io_net_read(&mut h).unwrap().unwrap();
+        assert_eq!(net.name, "test");
         assert_net_eq(&net, &craft_ab_net("test"));
     }
 
@@ -2403,7 +2388,7 @@ mod tests {
         let mut iobh = io_init();
         iobh.io_buf = Some(text);
         iobh.io_buf_ptr = 0;
-        let (net2, _name) = io_net_read(&mut iobh)
+        let net2 = io_net_read(&mut iobh)
             .expect("valid net should parse")
             .expect("a net, not clean EOF");
         assert_eq!(net2.name, "");

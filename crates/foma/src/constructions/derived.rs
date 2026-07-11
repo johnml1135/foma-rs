@@ -119,12 +119,11 @@ pub fn fsm_explode(symbol: &str) -> Box<Fsm> {
     let mut h = fsm_construct_init("");
     fsm_construct_set_initial(&mut h, 0);
 
-    /* `symbol` is `{...}`; emit one identity arc per character of the interior
-    (C skipped the two brace bytes and walked the middle with utf8skip). */
-    let interior = &symbol[1..symbol.len() - 1];
+    /* one identity arc per character (`symbol` is the bare content; C received
+    the brace-enclosed form and skipped the two delimiter bytes itself) */
     let mut j: i32 = 1;
     let mut buf = [0u8; 4];
-    for ch in interior.chars() {
+    for ch in symbol.chars() {
         let sym = ch.encode_utf8(&mut buf);
         fsm_construct_add_arc(&mut h, j - 1, j, sym, sym);
         j += 1;

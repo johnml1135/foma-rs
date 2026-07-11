@@ -1,13 +1,15 @@
 //! Literal port of foma/stringhash.c (Wave 2, bug-for-bug).
 //!
-//! The hash table owns its interned Strings (the C table owns strdup'd
+//! The hash table owns its interned SmolStrs (the C table owns strdup'd
 //! copies, freed by sh_done). C returns pointers to the interned copies;
 //! safe Rust cannot hand out aliases into the table, so the find/add
-//! functions return owned clones of the interned copy — observably the
-//! same bytes at every call site (trie.c stores owned copies per the
-//! types.rs TrieHash deviation; spelling.c only NULL-checks the result).
+//! functions return clones of the interned copy — O(1) for the short
+//! symbol strings interned here, and observably the same bytes at every
+//! call site (trie.c stores owned copies per the types.rs TrieHash
+//! deviation; spelling.c only NULL-checks the result).
 
 use crate::types::{ShHandle, ShHashtable};
+use smol_str::SmolStr;
 
 /// C: `#define STRING_HASH_SIZE 8191`
 const STRING_HASH_SIZE: usize = 8191;
@@ -59,19 +61,18 @@ pub fn sh_get_value(sh: &ShHandle) -> i32 {
 // [spec:foma:sem:fomalib.sh-find-string-fn]
 // C returns the interned pointer owned by the table (NULL on a miss);
 // here a clone of the interned copy is returned (see module doc).
-pub fn sh_find_string(sh: &mut ShHandle, string: &str) -> Option<String> {
-    let mut found: Option<(String, i32)> = None;
+pub fn sh_find_string(sh: &mut ShHandle, string: &str) -> Option<SmolStr> {
+    let mut found: Option<(SmolStr, i32)> = None;
     {
         let mut hash: Option<&ShHashtable> = Some(&sh.hash[sh_hashf(string) as usize]);
         while let Some(h) = hash {
-            if h.string.is_none() {
+            let Some(interned) = &h.string else {
                 /* An empty head slot means the bucket has never been used */
                 return None;
-            }
-            if h.string.as_deref() == Some(string) {
-                /* C: strcmp(hash->string, string) == 0. The interned copy equals
-                `string`, so return an owned copy of the query. */
-                found = Some((string.to_string(), h.value));
+            };
+            if interned == string {
+                /* C: strcmp(hash->string, string) == 0 */
+                found = Some((interned.clone(), h.value));
                 break;
             }
             hash = h.next.as_deref();
@@ -92,7 +93,7 @@ pub fn sh_find_string(sh: &mut ShHandle, string: &str) -> Option<String> {
 // [spec:foma:sem:fomalib.sh-find-add-string-fn]
 // C never returns NULL here; the return is a clone of the interned copy
 // (see module doc).
-pub fn sh_find_add_string(sh: &mut ShHandle, string: &str, value: i32) -> String {
+pub fn sh_find_add_string(sh: &mut ShHandle, string: &str, value: i32) -> SmolStr {
     match sh_find_string(sh, string) {
         Some(existing) => existing,
         None => sh_add_string(sh, string, value),
@@ -106,22 +107,21 @@ pub fn sh_find_add_string(sh: &mut ShHandle, string: &str, value: i32) -> String
 // Unconditional insert (no duplicate check). The table owns the interned
 // copy (C: strdup); the return is a clone of it (see module doc).
 // sh->lastvalue is not touched.
-pub fn sh_add_string(sh: &mut ShHandle, string: &str, value: i32) -> String {
+pub fn sh_add_string(sh: &mut ShHandle, string: &str, value: i32) -> SmolStr {
+    let interned: SmolStr = string.into(); /* C: strdup(string) */
     let hash: &mut ShHashtable = &mut sh.hash[sh_hashf(string) as usize];
     if hash.string.is_none() {
-        hash.string = Some(string.into()); /* C: strdup(string) */
+        hash.string = Some(interned.clone());
         hash.value = value;
-        string.to_string()
     } else {
         let newhash: Box<ShHashtable> = Box::new(ShHashtable {
-            string: Some(string.into()), /* C: strdup(string) */
+            string: Some(interned.clone()),
             value,
             next: hash.next.take(), /* C: newhash->next = hash->next */
         });
-        let ret: String = string.to_string();
         hash.next = Some(newhash); /* C: hash->next = newhash */
-        ret
     }
+    interned
 }
 
 // [spec:foma:def:stringhash.sh-hashf-fn]

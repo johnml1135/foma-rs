@@ -1246,14 +1246,15 @@
 > [spec:foma:def:fomalib.fsm-explode-fn]
 > fsm *fsm_explode(char *symbol)
 
-> [spec:foma:sem:fomalib.fsm-explode-fn]
-> Builds a linear chain acceptor from a quoted multicharacter string. The first and last characters
-> of `symbol` are treated as delimiters and dropped (content = symbol[1..strlen-2]). The content is
+> [spec:foma:sem:fomalib.fsm-explode-fn+1]
+> Builds a linear chain acceptor from a multicharacter symbol string. The string is
 > split into single UTF-8 characters; the k-th character (k from 1) becomes an arc from state k-1 to
-> state k with that character on both sides (each one-character substring is duplicated, added via
-> fsm_construct_add_arc, then freed). State 0 is initial; the last state is final. Empty content
-> yields one state that is both initial and final (empty-string language). Built with the
-> construction API and returned via fsm_construct_done; the input string is caller-owned.
+> state k with that character on both sides, added via fsm_construct_add_arc. State 0 is initial;
+> the last state is final. An empty string yields one state that is both initial and final
+> (empty-string language). Built with the construction API and returned via fsm_construct_done.
+> The parameter is the bare content; C received the delimiter-quoted form and dropped its
+> first and last byte (content = symbol[1..strlen-2]), indexing out of bounds on
+> shorter-than-two-byte input.
 
 > [spec:foma:def:fomalib.fsm-extract-ambiguous-domain-fn]
 > fsm *fsm_extract_ambiguous_domain(struct fsm *net)
