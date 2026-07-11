@@ -68,9 +68,9 @@ pub fn decode_quoted(s: &mut Vec<u8>) {
         if s[i as usize] == 0x5c
             && len - i > 5
             && s[(i + 1) as usize] == 0x75
-            && ishexstr(&s[(i + 2) as usize..])
+            && is_hex4(&s[(i + 2) as usize..])
         {
-            let unistr: Vec<u8> = utf8code16tostr(&s[(i + 2) as usize..])
+            let unistr: Vec<u8> = hex4_to_utf8(&s[(i + 2) as usize..])
                 .expect("4 hex digits parse to a codepoint <= 0xFFFF");
             /* C: for (unistr=...; *unistr; j++, unistr++) — copy up to the
             NUL. The \u0000 escape yields the single byte 0, which the
@@ -111,7 +111,7 @@ pub fn decode_quoted(s: &mut Vec<u8>) {
 // oldstring that still matches after substitution) looped forever. An empty
 // oldstring (matches everywhere) and a newstring shorter than oldstring (the C
 // memcpy read past its end) are both treated as no-ops rather than hanging/panicking.
-pub fn streqrep(s: &mut Vec<u8>, oldstring: &[u8], newstring: &[u8]) {
+pub fn replace_equal_len(s: &mut Vec<u8>, oldstring: &[u8], newstring: &[u8]) {
     let len: usize = oldstring.len();
     if len == 0 || newstring.len() < len {
         return;
@@ -133,7 +133,7 @@ pub fn streqrep(s: &mut Vec<u8>, oldstring: &[u8], newstring: &[u8]) {
 // [spec:foma:sem:utf8.ishexstr-fn]
 // [spec:foma:def:fomalibconf.ishexstr-fn]
 // [spec:foma:sem:fomalibconf.ishexstr-fn]
-pub fn ishexstr(str: &[u8]) -> bool {
+pub fn is_hex4(str: &[u8]) -> bool {
     let mut i: i32 = 0;
     while i < 4 {
         /* C compares (signed) char, so bytes >= 0x80 are negative and fail
@@ -166,7 +166,7 @@ pub fn ishexstr(str: &[u8]) -> bool {
 // [spec:foma:sem:utf8.utf8iscombining-fn]
 // [spec:foma:def:fomalibconf.utf8iscombining-fn]
 // [spec:foma:sem:fomalibconf.utf8iscombining-fn]
-pub fn utf8iscombining(s: &[u8]) -> i32 {
+pub fn is_combining(s: &[u8]) -> i32 {
     /* Index >= len stands in for the C string's NUL terminator */
     let s0: u8 = if !s.is_empty() { s[0] } else { 0 };
     let s1: u8 = if s.len() > 1 { s[1] } else { 0 };
@@ -235,10 +235,10 @@ pub fn utf8skip(str: &[u8]) -> i32 {
 // [spec:foma:sem:utf8.utf8code16tostr-fn]
 // [spec:foma:def:fomalibconf.utf8code16tostr-fn]
 // [spec:foma:sem:fomalibconf.utf8code16tostr-fn]
-pub fn utf8code16tostr(str: &[u8]) -> Option<Vec<u8>> {
+pub fn hex4_to_utf8(str: &[u8]) -> Option<Vec<u8>> {
     let codepoint: i32;
-    codepoint = (hexstrtoint(str) << 8) + hexstrtoint(&str[2..]);
-    int2utf8str(codepoint)
+    codepoint = (parse_hex_byte(str) << 8) + parse_hex_byte(&str[2..]);
+    codepoint_to_utf8(codepoint)
 }
 
 // [spec:foma:def:utf8.int2utf8str-fn]
@@ -247,7 +247,7 @@ pub fn utf8code16tostr(str: &[u8]) -> Option<Vec<u8>> {
 // yields the encoded bytes without a trailing NUL (codepoint 0 yields the
 // single byte 0, which consumers treating the result as a C string see as
 // empty). Negative codepoints fall into the < 0x80 branch (truncated byte).
-pub fn int2utf8str(codepoint: i32) -> Option<Vec<u8>> {
+pub fn codepoint_to_utf8(codepoint: i32) -> Option<Vec<u8>> {
     let mut value: Vec<u8> = Vec::with_capacity(5);
 
     if codepoint < 0x80 {
@@ -273,7 +273,7 @@ pub fn int2utf8str(codepoint: i32) -> Option<Vec<u8>> {
 // [spec:foma:sem:utf8.hexstrtoint-fn]
 // C: file-static. No validation — callers must pre-check with ishexstr;
 // garbage in gives garbage out.
-pub(crate) fn hexstrtoint(str: &[u8]) -> i32 {
+pub(crate) fn parse_hex_byte(str: &[u8]) -> i32 {
     let mut hex: i32;
 
     /* C reads (signed) char values; reproduce with `as i8 as i32` */
@@ -333,42 +333,42 @@ mod tests {
     // [spec:foma:sem:utf8.utf8iscombining-fn/test]
     // [spec:foma:sem:fomalibconf.utf8iscombining-fn/test]
     #[test]
-    fn test_utf8iscombining() {
+    fn test_is_combining() {
         // NUL / short guards
-        assert_eq!(utf8iscombining(&[]), 0);
-        assert_eq!(utf8iscombining(&[0xcc]), 0); // s1 == 0 (NUL)
+        assert_eq!(is_combining(&[]), 0);
+        assert_eq!(is_combining(&[0xcc]), 0); // s1 == 0 (NUL)
         // fast reject: lead not in {CC,CD,E1,E2,EF}
-        assert_eq!(utf8iscombining(&[b'a', b'b']), 0);
-        assert_eq!(utf8iscombining(&[0xce, 0x80]), 0);
+        assert_eq!(is_combining(&[b'a', b'b']), 0);
+        assert_eq!(is_combining(&[0xce, 0x80]), 0);
         // U+0300-036F: 0xCC + 0x80..=0xBF → 2
-        assert_eq!(utf8iscombining(&[0xcc, 0x80]), 2);
-        assert_eq!(utf8iscombining(&[0xcc, 0xbf]), 2);
-        assert_eq!(utf8iscombining(&[0xcc, 0x7f]), 0); // below range
-        assert_eq!(utf8iscombining(&[0xcc, 0xc0]), 0); // above range
+        assert_eq!(is_combining(&[0xcc, 0x80]), 2);
+        assert_eq!(is_combining(&[0xcc, 0xbf]), 2);
+        assert_eq!(is_combining(&[0xcc, 0x7f]), 0); // below range
+        assert_eq!(is_combining(&[0xcc, 0xc0]), 0); // above range
         // 0xCD + 0x80..=0xAF → 2
-        assert_eq!(utf8iscombining(&[0xcd, 0x80]), 2);
-        assert_eq!(utf8iscombining(&[0xcd, 0xaf]), 2);
-        assert_eq!(utf8iscombining(&[0xcd, 0xb0]), 0); // above range
+        assert_eq!(is_combining(&[0xcd, 0x80]), 2);
+        assert_eq!(is_combining(&[0xcd, 0xaf]), 2);
+        assert_eq!(is_combining(&[0xcd, 0xb0]), 0); // above range
         // U+1AB0-1ABE: 0xE1 0xAA + 0xB0..=0xBE → 3
-        assert_eq!(utf8iscombining(&[0xe1, 0xaa, 0xb0]), 3);
-        assert_eq!(utf8iscombining(&[0xe1, 0xaa, 0xbe]), 3);
-        assert_eq!(utf8iscombining(&[0xe1, 0xaa, 0xaf]), 0);
-        assert_eq!(utf8iscombining(&[0xe1, 0xaa, 0xbf]), 0);
+        assert_eq!(is_combining(&[0xe1, 0xaa, 0xb0]), 3);
+        assert_eq!(is_combining(&[0xe1, 0xaa, 0xbe]), 3);
+        assert_eq!(is_combining(&[0xe1, 0xaa, 0xaf]), 0);
+        assert_eq!(is_combining(&[0xe1, 0xaa, 0xbf]), 0);
         // U+1DC0-1DFF: 0xE1 0xB7 + 0x80..=0xBF → 3
-        assert_eq!(utf8iscombining(&[0xe1, 0xb7, 0x80]), 3);
-        assert_eq!(utf8iscombining(&[0xe1, 0xb7, 0xbf]), 3);
+        assert_eq!(is_combining(&[0xe1, 0xb7, 0x80]), 3);
+        assert_eq!(is_combining(&[0xe1, 0xb7, 0xbf]), 3);
         // U+20D0-20F0: 0xE2 0x83 + 0x90..=0xB0 → 3
-        assert_eq!(utf8iscombining(&[0xe2, 0x83, 0x90]), 3);
-        assert_eq!(utf8iscombining(&[0xe2, 0x83, 0xb0]), 3);
-        assert_eq!(utf8iscombining(&[0xe2, 0x83, 0x8f]), 0);
-        assert_eq!(utf8iscombining(&[0xe2, 0x83, 0xb1]), 0);
+        assert_eq!(is_combining(&[0xe2, 0x83, 0x90]), 3);
+        assert_eq!(is_combining(&[0xe2, 0x83, 0xb0]), 3);
+        assert_eq!(is_combining(&[0xe2, 0x83, 0x8f]), 0);
+        assert_eq!(is_combining(&[0xe2, 0x83, 0xb1]), 0);
         // U+FE20-FE2D: 0xEF 0xB8 + 0xA0..=0xAD → 3
-        assert_eq!(utf8iscombining(&[0xef, 0xb8, 0xa0]), 3);
-        assert_eq!(utf8iscombining(&[0xef, 0xb8, 0xad]), 3);
-        assert_eq!(utf8iscombining(&[0xef, 0xb8, 0x9f]), 0);
-        assert_eq!(utf8iscombining(&[0xef, 0xb8, 0xae]), 0);
+        assert_eq!(is_combining(&[0xef, 0xb8, 0xa0]), 3);
+        assert_eq!(is_combining(&[0xef, 0xb8, 0xad]), 3);
+        assert_eq!(is_combining(&[0xef, 0xb8, 0x9f]), 0);
+        assert_eq!(is_combining(&[0xef, 0xb8, 0xae]), 0);
         // three-byte lead but s2 == 0 (NUL) → 0
-        assert_eq!(utf8iscombining(&[0xe1, 0xaa]), 0);
+        assert_eq!(is_combining(&[0xe1, 0xaa]), 0);
     }
 
     // escape_string: backslash-escapes each `chr`; identity (owned copy) when
@@ -467,18 +467,18 @@ mod tests {
     // [spec:foma:sem:utf8.streqrep-fn+1/test]
     // [spec:foma:sem:fomalibconf.streqrep-fn+1/test]
     #[test]
-    fn test_streqrep() {
+    fn test_replace_equal_len() {
         // no match → identity
         let mut s = b"hello".to_vec();
-        streqrep(&mut s, b"xy", b"za");
+        replace_equal_len(&mut s, b"xy", b"za");
         assert_eq!(s, b"hello".to_vec());
         // single replacement
         let mut s = b"cat".to_vec();
-        streqrep(&mut s, b"a", b"o");
+        replace_equal_len(&mut s, b"a", b"o");
         assert_eq!(s, b"cot".to_vec());
         // all occurrences replaced (new text does not re-match old)
         let mut s = b"abcabc".to_vec();
-        streqrep(&mut s, b"bc", b"XY");
+        replace_equal_len(&mut s, b"bc", b"XY");
         assert_eq!(s, b"aXYaXY".to_vec());
     }
 
@@ -487,18 +487,18 @@ mod tests {
     // [spec:foma:sem:utf8.streqrep-fn+1/test]
     // [spec:foma:sem:fomalibconf.streqrep-fn+1/test]
     #[test]
-    fn streqrep_always_terminates() {
+    fn replace_equal_len_always_terminates() {
         // old == new: every 'a' rewritten to 'a' — must terminate, not hang.
         let mut s = b"banana".to_vec();
-        streqrep(&mut s, b"a", b"a");
+        replace_equal_len(&mut s, b"a", b"a");
         assert_eq!(s, b"banana".to_vec());
         // empty oldstring matches everywhere: treated as a no-op.
         let mut s = b"xyz".to_vec();
-        streqrep(&mut s, b"", b"q");
+        replace_equal_len(&mut s, b"", b"q");
         assert_eq!(s, b"xyz".to_vec());
         // newstring shorter than oldstring: no-op (C read past newstring's end).
         let mut s = b"abcabc".to_vec();
-        streqrep(&mut s, b"ab", b"x");
+        replace_equal_len(&mut s, b"ab", b"x");
         assert_eq!(s, b"abcabc".to_vec());
     }
 
@@ -507,57 +507,57 @@ mod tests {
     // [spec:foma:sem:utf8.ishexstr-fn/test]
     // [spec:foma:sem:fomalibconf.ishexstr-fn/test]
     #[test]
-    fn test_ishexstr() {
-        assert!(ishexstr(b"0041"));
-        assert!(ishexstr(b"DEAD"));
-        assert!(ishexstr(b"beef"));
-        assert!(ishexstr(b"09af"));
+    fn test_is_hex4() {
+        assert!(is_hex4(b"0041"));
+        assert!(is_hex4(b"DEAD"));
+        assert!(is_hex4(b"beef"));
+        assert!(is_hex4(b"09af"));
         // boundaries just outside each range
-        assert!(!(ishexstr(b"123:"))); // ':' == 0x3a, above '9'
-        assert!(!(ishexstr(b"12G4"))); // 'G' == 0x47, above 'F'
-        assert!(!(ishexstr(b"aaag"))); // 'g' == 0x67, above 'f'
-        assert!(!(ishexstr(b"aa`a"))); // '`' == 0x60, below 'a'
+        assert!(!(is_hex4(b"123:"))); // ':' == 0x3a, above '9'
+        assert!(!(is_hex4(b"12G4"))); // 'G' == 0x47, above 'F'
+        assert!(!(is_hex4(b"aaag"))); // 'g' == 0x67, above 'f'
+        assert!(!(is_hex4(b"aa`a"))); // '`' == 0x60, below 'a'
         // short input: index >= len stands in for NUL (byte 0) → fail
-        assert!(!(ishexstr(b"12")));
+        assert!(!(is_hex4(b"12")));
         // byte >= 0x80 is negative as signed char → fails
-        assert!(!(ishexstr(&[0x30, 0x30, 0x30, 0xff])));
+        assert!(!(is_hex4(&[0x30, 0x30, 0x30, 0xff])));
     }
 
     // hexstrtoint: two hex bytes → 0..255; signed-char sign-extension yields
     // garbage (negative) results for bytes >= 0x80.
     // [spec:foma:sem:utf8.hexstrtoint-fn/test]
     #[test]
-    fn test_hexstrtoint() {
-        assert_eq!(hexstrtoint(b"41"), 0x41);
-        assert_eq!(hexstrtoint(b"ff"), 0xff);
-        assert_eq!(hexstrtoint(b"FF"), 0xff);
-        assert_eq!(hexstrtoint(b"A0"), 0xa0);
-        assert_eq!(hexstrtoint(b"00"), 0x00);
+    fn test_parse_hex_byte() {
+        assert_eq!(parse_hex_byte(b"41"), 0x41);
+        assert_eq!(parse_hex_byte(b"ff"), 0xff);
+        assert_eq!(parse_hex_byte(b"FF"), 0xff);
+        assert_eq!(parse_hex_byte(b"A0"), 0xa0);
+        assert_eq!(parse_hex_byte(b"00"), 0x00);
         // signed-char: 0x80 as i8 == -128 → (-128 - 0x30) << 4 == -2816
-        assert_eq!(hexstrtoint(&[0x80, 0x30]), -2816);
+        assert_eq!(parse_hex_byte(&[0x80, 0x30]), -2816);
     }
 
     // int2utf8str: 1/2/3-byte encodings; None for codepoints >= 0x10000;
     // negative codepoints fall into the <0x80 branch producing a garbage byte.
     // [spec:foma:sem:utf8.int2utf8str-fn/test]
     #[test]
-    fn test_int2utf8str() {
-        assert_eq!(int2utf8str(0x41), Some(vec![0x41]));
-        assert_eq!(int2utf8str(0x00), Some(vec![0x00]));
-        assert_eq!(int2utf8str(0x7f), Some(vec![0x7f]));
+    fn test_codepoint_to_utf8() {
+        assert_eq!(codepoint_to_utf8(0x41), Some(vec![0x41]));
+        assert_eq!(codepoint_to_utf8(0x00), Some(vec![0x00]));
+        assert_eq!(codepoint_to_utf8(0x7f), Some(vec![0x7f]));
         // 2-byte range boundaries
-        assert_eq!(int2utf8str(0x80), Some(vec![0xc2, 0x80]));
-        assert_eq!(int2utf8str(0xe9), Some(vec![0xc3, 0xa9])); // é
-        assert_eq!(int2utf8str(0x7ff), Some(vec![0xdf, 0xbf]));
+        assert_eq!(codepoint_to_utf8(0x80), Some(vec![0xc2, 0x80]));
+        assert_eq!(codepoint_to_utf8(0xe9), Some(vec![0xc3, 0xa9])); // é
+        assert_eq!(codepoint_to_utf8(0x7ff), Some(vec![0xdf, 0xbf]));
         // 3-byte range boundaries
-        assert_eq!(int2utf8str(0x800), Some(vec![0xe0, 0xa0, 0x80]));
-        assert_eq!(int2utf8str(0x20ac), Some(vec![0xe2, 0x82, 0xac])); // €
-        assert_eq!(int2utf8str(0xffff), Some(vec![0xef, 0xbf, 0xbf]));
+        assert_eq!(codepoint_to_utf8(0x800), Some(vec![0xe0, 0xa0, 0x80]));
+        assert_eq!(codepoint_to_utf8(0x20ac), Some(vec![0xe2, 0x82, 0xac])); // €
+        assert_eq!(codepoint_to_utf8(0xffff), Some(vec![0xef, 0xbf, 0xbf]));
         // >= 0x10000 → None (no 4-byte support)
-        assert_eq!(int2utf8str(0x10000), None);
-        assert_eq!(int2utf8str(0x10348), None);
+        assert_eq!(codepoint_to_utf8(0x10000), None);
+        assert_eq!(codepoint_to_utf8(0x10348), None);
         // negative → <0x80 branch, truncated garbage byte
-        assert_eq!(int2utf8str(-1), Some(vec![0xff]));
+        assert_eq!(codepoint_to_utf8(-1), Some(vec![0xff]));
     }
 
     // utf8code16tostr: four hex digits → BMP codepoint → UTF-8; surrogates are
@@ -565,12 +565,12 @@ mod tests {
     // [spec:foma:sem:utf8.utf8code16tostr-fn/test]
     // [spec:foma:sem:fomalibconf.utf8code16tostr-fn/test]
     #[test]
-    fn test_utf8code16tostr() {
-        assert_eq!(utf8code16tostr(b"0041"), Some(vec![0x41])); // 'A'
-        assert_eq!(utf8code16tostr(b"00E9"), Some(vec![0xc3, 0xa9])); // é
-        assert_eq!(utf8code16tostr(b"20AC"), Some(vec![0xe2, 0x82, 0xac])); // €
-        assert_eq!(utf8code16tostr(b"FFFF"), Some(vec![0xef, 0xbf, 0xbf]));
+    fn test_hex4_to_utf8() {
+        assert_eq!(hex4_to_utf8(b"0041"), Some(vec![0x41])); // 'A'
+        assert_eq!(hex4_to_utf8(b"00E9"), Some(vec![0xc3, 0xa9])); // é
+        assert_eq!(hex4_to_utf8(b"20AC"), Some(vec![0xe2, 0x82, 0xac])); // €
+        assert_eq!(hex4_to_utf8(b"FFFF"), Some(vec![0xef, 0xbf, 0xbf]));
         // surrogate half encoded as-is (CESU-8-like), not rejected
-        assert_eq!(utf8code16tostr(b"D800"), Some(vec![0xed, 0xa0, 0x80]));
+        assert_eq!(hex4_to_utf8(b"D800"), Some(vec![0xed, 0xa0, 0x80]));
     }
 }

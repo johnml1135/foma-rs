@@ -44,7 +44,7 @@ use crate::types::{
     Fsmcontexts, Fsmrules, OP_DOWNWARD_REPLACE, OP_IGNORE_ALL, OP_IGNORE_INTERNAL,
     OP_LEFTWARD_REPLACE, OP_RIGHTWARD_REPLACE, OP_UPWARD_REPLACE, RewriteSet,
 };
-use crate::utf8::streqrep;
+use crate::utf8::replace_equal_len;
 
 /* C: `#define MAX_PARSE_DEPTH 100` — the self-recursion guard for my_yyparse. */
 const MAX_PARSE_DEPTH: i32 = 100;
@@ -460,7 +460,7 @@ fn function_apply(
         streqrep's equal-length in-place replacement is valid. */
         let repstr = format!("{:012X}", gsym);
         let oldstr = format!("@ARGUMENT{:02}@", i + 1);
-        streqrep(&mut regex_bytes, oldstr.as_bytes(), repstr.as_bytes());
+        replace_equal_len(&mut regex_bytes, oldstr.as_bytes(), repstr.as_bytes());
         match nets.as_deref_mut() {
             Some(n) => {
                 add_defined(n, Some(argnet), &repstr);

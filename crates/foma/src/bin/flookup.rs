@@ -117,8 +117,8 @@ fn perror(prefix: &str) {
     eprintln!("{}: {}", prefix, io::Error::last_os_error());
 }
 
-/* atoi(): leading optional sign + decimal digits, 0 if none */
-fn atoi(s: &str) -> i32 {
+/* parse_leading_i32(): leading optional sign + decimal digits, 0 if none */
+fn parse_leading_i32(s: &str) -> i32 {
     let b = s.as_bytes();
     let mut i = 0usize;
     while i < b.len() && (b[i] == b' ' || b[i] == b'\t') {
@@ -339,18 +339,18 @@ fn main() {
                     index_arcs = 1;
                 } else if optarg.contains('k') || optarg.contains('K') {
                     /* k limit: "-I 4k" / "-I 4K" → 4 * 1024 bytes */
-                    index_mem_limit = 1024 * atoi(&optarg);
+                    index_mem_limit = 1024 * parse_leading_i32(&optarg);
                     index_arcs = 1;
                 } else if optarg.contains('m') || optarg.contains('M') {
                     /* m limit: "-I 4m" / "-I 4M" → 4 * 1024 * 1024 bytes */
-                    index_mem_limit = 1024 * 1024 * atoi(&optarg);
+                    index_mem_limit = 1024 * 1024 * parse_leading_i32(&optarg);
                     index_arcs = 1;
                 } else if first_is_digit(&optarg) {
                     // Plain "-I 4" is an arc-count cutoff. (C required BOTH letter
                     // cases in the arg for the k/m branches, so "-I 4k"/"-I 4M"
                     // fell through here — the k/m suffix was silently ignored.)
                     index_arcs = 1;
-                    index_cutoff = atoi(&optarg);
+                    index_cutoff = parse_leading_i32(&optarg);
                 }
             }
             b's' => {
@@ -366,7 +366,7 @@ fn main() {
             }
             b'P' => {
                 let optarg = go.optarg.clone().unwrap_or_default();
-                PORT_NUMBER.set(atoi(&optarg));
+                PORT_NUMBER.set(parse_leading_i32(&optarg));
             }
             b'w' => {
                 let optarg = go.optarg.clone().unwrap_or_default();

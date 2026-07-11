@@ -117,7 +117,7 @@ pub fn iface_extract_unambiguous(session: &mut Session) {
 // C atoi: skip leading whitespace, optional +/-, then decimal digits until a
 // non-digit; empty/no-digit → 0. Overflow is UB in C; wrapping here. Unannotated
 // plumbing used by iface_extract_number.
-fn atoi(s: &str) -> i32 {
+fn parse_leading_i32(s: &str) -> i32 {
     let bytes = s.as_bytes();
     let mut i = 0usize;
     while i < bytes.len() && matches!(bytes[i], b' ' | b'\t' | b'\n' | b'\r' | 0x0b | 0x0c) {
@@ -155,7 +155,7 @@ pub fn iface_extract_number(s: &str) -> i32 {
     if i > 0 && i < bytes.len() && bytes[i - 1] == b'-' {
         i -= 1;
     }
-    atoi(&s[i..])
+    parse_leading_i32(&s[i..])
 }
 
 // [spec:foma:def:iface.iface-eliminate-flag-fn]

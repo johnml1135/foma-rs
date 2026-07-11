@@ -42,7 +42,7 @@ use crate::types::{
     FLAG_POSITIVE, FLAG_REQUIRE, FLAG_UNIFY, FlagLookup, Fsm, IDENTITY, LOWER, RANDOM, SUCCEED,
     Searchstack, SigmaTrie, SigmaTrieArrays, SigmatchArray, Sigs, UNKNOWN, UP, UPPER,
 };
-use crate::utf8::{utf8iscombining, utf8skip};
+use crate::utf8::{is_combining, utf8skip};
 use smol_str::SmolStr;
 
 /* ------------------------------------------------------------------ */
@@ -1773,7 +1773,7 @@ pub fn apply_create_sigmatch(h: &mut ApplyHandle) {
             } else {
                 &[]
             };
-            let cons = utf8iscombining(slice);
+            let cons = is_combining(slice);
             if cons == 0 {
                 break;
             }

@@ -114,7 +114,7 @@ impl std::io::Write for Output {
 
 /* C `atoll`: skip leading whitespace, optional sign, base-10 digits. Overflow
 is UB in C; reproduced here with wrapping arithmetic. */
-fn atoll(s: &str) -> i64 {
+fn parse_leading_i64(s: &str) -> i64 {
     let b = s.as_bytes();
     let mut i = 0usize;
     while i < b.len() && matches!(b[i], b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r') {
@@ -136,8 +136,8 @@ fn atoll(s: &str) -> i64 {
 }
 
 /* C `atoi`: like atoll truncated to int. */
-fn atoi(s: &str) -> i32 {
-    atoll(s) as i32
+fn parse_leading_i32(s: &str) -> i32 {
+    parse_leading_i64(s) as i32
 }
 
 /* strlen from a byte index into a NUL-terminated buffer image. */
@@ -375,10 +375,16 @@ pub fn read_att(opts: &FomaOptions, filename: &str) -> Option<Box<Fsm>> {
             } else {
                 tokens[3]
             };
-            fsm_construct_add_arc(&mut h, atoi(tokens[0]), atoi(tokens[1]), t2, t3);
+            fsm_construct_add_arc(
+                &mut h,
+                parse_leading_i32(tokens[0]),
+                parse_leading_i32(tokens[1]),
+                t2,
+                t3,
+            );
         } else {
             /* i in 1..=3 */
-            fsm_construct_set_final(&mut h, atoi(tokens[0]));
+            fsm_construct_set_final(&mut h, parse_leading_i32(tokens[0]));
         }
     }
     fsm_construct_set_initial(&mut h, 0);
@@ -444,7 +450,7 @@ pub fn fsm_read_prolog(filename: &str) -> Option<Box<Fsm>> {
             let temp_ptr = field!(buf.find(' ')) + 1;
             let temp_ptr2 = field!(buf[temp_ptr..].find(").")) + temp_ptr;
             let temp = &buf[temp_ptr..temp_ptr2];
-            fsm_construct_set_final(field!(outh.as_deref_mut()), atoi(temp));
+            fsm_construct_set_final(field!(outh.as_deref_mut()), parse_leading_i32(temp));
         }
         if buf.starts_with("symbol(") {
             let temp_ptr = field!(buf.find(", \"")) + 3;
@@ -472,12 +478,12 @@ pub fn fsm_read_prolog(filename: &str) -> Option<Box<Fsm>> {
             /* Get source */
             let mut temp_ptr = field!(buf.find(' ')) + 1;
             let mut temp_ptr2 = field!(buf[temp_ptr..].find(',')) + temp_ptr;
-            let source = atoi(&buf[temp_ptr..temp_ptr2]);
+            let source = parse_leading_i32(&buf[temp_ptr..temp_ptr2]);
 
             /* Get target */
             temp_ptr = field!(buf[temp_ptr2..].find(' ')) + temp_ptr2 + 1;
             temp_ptr2 = field!(buf[temp_ptr..].find(',')) + temp_ptr;
-            let target = atoi(&buf[temp_ptr..temp_ptr2]);
+            let target = parse_leading_i32(&buf[temp_ptr..temp_ptr2]);
 
             temp_ptr = field!(buf[temp_ptr2..].find('"')) + temp_ptr2 + 1;
             if arity == 2 {
@@ -971,12 +977,12 @@ pub(crate) fn explode_line(buf: &str, values: &mut Vec<i32>) -> i32 {
         }
         if j >= bytes.len() {
             /* buf[j] == '\0' */
-            values.push(atoi(&buf[i..j]));
+            values.push(parse_leading_i32(&buf[i..j]));
             items += 1;
             break;
         } else {
             /* buf[j] == ' ' */
-            values.push(atoi(&buf[i..j]));
+            values.push(parse_leading_i32(&buf[i..j]));
             items += 1;
             j += 1;
         }
@@ -1029,40 +1035,40 @@ pub fn io_net_read(iobh: &mut IoBufHandle) -> Result<Option<(Box<Fsm>, String)>,
         remaining net fields at their fsm_create defaults) */
         let toks: Vec<&str> = buf.split_whitespace().collect();
         if !toks.is_empty() {
-            net.arity = atoi(toks[0]);
+            net.arity = parse_leading_i32(toks[0]);
         }
         if toks.len() > 1 {
-            net.arccount = atoi(toks[1]);
+            net.arccount = parse_leading_i32(toks[1]);
         }
         if toks.len() > 2 {
-            net.statecount = atoi(toks[2]);
+            net.statecount = parse_leading_i32(toks[2]);
         }
         if toks.len() > 3 {
-            net.linecount = atoi(toks[3]);
+            net.linecount = parse_leading_i32(toks[3]);
         }
         if toks.len() > 4 {
-            net.finalcount = atoi(toks[4]);
+            net.finalcount = parse_leading_i32(toks[4]);
         }
         if toks.len() > 5 {
-            net.pathcount = atoll(toks[5]);
+            net.pathcount = parse_leading_i64(toks[5]);
         }
         if toks.len() > 6 {
-            net.is_deterministic = atoi(toks[6]);
+            net.is_deterministic = parse_leading_i32(toks[6]);
         }
         if toks.len() > 7 {
-            net.is_pruned = atoi(toks[7]);
+            net.is_pruned = parse_leading_i32(toks[7]);
         }
         if toks.len() > 8 {
-            net.is_minimized = atoi(toks[8]);
+            net.is_minimized = parse_leading_i32(toks[8]);
         }
         if toks.len() > 9 {
-            net.is_epsilon_free = atoi(toks[9]);
+            net.is_epsilon_free = parse_leading_i32(toks[9]);
         }
         if toks.len() > 10 {
-            net.is_loop_free = atoi(toks[10]);
+            net.is_loop_free = parse_leading_i32(toks[10]);
         }
         if toks.len() > 11 {
-            extras = atoi(toks[11]);
+            extras = parse_leading_i32(toks[11]);
         }
         // [spec:foma:sem:io.io-net-read-fn+3] a missing name field yields an empty
         // name. C's sscanf left the buffer holding the whole props line, so that
@@ -1125,7 +1131,7 @@ pub fn io_net_read(iobh: &mut IoBufHandle) -> Result<Option<(Box<Fsm>, String)>,
         };
         let number_str = &buf[..p];
         let new_symbol = &buf[p + 1..];
-        let n = atoi(number_str);
+        let n = parse_leading_i32(number_str);
         if new_symbol.is_empty() {
             /* a literal-newline symbol survives the line-oriented format */
             sigma_add_number(&mut net.sigma, "\n", n);
