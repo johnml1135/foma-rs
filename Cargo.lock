@@ -237,6 +237,8 @@ dependencies = [
 [[package]]
 name = "nfst-lexc"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e032228b31153fa2e504f3e9a1f289598db1c6035ef02c52898cf768e9812c4"
 dependencies = [
  "logos",
  "nfst-syntax",
@@ -247,10 +249,14 @@ dependencies = [
 [[package]]
 name = "nfst-syntax"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4441ec0e57add49cd8fe5a81f10c57e1031c6c09f6c62b923ff97e8b1671ee1b"
 
 [[package]]
 name = "nfst-xre"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c1c59292c33c651faa5bfcd34b07e2761d41f8b06596bcf1361c58693446e9e"
 dependencies = [
  "ariadne",
  "chumsky",

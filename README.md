@@ -10,9 +10,10 @@ phonology work.
 This repository contains:
 
 - `crates/foma/` — the Rust port (library `foma` + three binaries).
-- `foma/` — the original upstream C sources, kept as the porting reference.
 - `docs/spec/port/` — the behavioral specification (per-function `def`/`sem`
-  rules) that pins the port to the C behavior.
+  rules) that pins the port to the C behavior of
+  [upstream foma](https://github.com/mhulden/foma), which served as the
+  porting reference.
 - `docs/port/rust-conventions.md` — the conventions the port was built under.
 
 ## Status
@@ -23,11 +24,11 @@ The port is complete. It was built in four waves:
    matching Rust module, one module per C file.
 2. **Spec** — a per-function behavioral spec (`def` + `sem` rules) extracted
    from the C, under `docs/spec/port/`.
-3. **Tests** — **548 tests** pinning that spec, including the documented C
+3. **Tests** — **545 tests** pinning that spec, including the documented C
    quirks, so later refactors diff against a known oracle.
 4. **Idiomatization** — the literal port reshaped into idiomatic Rust
    (`Result`-based errors, iterator front-ends, owned handles instead of
-   global mutable state) while keeping every spec rule covered and all 548
+   global mutable state) while keeping every spec rule covered and all 545
    tests green.
 
 The flex/bison regex and `lexc` grammars are replaced by the sibling parser
@@ -36,27 +37,17 @@ the same construction routines the C grammar actions would.
 
 ## Building
 
-The port depends on two path crates from the sibling
-[`necessary/nfst`](https://github.com/necessary/nfst) repository. Check it out
-next to this repository so the relative paths in the workspace `Cargo.toml`
-resolve:
-
-```
-parent/
-├── foma/    <- this repo
-└── nfst/    <- git clone of necessary/nfst
-```
-
-Then, from the repo root:
+From the repo root:
 
 ```sh
 cargo build            # builds the library and all three binaries
-cargo test -p foma     # runs the full test suite (548 tests)
+cargo test -p foma     # runs the full test suite (545 tests)
 ```
 
-> Not yet on crates.io: the crate depends on the unpublished `nfst-xre` and
-> `nfst-lexc` path crates, so publishing the port requires publishing those
-> first (see "Publishing" below).
+The regex and lexc parsers come from the
+[`nfst-xre`](https://crates.io/crates/nfst-xre) and
+[`nfst-lexc`](https://crates.io/crates/nfst-lexc) crates
+([`necessary-nu/nfst`](https://github.com/necessary-nu/nfst)).
 
 ## Binaries
 
@@ -126,9 +117,7 @@ are in `docs/port/rust-conventions.md`.
 
 Before this crate can go to crates.io:
 
-1. Publish `nfst-xre` and `nfst-lexc` (currently path dependencies).
-2. Swap the workspace path dependencies for versioned crates.io deps.
-3. Provide a crate-local `README.md` (crates.io/docs.rs cannot package the
+1. Provide a crate-local `README.md` (crates.io/docs.rs cannot package the
    repo-root README referenced here) and set the port's canonical
    `repository`/`homepage`.
 
