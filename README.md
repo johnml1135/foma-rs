@@ -35,9 +35,16 @@ The flex/bison regex and `lexc` grammars are replaced by the sibling parser
 crates `nfst-xre` and `nfst-lexc`; the port walks their typed ASTs and calls
 the same construction routines the C grammar actions would.
 
-## Building
+## Using
 
-From the repo root:
+The crate is on [crates.io](https://crates.io/crates/foma):
+
+```sh
+cargo add foma         # library dependency
+cargo install foma     # the foma / flookup / cgflookup binaries
+```
+
+To build from a checkout of [divvun/foma-rs](https://github.com/divvun/foma-rs):
 
 ```sh
 cargo build            # builds the library and all three binaries
@@ -112,14 +119,6 @@ ported function carries `// [spec:foma:def:…]` / `// [spec:foma:sem:…]`
 annotations tying the code to its rule, and every rule is verified by a test
 carrying the matching `…/test` facet. The conventions that governed the port
 are in `docs/port/rust-conventions.md`.
-
-## Publishing
-
-Before this crate can go to crates.io:
-
-1. Provide a crate-local `README.md` (crates.io/docs.rs cannot package the
-   repo-root README referenced here) and set the port's canonical
-   `repository`/`homepage`.
 
 ## License
 
