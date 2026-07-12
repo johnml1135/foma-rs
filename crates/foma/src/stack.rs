@@ -369,9 +369,7 @@ impl Session {
             apply_clear(ah);
         }
         let amedh = self.take_amedh(stack_ptr);
-        if amedh.is_some() {
-            apply_med_clear(amedh);
-        }
+        apply_med_clear(amedh);
         // stack_ptr->fsm = NULL (done by take_fsm); free(stack_ptr): slot leaked.
         fsm
     }
@@ -477,9 +475,7 @@ impl Session {
                 apply_clear(ah);
             }
             let amedh = self.take_amedh(stack_ptr);
-            if amedh.is_some() {
-                apply_med_clear(amedh);
-            }
+            apply_med_clear(amedh);
             self.set_main_stack(next);
             let fsm = self.take_fsm(stack_ptr);
             if let Some(fsm) = fsm {

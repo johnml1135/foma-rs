@@ -719,14 +719,15 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
                 if !(net1.states[ai].target == -1 || net2.states[bi].target == -1) {
                     let atarget = net1.states[ai].target;
                     let btarget = net2.states[bi].target;
-                    let mut target_number = triplet_hash_find(&th, atarget, btarget, 0);
-                    if target_number.is_none() {
-                        /* STACK_2_PUSH(machine_b->target, machine_a->target) */
-                        int_stack.push(btarget);
-                        int_stack.push(atarget);
-                        target_number = Some(triplet_hash_insert(&mut th, atarget, btarget, 0));
-                    }
-                    let target_number = target_number.expect("found or just inserted");
+                    let target_number = match triplet_hash_find(&th, atarget, btarget, 0) {
+                        Some(n) => n,
+                        None => {
+                            /* STACK_2_PUSH(machine_b->target, machine_a->target) */
+                            int_stack.push(btarget);
+                            int_stack.push(atarget);
+                            triplet_hash_insert(&mut th, atarget, btarget, 0)
+                        }
+                    };
                     let mut symbol1 = net1.states[ai].r#in as i32;
                     let mut symbol2 = net2.states[bi].r#in as i32;
                     if symbol1 == IDENTITY && symbol2 != IDENTITY {
@@ -764,14 +765,15 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
                     /* Add 0:b i.e. stay in state A */
                     let astate = net1.states[ai].state_no;
                     let btarget = net2.states[bi].target;
-                    let mut target_number = triplet_hash_find(&th, astate, btarget, 0);
-                    if target_number.is_none() {
-                        /* STACK_2_PUSH(machine_b->target, machine_a->state_no) */
-                        int_stack.push(btarget);
-                        int_stack.push(astate);
-                        target_number = Some(triplet_hash_insert(&mut th, astate, btarget, 0));
-                    }
-                    let target_number = target_number.expect("found or just inserted");
+                    let target_number = match triplet_hash_find(&th, astate, btarget, 0) {
+                        Some(n) => n,
+                        None => {
+                            /* STACK_2_PUSH(machine_b->target, machine_a->state_no) */
+                            int_stack.push(btarget);
+                            int_stack.push(astate);
+                            triplet_hash_insert(&mut th, astate, btarget, 0)
+                        }
+                    };
                     /* @:0 becomes ?:0 */
                     let symbol2 = if net2.states[bi].r#in as i32 == IDENTITY {
                         UNKNOWN
@@ -793,14 +795,15 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
                     /* Add a:0 i.e. stay in state B */
                     let atarget = net1.states[ai].target;
                     let bstate = net2.states[bi].state_no;
-                    let mut target_number = triplet_hash_find(&th, atarget, bstate, 0);
-                    if target_number.is_none() {
-                        /* STACK_2_PUSH(machine_b->state_no, machine_a->target) */
-                        int_stack.push(bstate);
-                        int_stack.push(atarget);
-                        target_number = Some(triplet_hash_insert(&mut th, atarget, bstate, 0));
-                    }
-                    let target_number = target_number.expect("found or just inserted");
+                    let target_number = match triplet_hash_find(&th, atarget, bstate, 0) {
+                        Some(n) => n,
+                        None => {
+                            /* STACK_2_PUSH(machine_b->state_no, machine_a->target) */
+                            int_stack.push(bstate);
+                            int_stack.push(atarget);
+                            triplet_hash_insert(&mut th, atarget, bstate, 0)
+                        }
+                    };
                     /* @:0 becomes ?:0 */
                     let symbol1 = if net1.states[ai].r#in as i32 == IDENTITY {
                         UNKNOWN

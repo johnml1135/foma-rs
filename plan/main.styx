@@ -1233,6 +1233,13 @@ children (
                         kind @note
                         text "Scope is exactly the 10 sites in the title — do NOT churn the ~103 other is_some/is_none uses, which are legitimate: borrow-checker-forced linked-list walks that already carry explanatory .expect messages (structures.rs:1283/1284/1376/1379/1385/1388, define.rs:150), fill-if-empty into arena-indexed Option slots where if-let can't bind (lexcread), value-selection `let n = if x.is_some() {..} else {..}`, and pure predicate reads. Neither flags.rs unwrap can actually fire (guarded by start.is_some() in the same arm, start always <= i) — this is a style/consistency fix to hit the stated zero-bare-unwrap bar, not a live panic. Rewrites: flags.rs 638/659 bind Some in the arm; products.rs 723/768/797 + derived.rs:503 collapse get-or-insert to a match (products keeps the int_stack.push side-effect in the None arm); stack.rs 372/480 just delete the guard (apply_med_clear already no-ops on None); flookup.rs:602 / cgflookup.rs:499 use an edition-2024 let-chain `if !is_tail && let Some(r) = result.take()`."
                     }
+
+                    {
+                        at 2026-07-12T23:00:09.021222Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Todo → Done (nplan_complete)"
+                    }
                 )
             }
 

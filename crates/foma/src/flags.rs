@@ -633,9 +633,9 @@ pub fn flag_get_name(string: &str) -> Option<SmolStr> {
     // so they never occur inside a multi-byte char — walk characters directly.
     let mut start: Option<usize> = None;
     for (i, c) in string.char_indices() {
-        match c {
-            '.' if start.is_none() => start = Some(i + 1),
-            '.' | '@' if start.is_some() => return Some(string[start.unwrap()..i].into()),
+        match (c, start) {
+            ('.', None) => start = Some(i + 1),
+            ('.' | '@', Some(s)) => return Some(string[s..i].into()),
             _ => {}
         }
     }
@@ -654,10 +654,10 @@ pub fn flag_get_value(string: &str) -> Option<SmolStr> {
     let mut seen_first_dot = false;
     let mut start: Option<usize> = None;
     for (i, c) in string.char_indices() {
-        match c {
-            '.' if !seen_first_dot => seen_first_dot = true,
-            '@' if start.is_some() => return Some(string[start.unwrap()..i].into()),
-            '.' if seen_first_dot => start = Some(i + 1),
+        match (c, seen_first_dot, start) {
+            ('.', false, _) => seen_first_dot = true,
+            ('@', _, Some(s)) => return Some(string[s..i].into()),
+            ('.', true, _) => start = Some(i + 1),
             _ => {}
         }
     }

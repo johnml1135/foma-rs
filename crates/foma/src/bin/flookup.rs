@@ -599,10 +599,12 @@ fn handle_line(s: &str) {
             let p = chain_pos.expect("chain has at least one node (numnets>=1)");
             let mut result = apply_at(p, Some(&tempstr));
             let is_tail = chain_pos == CHAIN_TAIL.get();
-            if result.is_some() && !is_tail {
-                tempstr = result.take().expect("result is Some in this branch");
-                chain_pos = CHAIN.with_borrow(|c| c[p].next);
-                continue;
+            if !is_tail {
+                if let Some(r) = result.take() {
+                    tempstr = r;
+                    chain_pos = CHAIN.with_borrow(|c| c[p].next);
+                    continue;
+                }
             }
             if result.is_some() && is_tail {
                 loop {

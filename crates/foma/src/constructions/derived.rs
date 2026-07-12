@@ -499,14 +499,15 @@ pub fn fsm_unflatten(
                     continue;
                 }
                 let odd_target = net.states[oi].target;
-                let mut target_number = triplet_hash_find(&th, odd_target, odd_target, 0);
-                if target_number.is_none() {
-                    /* STACK_2_PUSH(odd_state->target, odd_state->target) */
-                    int_stack.push(odd_target);
-                    int_stack.push(odd_target);
-                    target_number = Some(triplet_hash_insert(&mut th, odd_target, odd_target, 0));
-                }
-                let target_number = target_number.expect("found or just inserted");
+                let target_number = match triplet_hash_find(&th, odd_target, odd_target, 0) {
+                    Some(n) => n,
+                    None => {
+                        /* STACK_2_PUSH(odd_state->target, odd_state->target) */
+                        int_stack.push(odd_target);
+                        int_stack.push(odd_target);
+                        triplet_hash_insert(&mut th, odd_target, odd_target, 0)
+                    }
+                };
                 let mut r#in = net.states[ei].r#in as i32;
                 let mut out = net.states[oi].r#in as i32;
                 if out == repeat {
