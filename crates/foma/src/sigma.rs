@@ -132,10 +132,10 @@ pub fn sigma_add(symbol: &str, sigma: &mut Vec<Sigma>) -> i32 {
 // [spec:foma:sem:fomalibconf.sigma-cleanup-fn+1]
 pub fn sigma_cleanup(net: &mut Fsm, force: i32) {
     if force == 0 {
-        if sigma_find_number(IDENTITY, &net.sigma).is_some() {
+        if sigma_contains_number(IDENTITY, &net.sigma) {
             return;
         }
-        if sigma_find_number(UNKNOWN, &net.sigma).is_some() {
+        if sigma_contains_number(UNKNOWN, &net.sigma) {
             return;
         }
     }
@@ -281,6 +281,17 @@ pub fn sigma_substitute(symbol: &str, sub: &str, sigma: &mut [Sigma]) -> Option<
 pub fn sigma_find(symbol: &str, sigma: &[Sigma]) -> Option<i32> {
     /* Some(number) for the first entry whose symbol matches, else None (C -1). */
     sigma.iter().find(|s| s.symbol == symbol).map(|s| s.number)
+}
+
+/// Whether `symbol` labels a sigma entry (the alphabet membership predicate;
+/// no C counterpart — callers in C wrote `sigma_find(...) != -1`).
+pub(crate) fn sigma_contains(symbol: &str, sigma: &[Sigma]) -> bool {
+    sigma.iter().any(|s| s.symbol == symbol)
+}
+
+/// Whether `number` labels a sigma entry (numeric membership predicate).
+pub(crate) fn sigma_contains_number(number: i32, sigma: &[Sigma]) -> bool {
+    sigma.iter().any(|s| s.number == number)
 }
 
 // [spec:foma:def:sigma.ssort]

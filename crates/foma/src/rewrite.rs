@@ -17,7 +17,9 @@ use crate::extract::{fsm_lower, fsm_upper};
 use crate::minimize::fsm_minimize;
 use crate::options::FomaOptions;
 use crate::regex::fsm_parse_regex;
-use crate::sigma::{sigma_add, sigma_find, sigma_remove, sigma_sort, sigma_substitute};
+use crate::sigma::{
+    sigma_add, sigma_contains, sigma_find, sigma_remove, sigma_sort, sigma_substitute,
+};
 use crate::structures::{fsm_copy, fsm_destroy, fsm_empty_set, fsm_empty_string, fsm_identity};
 use crate::types::{
     ARROW_DOTTED, ARROW_LEFT, ARROW_LONGEST_MATCH, ARROW_OPTIONAL, ARROW_RIGHT,
@@ -1701,7 +1703,7 @@ pub fn rewr_context_restrict(
         ),
     );
 
-    if sigma_find("@VARX@", &result.sigma).is_some() {
+    if sigma_contains("@VARX@", &result.sigma) {
         result = fsm_complement(
             opts,
             fsm_substitute_symbol(result, "@VARX@", "@_EPSILON_SYMBOL_@"),

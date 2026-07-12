@@ -31,8 +31,8 @@ pub(crate) use crate::minimize::fsm_minimize;
 pub(crate) use crate::options::FomaOptions;
 pub(crate) use crate::rewrite::fsm_clear_contexts;
 pub(crate) use crate::sigma::{
-    sigma_add, sigma_add_special, sigma_cleanup, sigma_find, sigma_find_number, sigma_max,
-    sigma_remove, sigma_size, sigma_sort, sigma_substitute,
+    sigma_add, sigma_add_special, sigma_cleanup, sigma_contains, sigma_contains_number, sigma_find,
+    sigma_find_number, sigma_max, sigma_remove, sigma_size, sigma_sort, sigma_substitute,
 };
 pub(crate) use crate::structures::{
     find_arccount, fsm_copy, fsm_create, fsm_destroy, fsm_empty_set, fsm_empty_string,

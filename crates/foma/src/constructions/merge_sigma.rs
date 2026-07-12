@@ -88,8 +88,8 @@ pub fn fsm_merge_sigma(opts: &FomaOptions, net1: &mut Fsm, net2: &mut Fsm) {
     let mut net_unk = 0;
 
     if !opts.skip_word_boundary_marker {
-        let in_1 = sigma_find(".#.", &net1.sigma).is_some();
-        let in_2 = sigma_find(".#.", &net2.sigma).is_some();
+        let in_1 = sigma_contains(".#.", &net1.sigma);
+        let in_2 = sigma_contains(".#.", &net2.sigma);
         if in_1 && !in_2 {
             sigma_add(".#.", &mut net2.sigma);
             sigma_sort(net2);

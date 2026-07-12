@@ -245,7 +245,7 @@ pub fn fsm_completes(opts: &FomaOptions, net: Box<Fsm>, operation: i32) -> Box<F
     }
 
     let mut incomplete = 0;
-    if sigma_find_number(UNKNOWN, &net.sigma).is_some() {
+    if sigma_contains_number(UNKNOWN, &net.sigma) {
         /* C: sigma_remove's returned new head is discarded (harmless
         unless UNKNOWN were the head node); the owned list here must be
         reassigned */
@@ -259,7 +259,7 @@ pub fn fsm_completes(opts: &FomaOptions, net: Box<Fsm>, operation: i32) -> Box<F
     let mut sigsize = sigma_size(&net.sigma);
     let last_sigma = sigma_max(&net.sigma);
 
-    if sigma_find_number(EPSILON, &net.sigma).is_some() {
+    if sigma_contains_number(EPSILON, &net.sigma) {
         sigsize -= 1;
     }
 

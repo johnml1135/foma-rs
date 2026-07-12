@@ -2216,7 +2216,7 @@ pub fn fsm_context_restrict(
             ),
         ),
     );
-    if sigma_find("@VARX@", &result.sigma).is_some() {
+    if sigma_contains("@VARX@", &result.sigma) {
         result = fsm_complement(
             opts,
             fsm_substitute_symbol(result, "@VARX@", "@_EPSILON_SYMBOL_@"),
@@ -2225,7 +2225,7 @@ pub fn fsm_context_restrict(
         result = fsm_complement(opts, result);
     }
 
-    if sigma_find("@#@", &result.sigma).is_some() {
+    if sigma_contains("@#@", &result.sigma) {
         let word = fsm_minimize(
             opts,
             fsm_concat(

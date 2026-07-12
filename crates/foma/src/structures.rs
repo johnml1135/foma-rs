@@ -1269,25 +1269,15 @@ pub fn count_quantifiers(quantifiers: &Quantifiers) -> i32 {
 // [spec:foma:sem:foma.add-quantifier-fn]
 pub fn add_quantifier(quantifiers: &mut Quantifiers, string: &str) {
     /* no duplicate check: adding the same name twice creates two nodes */
-    if quantifiers.head.is_none() {
-        quantifiers.head = Some(Box::new(DefinedQuantifiers {
-            name: Some(string.into()),
-            next: None,
-        }));
-    } else {
-        /* walk to the tail node (next == NULL) */
-        let mut q = quantifiers
-            .head
-            .as_deref_mut()
-            .expect("head is Some in this branch");
-        while q.next.is_some() {
-            q = q.next.as_deref_mut().expect("just checked next.is_some()");
-        }
-        q.next = Some(Box::new(DefinedQuantifiers {
-            name: Some(string.into()),
-            next: None,
-        }));
+    /* walk to the trailing empty slot (the head when the list is empty) */
+    let mut slot = &mut quantifiers.head;
+    while let Some(node) = slot {
+        slot = &mut node.next;
     }
+    *slot = Some(Box::new(DefinedQuantifiers {
+        name: Some(string.into()),
+        next: None,
+    }));
 }
 
 // [spec:foma:def:structures.union-quantifiers-fn]
