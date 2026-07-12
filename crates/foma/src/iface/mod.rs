@@ -53,7 +53,7 @@ pub(crate) use crate::structures::{
 };
 pub(crate) use crate::topsort::fsm_topsort;
 pub(crate) use crate::types::{
-    AP_D, AP_U, ApplyHandle, EPSILON, Fsm, IDENTITY, M_LOWER, M_UPPER, OP_IGNORE_ALL,
+    ApplyDir, ApplyHandle, EPSILON, Fsm, IDENTITY, M_LOWER, M_UPPER, OP_IGNORE_ALL,
     PATHCOUNT_CYCLIC, Sigma, UNKNOWN, YES,
 };
 pub(crate) use crate::utf8::{dequote_string, escape_string};

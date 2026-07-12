@@ -81,12 +81,16 @@ pub const APPLY_INDEX_OUTPUT: i32 = 2;
 /* Constants from foma.h                                               */
 /* ------------------------------------------------------------------ */
 
-/// Apply down
-pub const AP_D: i32 = 1;
-/// Apply up
-pub const AP_U: i32 = 2;
-/// Apply minimum edit distance
-pub const AP_M: i32 = 3;
+/// Direction of an interactive `apply` command (C: AP_D=1 / AP_U=2 / AP_M=3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApplyDir {
+    /// apply down
+    Down,
+    /// apply up
+    Up,
+    /// apply minimum edit distance
+    Med,
+}
 
 /// Regular prompt
 pub const PROMPT_MAIN: i32 = 0;

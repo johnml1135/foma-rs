@@ -34,10 +34,16 @@ use crate::sigma::sigma_max;
 use crate::types::{EPSILON, Fsm, FsmState, UNKNOWN, YES};
 
 /* C: #define SUBSET_EPSILON_REMOVE 1 / SUBSET_DETERMINIZE 2 /
-SUBSET_TEST_STAR_FREE 3 */
-pub const SUBSET_EPSILON_REMOVE: i32 = 1;
-pub const SUBSET_DETERMINIZE: i32 = 2;
-pub const SUBSET_TEST_STAR_FREE: i32 = 3;
+SUBSET_TEST_STAR_FREE 3 — the subset-construction mode. Default is arbitrary
+(fsm_subset sets op from its argument before any read; Subset::default only
+needs a value to satisfy the derive). */
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum SubsetOp {
+    #[default]
+    EpsilonRemove,
+    Determinize,
+    TestStarFree,
+}
 
 /// load limit for nhash table size
 pub const NHASH_LOAD_LIMIT: i32 = 2;
@@ -118,7 +124,7 @@ pub(crate) struct Subset {
     #[allow(dead_code)]
     limit: i32,
     num_start_states: i32,
-    op: i32,
+    op: SubsetOp,
 
     // C: static _Bool *finals, deterministic, numss;
     finals: Vec<bool>,
@@ -181,7 +187,7 @@ pub use crate::constructions::add_fsm_arc;
 // [spec:foma:def:fomalib.fsm-epsilon-remove-fn]
 // [spec:foma:sem:fomalib.fsm-epsilon-remove-fn]
 pub fn fsm_epsilon_remove(net: Box<Fsm>) -> Box<Fsm> {
-    fsm_subset(net, SUBSET_EPSILON_REMOVE)
+    fsm_subset(net, SubsetOp::EpsilonRemove)
 }
 
 // [spec:foma:def:determinize.fsm-determinize-fn]
@@ -189,18 +195,18 @@ pub fn fsm_epsilon_remove(net: Box<Fsm>) -> Box<Fsm> {
 // [spec:foma:def:fomalib.fsm-determinize-fn]
 // [spec:foma:sem:fomalib.fsm-determinize-fn]
 pub fn fsm_determinize(net: Box<Fsm>) -> Box<Fsm> {
-    fsm_subset(net, SUBSET_DETERMINIZE)
+    fsm_subset(net, SubsetOp::Determinize)
 }
 
 // [spec:foma:def:determinize.fsm-subset-fn]
 // [spec:foma:sem:determinize.fsm-subset-fn]
 #[allow(non_snake_case)]
-pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
+pub(crate) fn fsm_subset(net: Box<Fsm>, operation: SubsetOp) -> Box<Fsm> {
     let mut net = net;
     let mut T: i32;
     let mut U: i32;
 
-    if net.is_deterministic == YES && operation != SUBSET_TEST_STAR_FREE {
+    if net.is_deterministic == YES && operation != SubsetOp::TestStarFree {
         return net;
     }
     /* all subset-construction scratch is owned here and dropped on return */
@@ -233,13 +239,13 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
         return net;
     }
 
-    if operation == SUBSET_EPSILON_REMOVE && s.epsilon_symbol == -1 {
+    if operation == SubsetOp::EpsilonRemove && s.epsilon_symbol == -1 {
         net.is_epsilon_free = YES;
         nhash_free(std::mem::take(&mut s.table), s.nhash_tablesize);
         return net;
     }
 
-    let mut builder = if operation == SUBSET_TEST_STAR_FREE {
+    let mut builder = if operation == SubsetOp::TestStarFree {
         let sm = sigma_max(&net.sigma);
         let builder = fsm_state_init(sm + 1);
         s.star_free_mark = 0;
@@ -321,7 +327,7 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
                             s.temp_move[j as usize] = trgt;
                             j += 1;
 
-                            if operation == SUBSET_EPSILON_REMOVE {
+                            if operation == SubsetOp::EpsilonRemove {
                                 s.mainloop += 1;
                                 U = e_closure(&mut s, j);
                                 if U != -1 {
@@ -359,7 +365,7 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
                         next_minsym = inout;
                     }
                 }
-                if operation == SUBSET_DETERMINIZE {
+                if operation == SubsetOp::Determinize {
                     s.mainloop += 1;
                     U = e_closure(&mut s, j);
                     if U != -1 {
@@ -376,7 +382,7 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
                         );
                     }
                 }
-                if operation == SUBSET_TEST_STAR_FREE {
+                if operation == SubsetOp::TestStarFree {
                     s.mainloop += 1;
                     U = e_closure(&mut s, j);
                     if U != -1 {
@@ -674,7 +680,7 @@ pub(crate) fn initial_e_closure(s: &mut Subset, net: &Fsm) -> i32 {
             s.finals[state] = true;
         }
         /* Add the start states as the initial set */
-        if ((s.op == SUBSET_TEST_STAR_FREE) || fsm[i].start_state != 0)
+        if ((s.op == SubsetOp::TestStarFree) || fsm[i].start_state != 0)
             && s.e_table[state] != s.mainloop
         {
             s.num_start_states += 1;
@@ -880,7 +886,7 @@ pub(crate) fn nhash_find_insert(s: &mut Subset, set: &[i32], setsize: i32) -> i3
                         break;
                     }
                 }
-                if op == SUBSET_TEST_STAR_FREE && found == 1 {
+                if op == SubsetOp::TestStarFree && found == 1 {
                     for (j, &set_j) in set.iter().enumerate().take(setsize as usize) {
                         if set_j != s.set_table[currlist + j] {
                             /* Set mark (applied after the walk to keep the
@@ -1352,7 +1358,7 @@ mod tests {
             set_table_offset: 0,
             t_limit: 8,
             t_ptr: vec![TMemo::default(); 8],
-            op: SUBSET_DETERMINIZE,
+            op: SubsetOp::Determinize,
             ..Default::default()
         };
         nhash_init(&mut s, 6);

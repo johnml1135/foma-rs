@@ -182,19 +182,19 @@ fn apply_file_direction_stack_and_roundtrip() {
     std::fs::write(&inpath, "cat\n").unwrap();
 
     let mut session = Session::new();
-    // Invalid direction: rejected before the stack/file checks.
+    // Med is not a valid direction for apply-file: rejected before the stack/file checks.
     assert!(!iface_apply_file(
         &mut session,
         inpath.to_str().unwrap(),
         None,
-        0
+        ApplyDir::Med
     ));
     // Valid direction, empty stack: iface_stack_check(1) fails → handled (true).
     assert!(iface_apply_file(
         &mut session,
         inpath.to_str().unwrap(),
         None,
-        AP_D
+        ApplyDir::Down
     ));
 
     push(&mut session, "c a t"); // acceptor for "cat" over sigma {c,a,t}
@@ -203,14 +203,14 @@ fn apply_file_direction_stack_and_roundtrip() {
         &mut session,
         "/no/such/foma/path",
         None,
-        AP_D
+        ApplyDir::Down
     ));
     // Good run writing to a file.
     let rc = iface_apply_file(
         &mut session,
         inpath.to_str().unwrap(),
         Some(outpath.to_str().unwrap()),
-        AP_D,
+        ApplyDir::Down,
     );
     assert!(rc);
     assert_eq!(session.stack_size(), 1); // net not consumed
@@ -1453,31 +1453,31 @@ fn words_file_writes_per_type_and_refuses_cyclic() {
     let _ = std::fs::remove_file(&pc);
 
     let mut session = Session::new();
-    iface_words_file(&mut session, p0.to_str().unwrap(), 0); // empty: refusal
+    iface_words_file(&mut session, p0.to_str().unwrap(), WordSide::Words); // empty: refusal
     assert_eq!(session.stack_size(), 0);
 
     push(&mut session, "a b"); // acyclic acceptor → whole word "ab"
-    iface_words_file(&mut session, p0.to_str().unwrap(), 0);
+    iface_words_file(&mut session, p0.to_str().unwrap(), WordSide::Words);
     assert_eq!(session.stack_size(), 1); // net not consumed
     assert_eq!(std::fs::read_to_string(&p0).unwrap(), "ab\n");
     let _ = session.stack_pop();
 
     push(&mut session, "a:b"); // transducer → upper "a", lower "b"
-    iface_words_file(&mut session, p1.to_str().unwrap(), 1);
+    iface_words_file(&mut session, p1.to_str().unwrap(), WordSide::Upper);
     assert_eq!(std::fs::read_to_string(&p1).unwrap(), "a\n");
-    iface_words_file(&mut session, p2.to_str().unwrap(), 2);
+    iface_words_file(&mut session, p2.to_str().unwrap(), WordSide::Lower);
     assert_eq!(std::fs::read_to_string(&p2).unwrap(), "b\n");
     // Wave 4 fix: a type-0 call right after type 1/2 uses the words enumerator,
     // not the stale upper ("a") / lower ("b") one from the previous call.
     let pmix = dir.join("foma_s2_wordsmix.txt");
-    iface_words_file(&mut session, pmix.to_str().unwrap(), 0);
+    iface_words_file(&mut session, pmix.to_str().unwrap(), WordSide::Words);
     let mix = std::fs::read_to_string(&pmix).unwrap();
     assert_ne!(mix, "a\n"); // not the stale upper-words enumerator
     assert_ne!(mix, "b\n"); // not the stale lower-words enumerator
     let _ = session.stack_pop();
 
     push_topsorted(&mut session, "a*"); // cyclic → refuses before opening the file
-    iface_words_file(&mut session, pc.to_str().unwrap(), 0);
+    iface_words_file(&mut session, pc.to_str().unwrap(), WordSide::Words);
     assert_eq!(session.stack_size(), 1);
     assert!(!std::path::Path::new(&pc).exists());
 }

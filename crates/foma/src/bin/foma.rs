@@ -28,8 +28,7 @@ use foma::session::Session;
 use foma::structures::fsm_copy;
 use foma::topsort::fsm_topsort;
 use foma::types::{
-    AP_D, AP_M, AP_U, BUILD_VERSION, MAJOR_VERSION, MINOR_VERSION, PROMPT_A, PROMPT_MAIN,
-    STATUS_VERSION,
+    ApplyDir, BUILD_VERSION, MAJOR_VERSION, MINOR_VERSION, PROMPT_A, PROMPT_MAIN, STATUS_VERSION,
 };
 
 /* interface.l: #define RE 0 (regex) / #define DE 1 (define) */
@@ -203,7 +202,7 @@ thread_local! {
     static PIPE_MODE: Cell<i32> = const { Cell::new(0) };
     static USE_READLINE: Cell<i32> = const { Cell::new(1) };
     static PROMPTMODE: Cell<i32> = const { Cell::new(PROMPT_MAIN) };
-    static APPLY_DIRECTION: Cell<i32> = const { Cell::new(0) };
+    static APPLY_DIRECTION: Cell<Option<ApplyDir>> = const { Cell::new(None) };
     static INPUT_IS_FILE: Cell<i32> = const { Cell::new(0) };
     static LINENO: Cell<i32> = const { Cell::new(1) };
     /// Persistent "in REGEX/DEFINE start-condition" state (survives across
@@ -485,11 +484,11 @@ fn main() {
             format!("foma[{}]: ", session.stack_size())
         } else {
             let d = APPLY_DIRECTION.with(|d| d.get());
-            if d == AP_D {
+            if d == Some(ApplyDir::Down) {
                 "apply down> ".to_string()
-            } else if d == AP_U {
+            } else if d == Some(ApplyDir::Up) {
                 "apply up> ".to_string()
-            } else if d == AP_M {
+            } else if d == Some(ApplyDir::Med) {
                 "apply med> ".to_string()
             } else {
                 String::new()
@@ -586,11 +585,11 @@ fn apply_feed(session: &mut Session, line: &str) -> bool {
         return true;
     }
     let d = APPLY_DIRECTION.with(|d| d.get());
-    if d == AP_D {
+    if d == Some(ApplyDir::Down) {
         iface_apply_down(session, line);
-    } else if d == AP_M {
+    } else if d == Some(ApplyDir::Med) {
         iface_apply_med(session, line);
-    } else if d == AP_U {
+    } else if d == Some(ApplyDir::Up) {
         iface_apply_up(session, line);
     }
     true
@@ -868,9 +867,9 @@ fn dispatch(session: &mut Session, line: &str) -> bool {
             (w0, 1)
         };
         let dir = match dirword {
-            "down" => Some(AP_D),
-            "up" => Some(AP_U),
-            "med" => Some(AP_M),
+            "down" => Some(ApplyDir::Down),
+            "up" => Some(ApplyDir::Up),
+            "med" => Some(ApplyDir::Med),
             _ => None,
         };
         if let Some(dir) = dir {
@@ -878,11 +877,11 @@ fn dispatch(session: &mut Session, line: &str) -> bool {
             if arg.is_empty() {
                 if iface_stack_check(session, 1) {
                     PROMPTMODE.with(|p| p.set(PROMPT_A));
-                    APPLY_DIRECTION.with(|d| d.set(dir));
+                    APPLY_DIRECTION.with(|d| d.set(Some(dir)));
                 }
                 return true;
             }
-            if (dir == AP_D || dir == AP_U) && arg.starts_with('<') {
+            if (dir == ApplyDir::Down || dir == ApplyDir::Up) && arg.starts_with('<') {
                 let a2 = arg[1..].trim();
                 if let Some(gp) = a2.find('>') {
                     iface_apply_file(session, a2[..gp].trim(), Some(a2[gp + 1..].trim()), dir);
@@ -891,9 +890,9 @@ fn dispatch(session: &mut Session, line: &str) -> bool {
                 }
                 return true;
             }
-            if dir == AP_D {
+            if dir == ApplyDir::Down {
                 iface_apply_down(session, &arg);
-            } else if dir == AP_U {
+            } else if dir == ApplyDir::Up {
                 iface_apply_up(session, &arg);
             } else {
                 iface_apply_med(session, &arg);
@@ -1405,7 +1404,7 @@ fn try_print_family(session: &mut Session, t: &str, ws: &[&str]) -> Option<bool>
     }
     if pfx_hyphen(s0, "lower-words", 3) {
         if let Some(g) = gt {
-            iface_words_file(session, sub_owned[g + 1..].trim(), 2);
+            iface_words_file(session, sub_owned[g + 1..].trim(), WordSide::Lower);
         } else {
             iface_lower_words(session, num_arg(&subws, t));
         }
@@ -1413,7 +1412,7 @@ fn try_print_family(session: &mut Session, t: &str, ws: &[&str]) -> Option<bool>
     }
     if pfx_hyphen(s0, "upper-words", 3) {
         if let Some(g) = gt {
-            iface_words_file(session, sub_owned[g + 1..].trim(), 1);
+            iface_words_file(session, sub_owned[g + 1..].trim(), WordSide::Upper);
         } else {
             iface_upper_words(session, num_arg(&subws, t));
         }
@@ -1421,7 +1420,7 @@ fn try_print_family(session: &mut Session, t: &str, ws: &[&str]) -> Option<bool>
     }
     if s0 == "words" {
         if let Some(g) = gt {
-            iface_words_file(session, sub_owned[g + 1..].trim(), 0);
+            iface_words_file(session, sub_owned[g + 1..].trim(), WordSide::Words);
         } else {
             iface_words(session, num_arg(&subws, t));
         }

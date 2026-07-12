@@ -71,11 +71,11 @@ pub fn iface_apply_file(
     session: &mut Session,
     infilename: &str,
     outfilename: Option<&str>,
-    direction: i32,
+    direction: ApplyDir,
 ) -> bool {
     // C read input with fgets(line, 8192, INFILE); read_line below reads whole
     // logical lines instead, so there is no fixed buffer size to honor.
-    if direction != AP_D && direction != AP_U {
+    if direction != ApplyDir::Down && direction != ApplyDir::Up {
         perror("Invalid direction in iface_apply_file().\n");
         return false;
     }
@@ -134,7 +134,7 @@ pub fn iface_apply_file(
         }
 
         write!(outfile, "\n{}\n", inword).expect("writing apply-file output");
-        let result = if direction == AP_D {
+        let result = if direction == ApplyDir::Down {
             session.stack_entry_ah(ah, |h| apply_down(h, Some(&inword)))
         } else {
             session.stack_entry_ah(ah, |h| apply_up(h, Some(&inword)))
@@ -149,7 +149,7 @@ pub fn iface_apply_file(
         };
         writeln!(outfile, "{}", result).expect("writing apply-file output");
         loop {
-            let result = if direction == AP_D {
+            let result = if direction == ApplyDir::Down {
                 session.stack_entry_ah(ah, |h| apply_down(h, None))
             } else {
                 session.stack_entry_ah(ah, |h| apply_up(h, None))
@@ -623,21 +623,29 @@ pub fn iface_upper_words(session: &mut Session, limit: i32) {
     }
 }
 
+/// Which side(s) `print words > file` enumerates (C: type 0/1/2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WordSide {
+    /// both sides (`print words`)
+    Words,
+    /// upper side only (`print upper-words`)
+    Upper,
+    /// lower side only (`print lower-words`)
+    Lower,
+}
+
 // [spec:foma:def:iface.iface-words-file-fn]
 // [spec:foma:sem:iface.iface-words-file-fn+1]
 // [spec:foma:def:foma.iface-words-file-fn]
 // [spec:foma:sem:foma.iface-words-file-fn+1]
-pub fn iface_words_file(session: &mut Session, filename: &str, r#type: i32) {
-    /* type 0 (words), 1 (upper-words), 2 (lower-words) */
-    // Wave 4 fix: the C kept the applyer in a function-local `static`, so a type-0
-    // call after any type-1/2 call reused the stale upper/lower enumerator. Select
-    // the enumerator fresh from `type` on every call instead.
-    let applyer: fn(&mut ApplyHandle) -> Option<String> = if r#type == 1 {
-        apply_upper_words
-    } else if r#type == 2 {
-        apply_lower_words
-    } else {
-        apply_words
+pub fn iface_words_file(session: &mut Session, filename: &str, side: WordSide) {
+    // The applyer must be selected fresh from `side` on every call: C held it
+    // in a function-local `static`, so a both-sides call after an upper/lower
+    // call reused the stale enumerator.
+    let applyer: fn(&mut ApplyHandle) -> Option<String> = match side {
+        WordSide::Upper => apply_upper_words,
+        WordSide::Lower => apply_lower_words,
+        WordSide::Words => apply_words,
     };
     if iface_stack_check(session, 1) {
         let Some(top) = session.stack_find_top() else {
