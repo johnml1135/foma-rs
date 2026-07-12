@@ -846,11 +846,9 @@ pub fn fsm_read_init(net: Box<Fsm>) -> Box<FsmReadHandle> {
                 num_initials += 1;
             }
         }
-        if fsm[i].final_state != 0 {
-            if lookuptable[sno as usize] & 2 == 0 {
-                lookuptable[sno as usize] |= 2;
-                num_finals += 1;
-            }
+        if fsm[i].final_state != 0 && lookuptable[sno as usize] & 2 == 0 {
+            lookuptable[sno as usize] |= 2;
+            num_finals += 1;
         }
         if fsm[i].r#in as i32 == UNKNOWN
             || fsm[i].out as i32 == UNKNOWN
@@ -1042,9 +1040,7 @@ pub fn fsm_get_symbol_number(handle: &FsmReadHandle, symbol: &str) -> i32 {
 pub fn fsm_get_arc_in(handle: &FsmReadHandle) -> Option<&str> {
     /* C returns a borrowed char* into the handle's sigma list, or NULL
     when the cursor is NULL */
-    let Some(cursor) = handle.arcs_cursor else {
-        return None;
-    };
+    let cursor = handle.arcs_cursor?;
     let index = handle
         .net
         .as_ref()
@@ -1097,9 +1093,7 @@ pub fn fsm_get_arc_num_out(handle: &FsmReadHandle) -> i32 {
 pub fn fsm_get_arc_out(handle: &FsmReadHandle) -> Option<&str> {
     /* C returns a borrowed char* into the handle's sigma list, or NULL
     when the cursor is NULL */
-    let Some(cursor) = handle.arcs_cursor else {
-        return None;
-    };
+    let cursor = handle.arcs_cursor?;
     let index = handle
         .net
         .as_ref()

@@ -300,15 +300,15 @@ fn rl_gets(prompt: &str) -> Option<String> {
 // [spec:foma:sem:foma.print-help-fn]
 fn print_help() {
     print!("{}", USAGESTRING);
-    print!("Options:\n");
-    print!("-e \"command\"\texecute a command on startup (-e can be invoked several times)\n");
-    print!("-f scriptfile\tread commands from scriptfile on startup, and quit\n");
-    print!("-l scriptfile\tread commands from scriptfile on startup\n");
-    print!("-p\t\tpipe-mode\n");
-    print!("-q\t\tquiet mode (more quiet than pipe-mode)\n");
-    print!("-r\t\tdon't use readline library for input\n");
-    print!("-s\t\tstop execution and exit\n");
-    print!("-v\t\tprint version number\n");
+    println!("Options:");
+    println!("-e \"command\"\texecute a command on startup (-e can be invoked several times)");
+    println!("-f scriptfile\tread commands from scriptfile on startup, and quit");
+    println!("-l scriptfile\tread commands from scriptfile on startup");
+    println!("-p\t\tpipe-mode");
+    println!("-q\t\tquiet mode (more quiet than pipe-mode)");
+    println!("-r\t\tdon't use readline library for input");
+    println!("-s\t\tstop execution and exit");
+    println!("-v\t\tprint version number");
 }
 
 // [spec:foma:def:foma.my-completion-fn]
@@ -910,9 +910,7 @@ fn dispatch(session: &mut Session, line: &str) -> bool {
     // NAME = body  (define shorthand)
     if let Some(eq) = t.find('=') {
         let left = t[..eq].trim();
-        if !left.is_empty()
-            && !left.contains(|c: char| c == ' ' || c == '\t' || c == '#' || c == '!')
-        {
+        if !left.is_empty() && !left.contains([' ', '\t', '#', '!']) {
             return start_regex(session, DE, left.to_string(), &t[eq + 1..]);
         }
     }
@@ -1103,7 +1101,7 @@ fn dispatch(session: &mut Session, line: &str) -> bool {
     // echo / echo <string>
     if w0 == "echo" {
         if ws.len() == 1 {
-            print!("\n");
+            println!();
         } else {
             // print everything after "echo" + one whitespace, raw.
             let after = &t[4..];
@@ -1111,7 +1109,7 @@ fn dispatch(session: &mut Session, line: &str) -> bool {
                 .strip_prefix(' ')
                 .or_else(|| after.strip_prefix('\t'))
                 .unwrap_or(after);
-            print!("{}\n", after);
+            println!("{}", after);
         }
         return true;
     }
@@ -1167,9 +1165,7 @@ fn handle_define(session: &mut Session, rest: &str) -> bool {
     if rest.is_empty() {
         return true;
     }
-    let name_end = rest
-        .find(|c: char| c == ' ' || c == '\t' || c == '(')
-        .unwrap_or(rest.len());
+    let name_end = rest.find([' ', '\t', '(']).unwrap_or(rest.len());
     if rest[name_end..].starts_with('(') {
         // function definition
         let name = &rest[..name_end];
@@ -1640,15 +1636,15 @@ fn iface_push(session: &mut Session, name: &str) {
 // ───────────────────────── small helpers ─────────────────────────
 
 fn lstrip(s: &str) -> &str {
-    s.trim_start_matches(|c: char| c == ' ' || c == '\t' || c == '\r')
+    s.trim_start_matches([' ', '\t', '\r'])
 }
 
 /// Skip `n` whitespace-delimited tokens of `t`, returning the trimmed remainder.
 fn arg_after(t: &str, n: usize) -> String {
-    let mut s = t.trim_start_matches(|c: char| c == ' ' || c == '\t');
+    let mut s = t.trim_start_matches([' ', '\t']);
     for _ in 0..n {
-        match s.find(|c: char| c == ' ' || c == '\t') {
-            Some(i) => s = s[i..].trim_start_matches(|c: char| c == ' ' || c == '\t'),
+        match s.find([' ', '\t']) {
+            Some(i) => s = s[i..].trim_start_matches([' ', '\t']),
             None => {
                 s = "";
                 break;
@@ -1661,16 +1657,14 @@ fn arg_after(t: &str, n: usize) -> String {
 /// A file argument: like arg_after, but also drop a leading redirection '<'.
 fn read_file_arg(t: &str, n: usize) -> String {
     arg_after(t, n)
-        .trim_start_matches(|c: char| c == '<' || c == ' ' || c == '\t')
+        .trim_start_matches(['<', ' ', '\t'])
         .trim()
         .to_string()
 }
 
 /// Strip a leading '>' redirection marker (write/save/export use '>? filename').
 fn strip_redir(s: &str) -> String {
-    s.trim_start_matches(|c: char| c == '>' || c == ' ' || c == '\t')
-        .trim()
-        .to_string()
+    s.trim_start_matches(['>', ' ', '\t']).trim().to_string()
 }
 
 /// A numbered variant: `<cmd> N` → iface_extract_number over the whole line.

@@ -673,11 +673,11 @@ pub fn fsm_isidentity(opts: &FomaOptions, net: &mut Fsm) -> bool {
     let mut ptr_stack = PtrStack::new();
     ptr_stack.push(state_array[0].transitions);
 
-    /* C function-scope locals (factor/newlength keep their values across
-    iterations; startfrom is always assigned before use) */
+    /* C function-scope locals (factor keeps its value across iterations;
+    newlength/startfrom are always assigned before use) */
     let mut factor: i32 = 0;
-    let mut newlength: i32 = 1;
-    let mut startfrom: i32 = 0;
+    let mut newlength: i32;
+    let mut startfrom: i32;
     let mut failed = false;
 
     'stack_loop: while !ptr_stack.is_empty() {
@@ -766,7 +766,7 @@ pub fn fsm_isidentity(opts: &FomaOptions, net: &mut Fsm) -> bool {
             discrepancy records own their strings here (no shared buffer), so
             there is nothing to free and nothing to alias.
             calloc(abs(newlength), sizeof(int)) — int-width slots used as shorts */
-            let mut newstring_v: Vec<i16> = vec![0; newlength.abs() as usize];
+            let mut newstring_v: Vec<i16> = vec![0; newlength.unsigned_abs() as usize];
 
             let mut i: i32 = startfrom;
             let mut j: i32 = 0;
@@ -1002,11 +1002,11 @@ pub fn fsm_extract_nonidentity(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
     let mut ptr_stack = PtrStack::new();
     ptr_stack.push(state_array[0].transitions);
 
-    /* C function-scope locals (factor/newlength keep their values across
-    iterations; startfrom is always assigned before use) */
+    /* C function-scope locals (factor keeps its value across iterations;
+    newlength/startfrom are always assigned before use) */
     let mut factor: i32 = 0;
-    let mut newlength: i32 = 1;
-    let mut startfrom: i32 = 0;
+    let mut newlength: i32;
+    let mut startfrom: i32;
 
     while !ptr_stack.is_empty() {
         let mut curr_ptr = ptr_stack.pop();
@@ -1084,7 +1084,7 @@ pub fn fsm_extract_nonidentity(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
 
                 /* calloc(abs(newlength), sizeof(int)) — never freed in C
                 (leak, no aliasing hazard) */
-                let mut newstring: Vec<i16> = vec![0; newlength.abs() as usize];
+                let mut newstring: Vec<i16> = vec![0; newlength.unsigned_abs() as usize];
 
                 let mut i: i32 = startfrom;
                 let mut j: i32 = 0;

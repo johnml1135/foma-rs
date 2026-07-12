@@ -222,7 +222,7 @@ pub fn fsm_union(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm>
     net1.statecount = net1.statecount + net2.statecount + 1;
     net1.linecount = j;
     net1.arccount = arccount;
-    net1.finalcount = net1.finalcount + net2.finalcount;
+    net1.finalcount += net2.finalcount;
     fsm_destroy(net2);
     fsm_update_flags(&mut net1, NO, NO, NO, NO, UNK, NO);
     if sigma_find_number(EPSILON, &net1.sigma).is_none() {
@@ -650,13 +650,10 @@ pub fn fsm_invert(net: Box<Fsm>) -> Box<Fsm> {
     let mut net = net;
     let mut i = 0usize;
     while net.states[i].state_no != -1 {
-        let temp = net.states[i].r#in;
-        net.states[i].r#in = net.states[i].out;
-        net.states[i].out = temp;
+        let s = &mut net.states[i];
+        std::mem::swap(&mut s.r#in, &mut s.out);
         i += 1;
     }
-    let i = net.arcs_sorted_in;
-    net.arcs_sorted_in = net.arcs_sorted_out;
-    net.arcs_sorted_out = i;
+    std::mem::swap(&mut net.arcs_sorted_in, &mut net.arcs_sorted_out);
     net
 }

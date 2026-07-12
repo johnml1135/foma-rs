@@ -931,7 +931,7 @@ pub fn iface_help() {
     for gh in GLOBAL_HELP {
         // pad to maxlen + 1 columns so there is always at least one space
         let pad = " ".repeat(maxlen + 1 - gh.name.chars().count());
-        print!("{}{}{}\n", gh.name, pad, gh.help);
+        println!("{}{}{}", gh.name, pad, gh.help);
     }
 }
 
@@ -952,7 +952,7 @@ pub fn iface_apropos(s: &str) {
         .unwrap_or(0);
     for gh in matches() {
         let pad = " ".repeat(maxlen + 1 - gh.name.chars().count());
-        print!("{}{}{}\n", gh.name, pad, gh.help);
+        println!("{}{}{}", gh.name, pad, gh.help);
     }
 }
 
@@ -963,7 +963,7 @@ pub fn iface_apropos(s: &str) {
 pub fn iface_help_search(s: &str) {
     for gh in GLOBAL_HELP {
         if gh.name.contains(s) || gh.help.contains(s) {
-            print!("##\n");
+            println!("##");
             // printf("%-32.32s%s\n%s\n", name, help, longhelp): name is left-
             // justified and truncated/padded to exactly 32 BYTES (byte-based, not
             // UTF-8 aware), so the truncation is written as raw bytes.
@@ -973,7 +973,7 @@ pub fn iface_help_search(s: &str) {
             out.write_all(&nb[..take])
                 .expect("write help output to stdout");
             for _ in take..32 {
-                print!("{}", " ");
+                print!(" ");
             }
             print!("{}\n{}\n", gh.help, gh.longhelp);
         }
@@ -983,7 +983,7 @@ pub fn iface_help_search(s: &str) {
 // [spec:foma:def:iface.iface-print-bool-fn]
 // [spec:foma:sem:iface.iface-print-bool-fn]
 pub fn iface_print_bool(value: bool) {
-    print!("{} (1 = TRUE, 0 = FALSE)\n", if value { 1 } else { 0 });
+    println!("{} (1 = TRUE, 0 = FALSE)", if value { 1 } else { 0 });
 }
 
 // [spec:foma:def:iface.iface-warranty-fn]
@@ -1001,7 +1001,7 @@ pub fn iface_warranty() {
 pub fn iface_print_dot(session: &mut Session, filename: Option<&str>) {
     if iface_stack_check(session, 1) {
         if let Some(f) = filename {
-            print!("Writing dot file to {}.\n", f);
+            println!("Writing dot file to {}.", f);
         }
         let Some(top) = session.stack_find_top() else {
             return;
@@ -1025,11 +1025,9 @@ pub fn iface_print_net(session: &mut Session, netname: Option<&str>, filename: O
                 }
                 None => false,
             };
-            if !found {
-                if session.opts.verbose {
-                    eprint!("No defined network {}.\n", netname);
-                    // fflush(stderr) — stderr is unbuffered
-                }
+            if !found && session.opts.verbose {
+                eprintln!("No defined network {}.", netname);
+                // fflush(stderr) — stderr is unbuffered
             }
         }
         None => {
@@ -1059,7 +1057,7 @@ pub fn iface_print_cmatrix_att(session: &mut Session, filename: Option<&str>) {
                 .is_none_or(|m| m.confusion_matrix.is_empty())
         });
         if !has_cm {
-            print!("No confusion matrix defined.\n");
+            println!("No confusion matrix defined.");
         } else {
             match filename {
                 None => {
@@ -1068,7 +1066,7 @@ pub fn iface_print_cmatrix_att(session: &mut Session, filename: Option<&str>) {
                 Some(name) => {
                     // C: outfile = fopen(name,"w"); message; result NOT NULL-checked.
                     let res = File::create(name);
-                    print!("Writing confusion matrix to file '{}'.\n", name);
+                    println!("Writing confusion matrix to file '{}'.", name);
                     // C's unchecked fopen NULL-derefs on failure; report the error
                     // and return instead of crashing, like the other file commands.
                     match res {
@@ -1103,7 +1101,7 @@ pub fn iface_print_cmatrix(session: &mut Session) {
                 .is_none_or(|m| m.confusion_matrix.is_empty())
         });
         if !has_cm {
-            print!("No confusion matrix defined.\n");
+            println!("No confusion matrix defined.");
         } else {
             session.stack_entry_fsm(top, |f| cmatrix_print(f));
         }
@@ -1136,7 +1134,7 @@ pub fn iface_print_defined(session: &mut Session) {
             // Wave 4 fix: dropped the stray unmatched ')' from the C format
             // "%s@%i)\t" — now "%s@%i\t" (name@numargs then TAB).
             print!("{}@{}\t", name, node.numargs);
-            print!("{}\n", node.regex.as_deref().unwrap_or(""));
+            println!("{}", node.regex.as_deref().unwrap_or(""));
         }
         d = node.next.as_deref();
     }
@@ -1177,6 +1175,6 @@ pub fn iface_view(session: &mut Session) {
         let Some(top) = session.stack_find_top() else {
             return;
         };
-        session.stack_entry_fsm(top, |f| view_net(f));
+        session.stack_entry_fsm(top, view_net);
     }
 }

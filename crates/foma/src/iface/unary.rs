@@ -40,8 +40,8 @@ pub fn iface_compact(session: &mut Session) {
         let Some(top) = session.stack_find_top() else {
             return;
         };
-        session.stack_entry_fsm(top, |f| fsm_compact(f));
-        session.stack_entry_fsm(top, |f| sigma_sort(f));
+        session.stack_entry_fsm(top, fsm_compact);
+        session.stack_entry_fsm(top, sigma_sort);
         let Some(popped) = session.stack_pop() else {
             return;
         };
@@ -350,7 +350,7 @@ pub fn iface_sort(session: &mut Session) {
         let Some(top) = session.stack_find_top() else {
             return;
         };
-        session.stack_entry_fsm(top, |f| sigma_sort(f));
+        session.stack_entry_fsm(top, sigma_sort);
         let Some(popped) = session.stack_pop() else {
             return;
         };

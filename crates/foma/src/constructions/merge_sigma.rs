@@ -26,7 +26,7 @@ pub fn add_to_mergesigma<'a>(
     sigma: &Sigma,
     presence: i16,
 ) -> &'a mut Mergesigma {
-    let mut number = 0;
+    let mut number;
 
     let msigma = if msigma.number == -1 {
         number = 2;

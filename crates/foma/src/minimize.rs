@@ -195,9 +195,11 @@ pub(crate) fn fsm_minimize_hop(net: Box<Fsm>) -> Box<Fsm> {
     }
 
     /* all partition-refinement scratch is owned here and dropped on return */
-    let mut m = Minimizer::default();
-    m.num_states = net.statecount;
-    m.p = None;
+    let mut m = Minimizer {
+        num_states: net.statecount,
+        p: None,
+        ..Default::default()
+    };
 
     /*
        1. generate the inverse lookup table
@@ -570,8 +572,8 @@ pub(crate) fn refine_states(m: &mut Minimizer, invstates: i32) -> bool {
 
             /* Are we done for this block? Adjust counters */
             if m.phead[newP].count == m.phead[tP].t_count {
-                m.phead[tP].count = m.phead[tP].count - m.phead[newP].count;
-                m.phead[tP].inv_count = m.phead[tP].inv_count - m.phead[tP].inv_t_count;
+                m.phead[tP].count -= m.phead[newP].count;
+                m.phead[tP].inv_count -= m.phead[tP].inv_t_count;
                 m.phead[tP].current_split = None;
                 m.phead[tP].t_count = 0;
                 m.phead[tP].inv_t_count = 0;
@@ -818,7 +820,7 @@ pub(crate) fn sigma_to_pairs(m: &mut Minimizer, net: &mut Fsm) {
     while net.states[i].state_no != -1 {
         let sno = net.states[i].state_no as usize;
         /* C: finals[state_no] != 1 on a _Bool */
-        if net.states[i].final_state == 1 && m.finals[sno] != true {
+        if net.states[i].final_state == 1 && !m.finals[sno] {
             m.num_finals += 1;
             m.finals[sno] = true;
         }
@@ -1057,10 +1059,12 @@ mod tests {
     // [spec:foma:sem:minimize.init-pe-fn/test]
     #[test]
     fn init_pe_builds_initial_partition() {
-        let mut m = Minimizer::default();
-        m.num_states = 3;
-        m.num_finals = 1;
-        m.finals = vec![false, false, true];
+        let mut m = Minimizer {
+            num_states: 3,
+            num_finals: 1,
+            finals: vec![false, false, true],
+            ..Default::default()
+        };
         init_PE(&mut m);
         assert_eq!(m.total_states, 2);
         /* nonFP == block 0 (count 2), FP == block 1 (count 1) */
@@ -1102,8 +1106,10 @@ mod tests {
         fsm_construct_add_arc(&mut hc, 1, 1, "a", "a");
         fsm_construct_set_final(&mut hc, 1);
         let mut net = fsm_construct_done(hc);
-        let mut m = Minimizer::default();
-        m.num_states = net.statecount;
+        let mut m = Minimizer {
+            num_states: net.statecount,
+            ..Default::default()
+        };
         sigma_to_pairs(&mut m, &mut net);
         assert_eq!(net.arity, 2);
         assert_eq!(m.epsilon_symbol, -1);
@@ -1131,8 +1137,10 @@ mod tests {
         fsm_construct_add_arc(&mut hc, 1, 0, "a", "a");
         let mut net = fsm_construct_done(hc);
         fsm_count(&mut net);
-        let mut m = Minimizer::default();
-        m.num_states = net.statecount;
+        let mut m = Minimizer {
+            num_states: net.statecount,
+            ..Default::default()
+        };
         sigma_to_pairs(&mut m, &mut net);
         init_PE(&mut m);
         generate_inverse(&mut m, &net);
@@ -1164,11 +1172,13 @@ mod tests {
     // [spec:foma:sem:minimize.agenda-add-fn/test]
     #[test]
     fn refine_states_splits_and_enqueues_touched_half() {
-        let mut m = Minimizer::default();
-        m.num_states = 10; /* large: TOTAL never reaches it -> no abort */
-        m.total_states = 3;
-        /* block pool: index 1 is the splittable block tP, index 3 is free */
-        m.phead = vec![P::default(); 6];
+        let mut m = Minimizer {
+            num_states: 10, /* large: TOTAL never reaches it -> no abort */
+            total_states: 3,
+            /* block pool: index 1 is the splittable block tP, index 3 is free */
+            phead: vec![P::default(); 6],
+            ..Default::default()
+        };
         m.phead[1].count = 3;
         m.phead[1].first_e = Some(0);
         m.phead[1].last_e = Some(2);

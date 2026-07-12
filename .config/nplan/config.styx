@@ -1,35 +1,19 @@
 platforms (
     {
-        platform "c++"
-        files (src/**/*.c src/**/*.cc src/**/*.cpp src/**/*.cxx src/**/*.h src/**/*.hpp include/**/*.h include/**/*.hpp)
+        platform "rust"
+        files (crates/**/*.rs Cargo.toml crates/**/Cargo.toml)
         checks {
             format {
-                cmd "find src include -name '*.c' -o -name '*.cc' -o -name '*.cpp' -o -name '*.h' -o -name '*.hpp' | xargs clang-format --dry-run --Werror"
-                fix "find src include -name '*.c' -o -name '*.cc' -o -name '*.cpp' -o -name '*.h' -o -name '*.hpp' | xargs clang-format -i"
-            }
-        }
-    }
-
-    {
-        platform "python"
-        files (src/**/*.py **/*.py)
-        checks {
-            format {
-                cmd "ruff format --check ."
-                fix "ruff format ."
+                cmd "cargo fmt -p foma --check"
+                fix "cargo fmt -p foma"
             }
             lint {
-                cmd "ruff check ."
+                cmd "cargo clippy -p foma --all-targets -- -D warnings"
             }
             test {
-                cmd "pytest"
+                cmd "cargo test -p foma"
             }
         }
-    }
-
-    {
-        platform "typescript"
-        files (src/**/*.ts src/**/*.tsx src/**/*.js src/**/*.jsx)
     }
 )
 

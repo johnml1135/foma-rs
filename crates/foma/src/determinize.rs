@@ -204,9 +204,11 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: i32) -> Box<Fsm> {
         return net;
     }
     /* all subset-construction scratch is owned here and dropped on return */
-    let mut s = Subset::default();
-    /* Export this var */
-    s.op = operation;
+    let mut s = Subset {
+        /* Export this var */
+        op: operation,
+        ..Default::default()
+    };
     fsm_count(&mut net);
     s.num_states = net.statecount;
     s.deterministic = true;
@@ -672,16 +674,16 @@ pub(crate) fn initial_e_closure(s: &mut Subset, net: &Fsm) -> i32 {
             s.finals[state] = true;
         }
         /* Add the start states as the initial set */
-        if (s.op == SUBSET_TEST_STAR_FREE) || fsm[i].start_state != 0 {
-            if s.e_table[state] != s.mainloop {
-                s.num_start_states += 1;
-                /* numss = (fsm+i)->state_no; — numss is a C _Bool, so the
-                assignment truncates to state_no != 0 */
-                s.numss = fsm[i].state_no != 0;
-                s.e_table[state] = s.mainloop;
-                s.temp_move[j as usize] = fsm[i].state_no;
-                j += 1;
-            }
+        if ((s.op == SUBSET_TEST_STAR_FREE) || fsm[i].start_state != 0)
+            && s.e_table[state] != s.mainloop
+        {
+            s.num_start_states += 1;
+            /* numss = (fsm+i)->state_no; — numss is a C _Bool, so the
+            assignment truncates to state_no != 0 */
+            s.numss = fsm[i].state_no != 0;
+            s.e_table[state] = s.mainloop;
+            s.temp_move[j as usize] = fsm[i].state_no;
+            j += 1;
         }
         i += 1;
     }
@@ -715,27 +717,25 @@ pub(crate) fn memoize_e_closure(s: &mut Subset, fsm: &[FsmState]) {
     loop {
         let state = fsm[i].state_no;
 
-        if state != laststate {
-            if !s.int_stack.is_empty() {
-                s.deterministic = false;
-                /* ptr = e_closure_memo+laststate; */
-                let mut ptr = laststate as usize;
-                /* ptr->target = e_closure_memo+s.int_stack.pop(); — target
-                indices are head-node indices (state numbers) */
-                s.e_closure_memo[ptr].target = Some(s.int_stack.pop() as usize);
-                while !s.int_stack.is_empty() {
-                    /* append a chain node to the pool (its mark is never read
-                    on chain nodes; 0 here) */
-                    s.e_closure_memo.push(EClosureMemo {
-                        state: laststate,
-                        mark: 0,
-                        target: Some(s.int_stack.pop() as usize),
-                        next: None,
-                    });
-                    let ni = s.e_closure_memo.len() - 1;
-                    s.e_closure_memo[ptr].next = Some(ni);
-                    ptr = ni;
-                }
+        if state != laststate && !s.int_stack.is_empty() {
+            s.deterministic = false;
+            /* ptr = e_closure_memo+laststate; */
+            let mut ptr = laststate as usize;
+            /* ptr->target = e_closure_memo+s.int_stack.pop(); — target
+            indices are head-node indices (state numbers) */
+            s.e_closure_memo[ptr].target = Some(s.int_stack.pop() as usize);
+            while !s.int_stack.is_empty() {
+                /* append a chain node to the pool (its mark is never read
+                on chain nodes; 0 here) */
+                s.e_closure_memo.push(EClosureMemo {
+                    state: laststate,
+                    mark: 0,
+                    target: Some(s.int_stack.pop() as usize),
+                    next: None,
+                });
+                let ni = s.e_closure_memo.len() - 1;
+                s.e_closure_memo[ptr].next = Some(ni);
+                ptr = ni;
             }
         }
         if state == -1 {
@@ -747,11 +747,11 @@ pub(crate) fn memoize_e_closure(s: &mut Subset, fsm: &[FsmState]) {
         }
         /* Check if we have a redundant epsilon arc */
         if fsm[i].r#in as i32 == EPSILON && fsm[i].out as i32 == EPSILON {
-            if redcheck[fsm[i].target as usize] != fsm[i].state_no {
-                if fsm[i].target != fsm[i].state_no {
-                    s.int_stack.push(fsm[i].target);
-                    redcheck[fsm[i].target as usize] = fsm[i].state_no;
-                }
+            if redcheck[fsm[i].target as usize] != fsm[i].state_no
+                && fsm[i].target != fsm[i].state_no
+            {
+                s.int_stack.push(fsm[i].target);
+                redcheck[fsm[i].target as usize] = fsm[i].state_no;
             }
             laststate = state;
         }
@@ -881,8 +881,8 @@ pub(crate) fn nhash_find_insert(s: &mut Subset, set: &[i32], setsize: i32) -> i3
                     }
                 }
                 if op == SUBSET_TEST_STAR_FREE && found == 1 {
-                    for j in 0..setsize as usize {
-                        if set[j] != s.set_table[currlist + j] {
+                    for (j, &set_j) in set.iter().enumerate().take(setsize as usize) {
+                        if set_j != s.set_table[currlist + j] {
                             /* Set mark (applied after the walk to keep the
                             table borrow immutable) */
                             star_mark = true;
@@ -929,7 +929,7 @@ pub(crate) fn hashf(s: &Subset, set: &[i32], setsize: i32) -> i32 {
         sum = sum.wrapping_add(set[i as usize].wrapping_add(i) as u32);
     }
     hashval = hashval.wrapping_add(sum.wrapping_mul(31));
-    hashval = hashval % (s.nhash_tablesize as u32);
+    hashval %= s.nhash_tablesize as u32;
     hashval as i32
 }
 
@@ -1014,11 +1014,11 @@ pub(crate) fn nhash_rebuild_table(s: &mut Subset) {
     s.nhash_tablesize = PRIMES[i + 1] as i32;
 
     s.table = vec![NhashList::default(); s.nhash_tablesize as usize];
-    for i in 0..oldsize as usize {
-        if oldtable[i].size == 0 {
+    for bucket in oldtable.iter().take(oldsize as usize) {
+        if bucket.size == 0 {
             continue;
         }
-        let mut tableptr: Option<&NhashList> = Some(&oldtable[i]);
+        let mut tableptr: Option<&NhashList> = Some(bucket);
         while let Some(tp) = tableptr {
             /* rehash */
             let hashval = hashf(s, &s.set_table[tp.set_offset as usize..], tp.size as i32);
@@ -1077,8 +1077,8 @@ pub(crate) fn nhash_free(mut nptr: Vec<NhashList>, size: i32) {
     /* for each bucket, free every chained node reachable from ->next (the
     heads are elements of the array itself); iterative take()s mirror the
     node-by-node frees and avoid recursive Box drops on long chains */
-    for i in 0..size as usize {
-        let mut nptr2 = nptr[i].next.take();
+    for bucket in nptr.iter_mut().take(size as usize) {
+        let mut nptr2 = bucket.next.take();
         while let Some(mut node) = nptr2 {
             let nnext = node.next.take();
             drop(node); /* free(nptr2) */
@@ -1287,8 +1287,10 @@ mod tests {
     // [spec:foma:sem:determinize.hashf-fn/test]
     #[test]
     fn hashf_seed_and_permutation() {
-        let mut s = Subset::default();
-        s.nhash_tablesize = 61;
+        let mut s = Subset {
+            nhash_tablesize: 61,
+            ..Default::default()
+        };
         assert_eq!(hashf(&s, &[], 0), (6703271u32 % 61) as i32);
         /* large prime table: modulo does not mask the permutation equality */
         s.nhash_tablesize = 2147483647;
@@ -1341,16 +1343,18 @@ mod tests {
     #[test]
     fn nhash_insert_find_roundtrip() {
         let n = 5usize;
-        let mut s = Subset::default();
-        s.finals = vec![false; n];
-        s.e_table = vec![0; n];
-        s.mainloop = 1;
-        s.set_table_size = 64;
-        s.set_table = vec![0; 64];
-        s.set_table_offset = 0;
-        s.t_limit = 8;
-        s.t_ptr = vec![TMemo::default(); 8];
-        s.op = SUBSET_DETERMINIZE;
+        let mut s = Subset {
+            finals: vec![false; n],
+            e_table: vec![0; n],
+            mainloop: 1,
+            set_table_size: 64,
+            set_table: vec![0; 64],
+            set_table_offset: 0,
+            t_limit: 8,
+            t_ptr: vec![TMemo::default(); 8],
+            op: SUBSET_DETERMINIZE,
+            ..Default::default()
+        };
         nhash_init(&mut s, 6);
 
         /* first insert of {2,0,1} -> subset 0, members copied to set_table */
@@ -1434,8 +1438,10 @@ mod tests {
     // [spec:foma:sem:determinize.memoize-e-closure-fn/test]
     #[test]
     fn memoize_e_closure_builds_epsilon_graph() {
-        let mut s = Subset::default();
-        s.num_states = 3;
+        let mut s = Subset {
+            num_states: 3,
+            ..Default::default()
+        };
         let e = EPSILON as i16;
         let fsm = vec![
             FsmState {
@@ -1511,9 +1517,11 @@ mod tests {
     // [spec:foma:sem:determinize.e-closure-free-fn/test]
     #[test]
     fn e_closure_free_clears_memo() {
-        let mut s = Subset::default();
-        s.marktable = vec![1, 2, 3];
-        s.e_closure_memo = vec![EClosureMemo::default(); 4];
+        let mut s = Subset {
+            marktable: vec![1, 2, 3],
+            e_closure_memo: vec![EClosureMemo::default(); 4],
+            ..Default::default()
+        };
         e_closure_free(&mut s);
         assert!(s.marktable.is_empty());
         assert!(s.e_closure_memo.is_empty());

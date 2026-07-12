@@ -123,8 +123,8 @@ pub(crate) fn global_vars() -> Vec<Gv> {
 // [spec:foma:sem:foma.iface-stack-check-fn]
 pub fn iface_stack_check(session: &mut Session, size: i32) -> bool {
     if session.stack_size() < size {
-        print!(
-            "Not enough networks on stack. Operation requires at least {}.\n",
+        println!(
+            "Not enough networks on stack. Operation requires at least {}.",
             size
         );
         return false;
@@ -140,13 +140,13 @@ pub fn iface_show_variables(session: &mut Session) {
     for gv in global_vars() {
         // "%-17.17s" — left-justified, padded/truncated to exactly 17 chars.
         match gv.field {
-            GvField::Bool(f) => print!(
-                "{:<17.17}: {}\n",
+            GvField::Bool(f) => println!(
+                "{:<17.17}: {}",
                 gv.name,
                 if *f(&mut session.opts) { "ON" } else { "OFF" }
             ),
-            GvField::Int(f) => print!("{:<17.17}: {}\n", gv.name, *f(&mut session.opts)),
-            GvField::Str(f) => print!("{:<17.17}: {}\n", gv.name, f(&mut session.opts)),
+            GvField::Int(f) => println!("{:<17.17}: {}", gv.name, *f(&mut session.opts)),
+            GvField::Str(f) => println!("{:<17.17}: {}", gv.name, f(&mut session.opts)),
         }
     }
 }
@@ -166,10 +166,10 @@ pub fn iface_show_variable(session: &mut Session, name: &str) {
             // the char* bytes as int). Print by declared type instead: BOOL as
             // ON/OFF, INT as its value, STRING as its string.
             match gv.field {
-                GvField::Int(f) => print!("{} = {}\n", gv.name, *f(&mut session.opts)),
-                GvField::Str(f) => print!("{} = {}\n", gv.name, f(&mut session.opts)),
-                GvField::Bool(f) => print!(
-                    "{} = {}\n",
+                GvField::Int(f) => println!("{} = {}", gv.name, *f(&mut session.opts)),
+                GvField::Str(f) => println!("{} = {}", gv.name, f(&mut session.opts)),
+                GvField::Bool(f) => println!(
+                    "{} = {}",
                     gv.name,
                     if *f(&mut session.opts) { "ON" } else { "OFF" }
                 ),
@@ -177,7 +177,7 @@ pub fn iface_show_variable(session: &mut Session, name: &str) {
             return;
         }
     }
-    print!("*There is no global variable '{}'.\n", name);
+    println!("*There is no global variable '{}'.", name);
 }
 
 // [spec:foma:def:iface.iface-set-variable-fn]
@@ -197,12 +197,12 @@ pub fn iface_set_variable(session: &mut Session, name: &str, value: &str) {
                     } else if value == "OFF" || value == "0" {
                         j = false;
                     } else {
-                        print!("Invalid value '{}' for variable '{}'\n", value, gv.name);
+                        println!("Invalid value '{}' for variable '{}'", value, gv.name);
                         return;
                     }
                     *f(&mut session.opts) = j;
-                    print!(
-                        "variable {} = {}\n",
+                    println!(
+                        "variable {} = {}",
                         gv.name,
                         if *f(&mut session.opts) { "ON" } else { "OFF" }
                     );
@@ -210,16 +210,16 @@ pub fn iface_set_variable(session: &mut Session, name: &str, value: &str) {
                 GvField::Str(f) => {
                     // *ptr = strdup(value): C leaks the old string; replaced here.
                     *f(&mut session.opts) = value.into();
-                    print!("variable {} = {}\n", gv.name, value);
+                    println!("variable {} = {}", gv.name, value);
                 }
                 GvField::Int(f) => {
                     let parsed = crate::io::parse_leading_decimal(value);
                     // j = (int)strtol(...) — truncation to int.
                     let j = parsed.value as i32;
                     if parsed.out_of_range || parsed.no_digits || j < 0 {
-                        print!("invalid value {} for variable {}\n", value, gv.name);
+                        println!("invalid value {} for variable {}", value, gv.name);
                     } else {
-                        print!("variable {} = {}\n", gv.name, j);
+                        println!("variable {} = {}", gv.name, j);
                         *f(&mut session.opts) = j;
                     }
                 }
@@ -227,5 +227,5 @@ pub fn iface_set_variable(session: &mut Session, name: &str, value: &str) {
             return;
         }
     }
-    print!("*There is no global variable '{}'.\n", name);
+    println!("*There is no global variable '{}'.", name);
 }

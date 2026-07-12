@@ -264,24 +264,21 @@ pub fn flag_eliminate(opts: &FomaOptions, net: Box<Fsm>, name: Option<&str>) -> 
 // [spec:foma:def:flags.flag-create-symbol-fn]
 // [spec:foma:sem:flags.flag-create-symbol-fn]
 pub(crate) fn flag_create_symbol(r#type: i32, name: &str, value: Option<&str>) -> Box<Fsm> {
-    let value = match value {
-        None => "",
-        Some(v) => v,
-    };
+    let value = value.unwrap_or_default();
 
     /* C: string = malloc(strlen(name)+strlen(value)+6), built with strcat and
     never freed (leak); an owned String here */
     let mut string = String::new();
-    string.push_str("@");
+    string.push('@');
     /* flag_type_to_char(type) — C would segfault on NULL for unknown types */
     string.push_str(flag_type_to_char(r#type).expect("known flag type has a char"));
-    string.push_str(".");
+    string.push('.');
     string.push_str(name);
-    if value != "" {
-        string.push_str(".");
+    if !value.is_empty() {
+        string.push('.');
         string.push_str(value);
     }
-    string.push_str("@");
+    string.push('@');
 
     fsm_symbol(&string)
 }

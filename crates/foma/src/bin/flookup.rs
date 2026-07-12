@@ -84,8 +84,8 @@ thread_local! {
     static SEPARATOR: RefCell<String> = RefCell::new("\t".to_string());
     static WORDSEPARATOR: RefCell<String> = RefCell::new("\n".to_string());
     static SERVER_ADDRESS: RefCell<Option<String>> = const { RefCell::new(None) };
-    static LINE: RefCell<String> = RefCell::new(String::new());
-    static SERVERSTRING: RefCell<String> = RefCell::new(String::new());
+    static LINE: RefCell<String> = const { RefCell::new(String::new()) };
+    static SERVERSTRING: RefCell<String> = const { RefCell::new(String::new()) };
 
     // static char *(*applyer)(...) = &apply_up;
     static APPLYER: Cell<Applyer> = Cell::new(apply_up as Applyer);
@@ -278,11 +278,7 @@ fn main() {
 
     let mut go = GetOpt::new(std::env::args().collect());
     // optstring "abhHiI:qs:SA:P:w:vx"; arg-taking letters: I s A P w
-    loop {
-        let opt = match go.next("IsAPw") {
-            Some(o) => o,
-            None => break,
-        };
+    while let Some(opt) = go.next("IsAPw") {
         match opt {
             b'a' => {
                 APPLY_ALTERNATES.set(1);
@@ -442,7 +438,7 @@ fn main() {
     }
 
     if numnets < 1 {
-        eprintln!("{}: {}", "File error", infilename);
+        eprintln!("File error: {}", infilename);
         finish(EXIT_FAILURE);
     }
 
@@ -584,14 +580,9 @@ fn handle_line(s: &str) {
             if let Some(r) = result {
                 RESULTS.set(RESULTS.get() + 1);
                 app_print(Some(&r));
-                loop {
-                    match apply_at(p, None) {
-                        Some(r2) => {
-                            RESULTS.set(RESULTS.get() + 1);
-                            app_print(Some(&r2));
-                        }
-                        None => break,
-                    }
+                while let Some(r2) = apply_at(p, None) {
+                    RESULTS.set(RESULTS.get() + 1);
+                    app_print(Some(&r2));
                 }
                 break;
             }

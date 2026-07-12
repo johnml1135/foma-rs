@@ -258,9 +258,7 @@ fn lexc_symbol_hash(s: &str) -> u32 {
 fn lexc_find_sigma_hash(lx: &LexcCompiler, symbol: &str) -> Option<i32> {
     let ptr = lexc_symbol_hash(symbol) as usize;
 
-    if lx.hashtable[ptr].symbol.is_none() {
-        return None;
-    }
+    lx.hashtable[ptr].symbol.as_ref()?;
     /* for (h = head; h != NULL; h = h->next) */
     if lx.hashtable[ptr].symbol.as_deref() == Some(symbol) {
         return Some(lx.hashtable[ptr].sigma_number);
@@ -491,7 +489,7 @@ fn lexc_add_network(lx: &mut LexcCompiler) {
     let mut slist: Vec<usize> = vec![0; (maxstate + 1) as usize];
     let mut finals: Vec<i32> = vec![0; (maxstate + 1) as usize];
 
-    for i in 0..=(maxstate as usize) {
+    for slot in slist.iter_mut().take(maxstate as usize + 1) {
         let newidx = lx.state_arena.len();
         lx.state_arena.push(States {
             trans: None,
@@ -503,7 +501,7 @@ fn lexc_add_network(lx: &mut LexcCompiler) {
             merge_with: 0, /* set to self below */
         });
         lx.state_arena[newidx].merge_with = newidx;
-        slist[i] = newidx;
+        *slot = newidx;
         /* Prepend a statelist cell directly (NOT via lexc_add_state, so
         lexc_statecount is not bumped — harmless; recomputed later) */
         let slidx = lx.statelist_arena.len();
@@ -982,13 +980,13 @@ fn lexc_add_mc(lx: &mut LexcCompiler, raw: &str) {
         /* for (mcs = mc; mcs != NULL && utf8strlen(mcs->symbol) > len; ...) */
         let mut mcs = lx.mc;
         while let Some(m) = mcs {
-            if !(lx.mc_arena[m]
+            if lx.mc_arena[m]
                 .symbol
                 .as_deref()
                 .expect("multichar arena entry has a symbol")
                 .chars()
                 .count()
-                > len)
+                <= len
             {
                 break;
             }
@@ -1263,19 +1261,19 @@ fn lexc_number_states(lx: &mut LexcCompiler) {
         let mut l = lx.lexstates;
         while let Some(lidx) = l {
             let state = lx.lexstates_arena[lidx].state;
-            if lx.lexstates_arena[lidx].targeted == 0 && lx.state_arena[state].number != 0 {
-                if lx.opts.verbose {
-                    let name = lx.lexstates_arena[lidx].name.as_deref().unwrap_or("");
-                    tracing::warn!("lexicon '{}' defined but not used", name);
-                }
+            if lx.lexstates_arena[lidx].targeted == 0
+                && lx.state_arena[state].number != 0
+                && lx.opts.verbose
+            {
+                let name = lx.lexstates_arena[lidx].name.as_deref().unwrap_or("");
+                tracing::warn!("lexicon '{}' defined but not used", name);
             }
             if lx.lexstates_arena[lidx].has_outgoing == 0
                 && lx.lexstates_arena[lidx].name.as_deref() != Some("#")
+                && lx.opts.verbose
             {
-                if lx.opts.verbose {
-                    let name = lx.lexstates_arena[lidx].name.as_deref().unwrap_or("");
-                    tracing::warn!("lexicon '{}' used but never defined", name);
-                }
+                let name = lx.lexstates_arena[lidx].name.as_deref().unwrap_or("");
+                tracing::warn!("lexicon '{}' used but never defined", name);
             }
             l = lx.lexstates_arena[lidx].next;
         }
@@ -1355,7 +1353,10 @@ fn lexc_merge_states(lx: &mut LexcCompiler) {
         while let Some(sidx) = s {
             let state = lx.statelist_arena[sidx].state;
             if lx.state_arena[state].mergeable != 0 {
-                numstates += 1; /* dead second count, as in C */
+                #[allow(unused_assignments)]
+                {
+                    numstates += 1; /* dead second count, as in C */
+                }
                 let distance = lx.state_arena[state].distance as usize;
                 if lenlist[distance].state.is_none() {
                     lenlist[distance].state = Some(state);
@@ -1556,11 +1557,10 @@ fn lexc_to_fsm(lx: &mut LexcCompiler) -> Box<Fsm> {
     };
     let mut fsm: Vec<FsmState> = vec![default_line; (linecount + 1) as usize];
     let mut i = 0i32;
-    for j in 0..statecount {
+    for &(state, sstart, sfinal) in sa.iter().take(statecount) {
         /* sa[num] was stored as (state, start, final); C calls
         add_fsm_arc(..., s[j].final, s[j].start), so bind so that
         `sfinal` = the final flag and `sstart` = the start flag. */
-        let (state, sstart, sfinal) = sa[j];
         if lx.state_arena[state].trans.is_none() {
             add_fsm_arc(
                 &mut fsm,
@@ -1799,13 +1799,7 @@ pub fn fsm_lexc_parse_file(
     /* mystring = file_to_mem(filename); return fsm_lexc_parse_string(mystring,
     verbose). The C never frees mystring (documented leak); here the buffer is a
     Vec that drops at scope end — an observable no-op. */
-    let mystring = match file_to_mem(filename).ok() {
-        Some(v) => v,
-        /* C has no NULL check and hands NULL to the scanner (undefined
-        behavior); file_to_mem already printed the error. DEVIATION from C: a
-        null pointer cannot be reconstructed safely, so return None. */
-        None => return None,
-    };
+    let mystring = file_to_mem(filename).ok()?;
     /* file_to_mem appends a terminating NUL; strip it (and any BOM-free tail of
     trailing NULs) before handing the text to the parser. */
     let end = mystring

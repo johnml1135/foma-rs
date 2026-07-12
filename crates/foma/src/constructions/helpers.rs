@@ -114,6 +114,7 @@ pub fn init_state_pointers(fsm_state: &[FsmState]) -> Vec<StateArr> {
 // [spec:foma:sem:constructions.add-fsm-arc-fn]
 // [spec:foma:def:fomalibconf.add-fsm-arc-fn]
 // [spec:foma:sem:fomalibconf.add-fsm-arc-fn]
+#[allow(clippy::too_many_arguments)]
 pub fn add_fsm_arc(
     fsm: &mut [FsmState],
     offset: i32,
@@ -182,9 +183,9 @@ pub fn fsm_count(net: &mut Fsm) {
 pub(crate) fn fsm_add_to_states(net: &mut Fsm, add: i32) {
     let mut i = 0usize;
     while net.states[i].state_no != -1 {
-        net.states[i].state_no = net.states[i].state_no + add;
+        net.states[i].state_no += add;
         if net.states[i].target != -1 {
-            net.states[i].target = net.states[i].target + add;
+            net.states[i].target += add;
         }
         i += 1;
     }

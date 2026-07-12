@@ -10,8 +10,8 @@ pub fn iface_test_equivalent(session: &mut Session) {
     if iface_stack_check(session, 2) {
         let top = session.stack_find_top().unwrap();
         let second = session.stack_find_second().unwrap();
-        let mut one = session.stack_entry_fsm(top, |f| fsm_copy(f));
-        let mut two = session.stack_entry_fsm(second, |f| fsm_copy(f));
+        let mut one = session.stack_entry_fsm(top, fsm_copy);
+        let mut two = session.stack_entry_fsm(second, fsm_copy);
         fsm_count(&mut one);
         fsm_count(&mut two);
         // Latent leak in C: the two copies are never fsm_destroy'd; here they are
@@ -27,7 +27,7 @@ pub fn iface_test_equivalent(session: &mut Session) {
 pub fn iface_test_functional(session: &mut Session) {
     if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
-        let r = session.stack_entry_fsm_with_opts(top, |opts, f| fsm_isfunctional(opts, f));
+        let r = session.stack_entry_fsm_with_opts(top, fsm_isfunctional);
         iface_print_bool(r);
     }
 }
@@ -39,7 +39,7 @@ pub fn iface_test_functional(session: &mut Session) {
 pub fn iface_test_identity(session: &mut Session) {
     if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
-        let r = session.stack_entry_fsm_with_opts(top, |opts, f| fsm_isidentity(opts, f));
+        let r = session.stack_entry_fsm_with_opts(top, fsm_isidentity);
         iface_print_bool(r);
     }
 }
@@ -52,7 +52,7 @@ pub fn iface_test_nonnull(session: &mut Session) {
     if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
         // C: iface_print_bool(!fsm_isempty(...)) — logical NOT of the int result.
-        let e = session.stack_entry_fsm_with_opts(top, |opts, f| fsm_isempty(opts, f));
+        let e = session.stack_entry_fsm_with_opts(top, fsm_isempty);
         iface_print_bool(!e);
     }
 }
@@ -64,7 +64,7 @@ pub fn iface_test_nonnull(session: &mut Session) {
 pub fn iface_test_null(session: &mut Session) {
     if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
-        let r = session.stack_entry_fsm_with_opts(top, |opts, f| fsm_isempty(opts, f));
+        let r = session.stack_entry_fsm_with_opts(top, fsm_isempty);
         iface_print_bool(r);
     }
 }
@@ -76,7 +76,7 @@ pub fn iface_test_null(session: &mut Session) {
 pub fn iface_test_unambiguous(session: &mut Session) {
     if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
-        let r = session.stack_entry_fsm_with_opts(top, |opts, f| fsm_isunambiguous(opts, f));
+        let r = session.stack_entry_fsm_with_opts(top, fsm_isunambiguous);
         iface_print_bool(r);
     }
 }
@@ -88,7 +88,7 @@ pub fn iface_test_unambiguous(session: &mut Session) {
 pub fn iface_test_lower_universal(session: &mut Session) {
     if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
-        let copy = session.stack_entry_fsm(top, |f| fsm_copy(f));
+        let copy = session.stack_entry_fsm(top, fsm_copy);
         let mut tmp = fsm_complement(&session.opts, fsm_lower(copy));
         iface_print_bool(fsm_isempty(&session.opts, &mut tmp));
         fsm_destroy(tmp);
@@ -114,7 +114,7 @@ pub fn iface_test_sequential(session: &mut Session) {
 pub fn iface_test_upper_universal(session: &mut Session) {
     if iface_stack_check(session, 1) {
         let top = session.stack_find_top().unwrap();
-        let copy = session.stack_entry_fsm(top, |f| fsm_copy(f));
+        let copy = session.stack_entry_fsm(top, fsm_copy);
         let mut tmp = fsm_complement(&session.opts, fsm_upper(copy));
         iface_print_bool(fsm_isempty(&session.opts, &mut tmp));
         fsm_destroy(tmp);

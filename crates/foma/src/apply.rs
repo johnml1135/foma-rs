@@ -878,8 +878,6 @@ pub fn apply_binarysearch(h: &mut ApplyHandle) -> bool {
     let mut lastptr: i32;
     let mut midptr: i32;
     let mut nextsym: i32;
-    let seeksym: i32;
-    let thisstate: i32;
 
     h.curr_ptr = h.ptr;
     thisptr = h.curr_ptr;
@@ -897,12 +895,12 @@ pub fn apply_binarysearch(h: &mut ApplyHandle) -> bool {
     if h.ipos >= h.current_instring_length {
         return false;
     }
-    seeksym = h.sigmatch_array[h.ipos as usize].signumber;
+    let seeksym: i32 = h.sigmatch_array[h.ipos as usize].signumber;
     if seeksym == nextsym || (nextsym == UNKNOWN && seeksym == IDENTITY) {
         return true;
     }
 
-    thisstate = l_state_no(h, thisptr);
+    let thisstate: i32 = l_state_no(h, thisptr);
     lastptr = h.statemap[thisstate as usize] + h.numlines[thisstate as usize] - 1;
     thisptr += 1;
 
@@ -1018,9 +1016,9 @@ pub fn apply_follow_next_arc(h: &mut ApplyHandle) -> bool {
             }
             h.iptr = h.iptr.as_deref().and_then(|i| i.next.clone());
         }
-        return false;
-    } else if (h.binsearch != 0 && h.has_flags == 0)
-        || (h.binsearch != 0 && {
+        false
+    } else if h.binsearch != 0
+        && (h.has_flags == 0 || {
             let sn = l_state_no(h, h.ptr);
             !bittest(&h.flagstates, sn)
         })
@@ -1141,7 +1139,7 @@ pub fn apply_follow_next_arc(h: &mut ApplyHandle) -> bool {
             }
             h.curr_ptr += 1;
         }
-        return false;
+        false
     }
 }
 
@@ -1204,8 +1202,8 @@ pub fn apply_at_last_arc(h: &ApplyHandle) -> bool {
         if iptr.next.as_deref().is_none_or(|n| n.fsmptr == -1) {
             return true;
         }
-    } else if (h.binsearch != 0 && h.has_flags == 0)
-        || (h.binsearch != 0 && !bittest(&h.flagstates, l_state_no(h, h.ptr)))
+    } else if h.binsearch != 0
+        && (h.has_flags == 0 || !bittest(&h.flagstates, l_state_no(h, h.ptr)))
     {
         if l_state_no(h, h.ptr) != l_state_no(h, h.ptr + 1) {
             return true;
@@ -1531,10 +1529,10 @@ pub fn apply_match_length(h: &ApplyHandle, symbol: i32) -> i32 {
     if h.sigmatch_array[h.ipos as usize].signumber == symbol {
         return h.sigmatch_array[h.ipos as usize].consumes;
     }
-    if (symbol == IDENTITY) || (symbol == UNKNOWN) {
-        if h.sigmatch_array[h.ipos as usize].signumber == IDENTITY {
-            return h.sigmatch_array[h.ipos as usize].consumes;
-        }
+    if ((symbol == IDENTITY) || (symbol == UNKNOWN))
+        && h.sigmatch_array[h.ipos as usize].signumber == IDENTITY
+    {
+        return h.sigmatch_array[h.ipos as usize].consumes;
     }
     -1
 }
@@ -1584,10 +1582,10 @@ pub fn apply_match_str(h: &mut ApplyHandle, symbol: i32, position: i32) -> i32 {
     if h.sigmatch_array[position as usize].signumber == symbol {
         return h.sigmatch_array[position as usize].consumes;
     }
-    if (symbol == IDENTITY) || (symbol == UNKNOWN) {
-        if h.sigmatch_array[position as usize].signumber == IDENTITY {
-            return h.sigmatch_array[position as usize].consumes;
-        }
+    if ((symbol == IDENTITY) || (symbol == UNKNOWN))
+        && h.sigmatch_array[position as usize].signumber == IDENTITY
+    {
+        return h.sigmatch_array[position as usize].consumes;
     }
     -1
 }
@@ -1623,8 +1621,8 @@ pub fn apply_add_sigma_trie(h: &mut ApplyHandle, number: i32, symbol: &str, len:
     // child-level base index is stored in a synthetic `next` node's signum.
     let bytes = symbol.as_bytes();
     let mut base = 0usize; /* root level */
-    for i in 0..len as usize {
-        let cell = base + bytes[i] as usize;
+    for (i, &byte) in bytes.iter().enumerate().take(len as usize) {
+        let cell = base + byte as usize;
         if i == (len as usize - 1) {
             h.sigma_trie[cell].signum = number;
         } else if let Some(next) = h.sigma_trie[cell].next.as_ref() {

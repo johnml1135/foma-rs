@@ -111,7 +111,7 @@ pub fn decode_quoted(s: &mut Vec<u8>) {
 // oldstring that still matches after substitution) looped forever. An empty
 // oldstring (matches everywhere) and a newstring shorter than oldstring (the C
 // memcpy read past its end) are both treated as no-ops rather than hanging/panicking.
-pub fn replace_equal_len(s: &mut Vec<u8>, oldstring: &[u8], newstring: &[u8]) {
+pub fn replace_equal_len(s: &mut [u8], oldstring: &[u8], newstring: &[u8]) {
     let len: usize = oldstring.len();
     if len == 0 || newstring.len() < len {
         return;
@@ -177,10 +177,10 @@ pub fn is_combining(s: &[u8]) -> i32 {
         return 0;
     }
     /* 0300-036F */
-    if s0 == 0xcc && s1 >= 0x80 && s1 <= 0xbf {
+    if s0 == 0xcc && (0x80..=0xbf).contains(&s1) {
         return 2;
     }
-    if s0 == 0xcd && s1 >= 0x80 && s1 <= 0xaf {
+    if s0 == 0xcd && (0x80..=0xaf).contains(&s1) {
         return 2;
     }
     let s2: u8 = if s.len() > 2 { s[2] } else { 0 };
@@ -188,19 +188,19 @@ pub fn is_combining(s: &[u8]) -> i32 {
         return 0;
     }
     /* 1AB0-1ABE */
-    if s0 == 0xe1 && s1 == 0xaa && s2 >= 0xb0 && s2 <= 0xbe {
+    if s0 == 0xe1 && s1 == 0xaa && (0xb0..=0xbe).contains(&s2) {
         return 3;
     }
     /* 1DC0-1DFF */
-    if s0 == 0xe1 && s1 == 0xb7 && s2 >= 0x80 && s2 <= 0xbf {
+    if s0 == 0xe1 && s1 == 0xb7 && (0x80..=0xbf).contains(&s2) {
         return 3;
     }
     /* 20D0-20F0 */
-    if s0 == 0xe2 && s1 == 0x83 && s2 >= 0x90 && s2 <= 0xb0 {
+    if s0 == 0xe2 && s1 == 0x83 && (0x90..=0xb0).contains(&s2) {
         return 3;
     }
     /* FE20-FE2D */
-    if s0 == 0xef && s1 == 0xb8 && s2 >= 0xa0 && s2 <= 0xad {
+    if s0 == 0xef && s1 == 0xb8 && (0xa0..=0xad).contains(&s2) {
         return 3;
     }
     0
@@ -211,11 +211,9 @@ pub fn is_combining(s: &[u8]) -> i32 {
 // [spec:foma:def:fomalibconf.utf8skip-fn]
 // [spec:foma:sem:fomalibconf.utf8skip-fn]
 pub fn utf8skip(str: &[u8]) -> i32 {
-    let s: u8;
-
     /* C: s = (unsigned char)(unsigned int) (*str) — an empty slice stands
     in for pointing at the NUL terminator (byte 0, classified as ASCII). */
-    s = if !str.is_empty() { str[0] } else { 0 };
+    let s: u8 = if !str.is_empty() { str[0] } else { 0 };
     if s < 0x80 {
         return 0;
     }
@@ -236,8 +234,7 @@ pub fn utf8skip(str: &[u8]) -> i32 {
 // [spec:foma:def:fomalibconf.utf8code16tostr-fn]
 // [spec:foma:sem:fomalibconf.utf8code16tostr-fn]
 pub fn hex4_to_utf8(str: &[u8]) -> Option<Vec<u8>> {
-    let codepoint: i32;
-    codepoint = (parse_hex_byte(str) << 8) + parse_hex_byte(&str[2..]);
+    let codepoint: i32 = (parse_hex_byte(str) << 8) + parse_hex_byte(&str[2..]);
     codepoint_to_utf8(codepoint)
 }
 
@@ -338,7 +335,7 @@ mod tests {
         assert_eq!(is_combining(&[]), 0);
         assert_eq!(is_combining(&[0xcc]), 0); // s1 == 0 (NUL)
         // fast reject: lead not in {CC,CD,E1,E2,EF}
-        assert_eq!(is_combining(&[b'a', b'b']), 0);
+        assert_eq!(is_combining(b"ab"), 0);
         assert_eq!(is_combining(&[0xce, 0x80]), 0);
         // U+0300-036F: 0xCC + 0x80..=0xBF → 2
         assert_eq!(is_combining(&[0xcc, 0x80]), 2);

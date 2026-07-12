@@ -262,7 +262,7 @@ impl Session {
         let mut stack_ptr_previous: Option<usize> = None;
 
         fsm_count(&mut fsm);
-        if fsm.name == "" {
+        if fsm.name.is_empty() {
             // sprintf(fsm->name, "%X", rand()) — uppercase hex of rand() into the
             // fixed 40-byte name buffer (%X of a 32-bit value is <= 8 chars).
             fsm.name = format!("{:X}", self.lcg.rand() as u32).into();
@@ -301,10 +301,7 @@ impl Session {
     // [spec:foma:def:foma.stack-get-med-ah-fn]
     // [spec:foma:sem:foma.stack-get-med-ah-fn]
     pub fn stack_get_med_ah(&mut self) -> Option<usize> {
-        let se = match self.stack_find_top() {
-            None => return None,
-            Some(x) => x,
-        };
+        let se = self.stack_find_top()?;
         if self.stack_arena[se].amedh.is_none() {
             // se->amedh = apply_med_init(se->fsm);
             let mut amedh = apply_med_init(
@@ -325,10 +322,7 @@ impl Session {
     // [spec:foma:def:foma.stack-get-ah-fn]
     // [spec:foma:sem:foma.stack-get-ah-fn]
     pub fn stack_get_ah(&mut self) -> Option<usize> {
-        let se = match self.stack_find_top() {
-            None => return None,
-            Some(x) => x,
-        };
+        let se = self.stack_find_top()?;
         if self.stack_arena[se].ah.is_none() {
             // se->ah = apply_init(se->fsm);
             let ah = apply_init(

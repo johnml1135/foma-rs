@@ -334,6 +334,7 @@ fn node_delete_min(medh: &mut ApplyMedHandle) -> Option<i32> {
 
 // [spec:foma:def:spelling.node-insert-fn]
 // [spec:foma:sem:spelling.node-insert-fn]
+#[allow(clippy::too_many_arguments)]
 fn node_insert(
     medh: &mut ApplyMedHandle,
     wordpos: i32,
@@ -345,7 +346,7 @@ fn node_insert(
     parent: i32,
 ) -> bool {
     let mut j: i32;
-    let f: i32;
+
     /* We add the node in the array */
     let i = medh.astarcount;
     if i >= medh.agenda_size - 1 {
@@ -368,7 +369,7 @@ fn node_insert(
             },
         );
     }
-    f = g + h;
+    let f: i32 = g + h;
     medh.agenda[i as usize].wordpos = wordpos as i16;
     medh.agenda[i as usize].fsmstate = fsmstate;
     medh.agenda[i as usize].f = f as i16;
@@ -443,8 +444,7 @@ enum Pc {
 pub fn fsm_create_letter_lookup(medh: &mut ApplyMedHandle, net: &Fsm) {
     let mut int_stack = IntStack::new();
     let mut ptr_stack = PtrStack::new();
-    let num_states: i32;
-    let num_symbols: i32;
+
     let mut index: i32;
     let mut v: i32;
     let mut vp: i32;
@@ -454,8 +454,8 @@ pub fn fsm_create_letter_lookup(medh: &mut ApplyMedHandle, net: &Fsm) {
     let mut depth: i32;
     medh.maxdepth = 2;
 
-    num_states = net.statecount;
-    num_symbols = sigma_max(&net.sigma);
+    let num_states: i32 = net.statecount;
+    let num_symbols: i32 = sigma_max(&net.sigma);
 
     /* BITNSLOTS(num_symbols+1) */
     medh.bytes_per_letter_array = ((num_symbols + 1) + CHAR_BIT - 1) / CHAR_BIT;
@@ -717,13 +717,9 @@ pub fn apply_med(medh: &mut ApplyMedHandle, word: Option<&str>) -> Option<String
     let mut g: i32;
     let mut h: i32;
 
-    let delcost: i32;
-    let subscost: i32;
-    let inscost: i32;
-
-    delcost = 1;
-    subscost = 1;
-    inscost = 1;
+    let delcost: i32 = 1;
+    let subscost: i32 = 1;
+    let inscost: i32 = 1;
 
     /* DEVIATION from C (resume-before-any-search is UB in C — the handle's
     resume state is uninitialized; here medh.curr_ptr is None from calloc and
@@ -787,7 +783,7 @@ pub fn apply_med(medh: &mut ApplyMedHandle, word: Option<&str>) -> Option<String
             medh.curr_ptr = Some(medh.state_array[medh.curr_state as usize].transitions);
             /* leftover conditional with an empty body (dead code) */
             if cur_final(medh) == 0
-                || !(medh.agenda[curr_node_idx as usize].wordpos as i32 == medh.utf8len)
+                || (medh.agenda[curr_node_idx as usize].wordpos as i32 != medh.utf8len)
             {
                 //continue;
             }
@@ -814,20 +810,21 @@ pub fn apply_med(medh: &mut ApplyMedHandle, word: Option<&str>) -> Option<String
                     break 'inner;
                 }
                 medh.lines += 1;
-                if cur_final(medh) != 0 && medh.curr_pos == medh.utf8len {
-                    if medh.curr_node_has_match == 0 {
-                        /* Found a match */
-                        medh.curr_node_has_match = 1;
-                        let sigma = med_net(medh).sigma.clone();
-                        let word = medh
-                            .word
-                            .clone()
-                            .expect("word set for the current med lookup");
-                        let off = medh.curr_agenda_offset as usize;
-                        print_match(medh, off, &sigma, &word);
-                        medh.nummatches += 1;
-                        return Some(medh.outstring.clone());
-                    }
+                if cur_final(medh) != 0
+                    && medh.curr_pos == medh.utf8len
+                    && medh.curr_node_has_match == 0
+                {
+                    /* Found a match */
+                    medh.curr_node_has_match = 1;
+                    let sigma = med_net(medh).sigma.clone();
+                    let word = medh
+                        .word
+                        .clone()
+                        .expect("word set for the current med lookup");
+                    let off = medh.curr_agenda_offset as usize;
+                    print_match(medh, off, &sigma, &word);
+                    medh.nummatches += 1;
+                    return Some(medh.outstring.clone());
                 }
             }
             resuming = false;
@@ -866,8 +863,8 @@ pub fn apply_med(medh: &mut ApplyMedHandle, word: Option<&str>) -> Option<String
                         // h = 1;
                     }
 
-                    if g + h <= medh.med_cutoff {
-                        if !node_insert(
+                    if g + h <= medh.med_cutoff
+                        && !node_insert(
                             medh,
                             medh.curr_pos,
                             target,
@@ -876,9 +873,9 @@ pub fn apply_med(medh: &mut ApplyMedHandle, word: Option<&str>) -> Option<String
                             r#in,
                             out,
                             medh.curr_agenda_offset,
-                        ) {
-                            break 'outer; /* goto out */
-                        }
+                        )
+                    {
+                        break 'outer; /* goto out */
                     }
                     if medh.curr_pos == medh.utf8len {
                         break 'skip_block; /* goto skip */
@@ -898,8 +895,8 @@ pub fn apply_med(medh: &mut ApplyMedHandle, word: Option<&str>) -> Option<String
                     }
 
                     h = calculate_h(medh, &medh.intword, medh.curr_pos + 1, cur_target(medh));
-                    if (g + h) <= medh.med_cutoff {
-                        if !node_insert(
+                    if (g + h) <= medh.med_cutoff
+                        && !node_insert(
                             medh,
                             medh.curr_pos + 1,
                             target,
@@ -908,9 +905,9 @@ pub fn apply_med(medh: &mut ApplyMedHandle, word: Option<&str>) -> Option<String
                             r#in,
                             out,
                             medh.curr_agenda_offset,
-                        ) {
-                            break 'outer; /* goto out */
-                        }
+                        )
+                    {
+                        break 'outer; /* goto out */
                     }
                 } /* insert: */
 
@@ -926,8 +923,8 @@ pub fn apply_med(medh: &mut ApplyMedHandle, word: Option<&str>) -> Option<String
                     };
                     h = calculate_h(medh, &medh.intword, medh.curr_pos + 1, medh.curr_state);
 
-                    if g + h <= medh.med_cutoff {
-                        if !node_insert(
+                    if g + h <= medh.med_cutoff
+                        && !node_insert(
                             medh,
                             medh.curr_pos + 1,
                             medh.curr_state,
@@ -936,9 +933,9 @@ pub fn apply_med(medh: &mut ApplyMedHandle, word: Option<&str>) -> Option<String
                             r#in,
                             out,
                             medh.curr_agenda_offset,
-                        ) {
-                            break 'outer; /* goto out */
-                        }
+                        )
+                    {
+                        break 'outer; /* goto out */
                     }
                 }
                 if cur_target(medh) == -1 {
@@ -977,8 +974,7 @@ pub fn cmatrix_print_att<W: std::io::Write + ?Sized>(net: &Fsm, outfile: &mut W)
             if i == 0 && j != 0 {
                 writeln!(
                     outfile,
-                    "0\t0\t{}\t{}\t{}",
-                    "@0@",
+                    "0\t0\t@0@\t{}\t{}",
                     sigma_string(j, &net.sigma).expect("symbol number in matrix range resolves"),
                     cm[(i * maxsigma + j) as usize]
                 )
@@ -986,9 +982,8 @@ pub fn cmatrix_print_att<W: std::io::Write + ?Sized>(net: &Fsm, outfile: &mut W)
             } else if j == 0 && i != 0 {
                 writeln!(
                     outfile,
-                    "0\t0\t{}\t{}\t{}",
+                    "0\t0\t{}\t@0@\t{}",
                     sigma_string(i, &net.sigma).expect("symbol number in matrix range resolves"),
-                    "@0@",
                     cm[(i * maxsigma + j) as usize]
                 )
                 .expect("writing the confusion matrix");
@@ -1037,15 +1032,11 @@ fn cmatrix_print_to<W: std::io::Write + ?Sized>(net: &Fsm, out: &mut W) {
         lsymbol = if l > lsymbol { l } else { lsymbol };
     }
     write!(out, "{:>w$}", "", w = (lsymbol + 2) as usize).expect("writing the confusion matrix");
-    write!(out, "{}", "0 ").expect("writing the confusion matrix");
+    write!(out, "0 ").expect("writing the confusion matrix");
 
     let mut i = 3;
-    loop {
-        if let Some(thisstring) = sigma_string(i, &net.sigma) {
-            write!(out, "{} ", thisstring).expect("writing the confusion matrix");
-        } else {
-            break;
-        }
+    while let Some(thisstring) = sigma_string(i, &net.sigma) {
+        write!(out, "{} ", thisstring).expect("writing the confusion matrix");
         i += 1;
     }
 
@@ -1108,13 +1099,12 @@ fn cmatrix_print_to<W: std::io::Write + ?Sized>(net: &Fsm, out: &mut W) {
 // [spec:foma:def:fomalib.cmatrix-init-fn]
 // [spec:foma:sem:fomalib.cmatrix-init-fn]
 pub fn cmatrix_init(net: &mut Fsm) {
-    let maxsigma: i32;
     if net.medlookup.is_none() {
         net.medlookup = Some(Box::new(Medlookup {
             confusion_matrix: Vec::new(),
         }));
     }
-    maxsigma = sigma_max(&net.sigma) + 1;
+    let maxsigma: i32 = sigma_max(&net.sigma) + 1;
     let mut cm = vec![0i32; (maxsigma * maxsigma) as usize];
     for i in 0..maxsigma {
         for j in 0..maxsigma {
@@ -1487,7 +1477,7 @@ mod tests {
         assert_eq!(cm[3 * 6 + 3], 0); // a->a
         assert_eq!(cm[3 * 6 + 4], 1); // a->c
         assert_eq!(cm[0], 0); // 0->0 diagonal
-        assert_eq!(cm[0 * 6 + 4], 1); // insertion of c
+        assert_eq!(cm[4], 1); // insertion of c
     }
 
     // [spec:foma:sem:spelling.cmatrix-set-cost-fn/test]
@@ -1519,7 +1509,7 @@ mod tests {
         let cm = &net.medlookup.as_ref().unwrap().confusion_matrix;
         assert_eq!(cm[3 * 6 + 4], 7); // off-diagonal substitution
         assert_eq!(cm[3 * 6 + 3], 0); // diagonal stays free
-        assert_eq!(cm[0 * 6 + 4], 1); // row 0 (insertion) untouched
+        assert_eq!(cm[4], 1); // row 0 (insertion) untouched
     }
 
     // [spec:foma:sem:spelling.cmatrix-default-insert-fn/test]
@@ -1531,7 +1521,7 @@ mod tests {
         cmatrix_default_insert(&mut net, 9);
         let cm = &net.medlookup.as_ref().unwrap().confusion_matrix;
         // row 0 = insertion costs.
-        assert_eq!(cm[0 * 6 + 3], 9);
+        assert_eq!(cm[3], 9);
         assert_eq!(cm[0], 9);
     }
 

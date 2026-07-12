@@ -69,8 +69,8 @@ thread_local! {
 
     static SEPARATOR: RefCell<String> = RefCell::new("\t".to_string());
     // wordseparator default "" — empty, unlike flookup's "\n".
-    static WORDSEPARATOR: RefCell<String> = RefCell::new(String::new());
-    static LINE: RefCell<String> = RefCell::new(String::new());
+    static WORDSEPARATOR: RefCell<String> = const { RefCell::new(String::new()) };
+    static LINE: RefCell<String> = const { RefCell::new(String::new()) };
     static INDENT: RefCell<String> = RefCell::new("\t".to_string());
 
     // static char *(*applyer)(...) = &apply_up;
@@ -226,11 +226,7 @@ fn main() {
 
     let mut go = GetOpt::new(std::env::args().collect());
     // optstring "abhHiI:qs:uw:vx"; arg-taking letters: I s w
-    loop {
-        let opt = match go.next("Isw") {
-            Some(o) => o,
-            None => break,
-        };
+    while let Some(opt) = go.next("Isw") {
         match opt {
             b'a' => {
                 APPLY_ALTERNATES.set(1);
@@ -388,7 +384,7 @@ fn main() {
     }
 
     if numnets < 1 {
-        eprintln!("{}: {}", "File error", infilename);
+        eprintln!("File error: {}", infilename);
         finish(EXIT_FAILURE);
     }
 
@@ -481,14 +477,9 @@ fn handle_line(s: &str) {
                     print_cohort_header();
                 }
                 app_print(Some(&r));
-                loop {
-                    match apply_at(p, None) {
-                        Some(r2) => {
-                            RESULTS.set(RESULTS.get() + 1);
-                            app_print(Some(&r2));
-                        }
-                        None => break,
-                    }
+                while let Some(r2) = apply_at(p, None) {
+                    RESULTS.set(RESULTS.get() + 1);
+                    app_print(Some(&r2));
                 }
                 break;
             }

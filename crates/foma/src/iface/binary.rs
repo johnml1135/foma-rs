@@ -126,7 +126,7 @@ pub fn iface_substitute_symbol(session: &mut Session, original: &str, substitute
             &session.opts,
             fsm_substitute_symbol(popped, &original, &substitute),
         )));
-        print!("Substituted '{}' for '{}'.\n", substitute, original);
+        println!("Substituted '{}' for '{}'.", substitute, original);
     }
 }
 
@@ -150,7 +150,7 @@ pub fn iface_substitute_defined(session: &mut Session, original: &str, substitut
         let mut defines = std::mem::replace(&mut session.defines, defined_networks_init());
         match find_defined(&mut defines, &substitute) {
             None => {
-                print!("No defined network '{}'.\n", substitute);
+                println!("No defined network '{}'.", substitute);
             }
             Some(subnet) => {
                 let top = session
@@ -159,7 +159,7 @@ pub fn iface_substitute_defined(session: &mut Session, original: &str, substitut
                 if !session
                     .stack_entry_fsm(top, |f| fsm_symbol_occurs(f, &original, M_UPPER + M_LOWER))
                 {
-                    print!("Symbol '{}' does not occur.\n", original);
+                    println!("Symbol '{}' does not occur.", original);
                 } else {
                     let newnet = session.stack_entry_fsm_with_opts(top, |opts, f| {
                         fsm_substitute_label(opts, f, &original, subnet)
@@ -167,7 +167,7 @@ pub fn iface_substitute_defined(session: &mut Session, original: &str, substitut
                     // C: stack_pop() — the popped net is NOT fsm_destroy'd (latent
                     // leak); here the returned Box is dropped (freed) instead.
                     let _ = session.stack_pop();
-                    print!("Substituted network '{}' for '{}'.\n", substitute, original);
+                    println!("Substituted network '{}' for '{}'.", substitute, original);
                     session.stack_add(fsm_topsort(fsm_minimize(&session.opts, newnet)));
                 }
             }

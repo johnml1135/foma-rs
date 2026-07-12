@@ -271,7 +271,7 @@ pub fn fsm_substitute_label(
                 target = fsm_get_arc_target(&inh);
                 fsm_construct_add_arc_nums(&mut outh, addstate1 + i, target, EPSILON, EPSILON);
             }
-            addstate1 = addstate1 + addstate2;
+            addstate1 += addstate2;
             /* One-sided replace, splice in repsym .x. sub or sub .x. repsym */
         } else if r#in == repsym || out == repsym {
             let subnet2 = if r#in == repsym {
@@ -319,7 +319,7 @@ pub fn fsm_substitute_label(
                 fsm_construct_add_arc_nums(&mut outh, addstate1 + i, target, EPSILON, EPSILON);
             }
             let subnet2 = fsm_read_done(subh2);
-            addstate1 = addstate1 + subnet2.statecount;
+            addstate1 += subnet2.statecount;
             fsm_destroy(subnet2);
         } else {
             /* Default, just copy arc */
@@ -354,17 +354,16 @@ pub fn fsm_substitute_symbol(net: Box<Fsm>, original: &str, substitute: &str) ->
             return net;
         }
     };
-    let s: i32;
-    if substitute == "0" {
-        s = EPSILON;
+    let s: i32 = if substitute == "0" {
+        EPSILON
     } else {
         /* C: substitute != NULL && (s = sigma_find(...)) == -1 → sigma_add
         (substitute is never NULL here) */
-        s = match sigma_find(substitute, &net.sigma) {
+        match sigma_find(substitute, &net.sigma) {
             Some(found) => found,
             None => sigma_add(substitute, &mut net.sigma),
-        };
-    }
+        }
+    };
     let mut i = 0usize;
     while net.states[i].state_no != -1 {
         if net.states[i].r#in as i32 == o {
@@ -1326,7 +1325,7 @@ pub fn fsm_ignore(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>, operation:
             }
             i += 1;
         }
-        state_add_counter = state_add_counter + states2;
+        state_add_counter += states2;
         splices -= 1;
         returns += 1;
     }

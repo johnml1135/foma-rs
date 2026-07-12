@@ -736,14 +736,13 @@ pub fn rewr_notlongest(
     );
     nl = fsm_intersect(opts, nl, rulenum);
     /* lang can't end in @0@ */
-    let flt;
-    if arrow_type & ARROW_RIGHT != 0 {
-        flt = fsm_parse_regex(opts, "[? ? ? ?]* [? ? [?-\"@0@\"] ?]", None, None)
-            .expect("constant rewrite regex compiles");
+    let flt = if arrow_type & ARROW_RIGHT != 0 {
+        fsm_parse_regex(opts, "[? ? ? ?]* [? ? [?-\"@0@\"] ?]", None, None)
+            .expect("constant rewrite regex compiles")
     } else {
-        flt = fsm_parse_regex(opts, "[? ? ? ?]* [? ? ? [?-\"@0@\"]]", None, None)
-            .expect("constant rewrite regex compiles");
-    }
+        fsm_parse_regex(opts, "[? ? ? ?]* [? ? ? [?-\"@0@\"]]", None, None)
+            .expect("constant rewrite regex compiles")
+    };
     fsm_minimize(
         opts,
         fsm_intersect(opts, fsm_intersect(opts, nl, fsm_copy(lang)), flt),
@@ -840,14 +839,13 @@ pub fn rewr_notleftmost(
         ),
     );
     nl = fsm_intersect(opts, nl, rulenum);
-    let flt;
-    if arrow_type & ARROW_RIGHT != 0 {
-        flt = fsm_parse_regex(opts, "[? ? ? ?]* [? ? [?-\"@0@\"] ?]", None, None)
-            .expect("constant rewrite regex compiles");
+    let flt = if arrow_type & ARROW_RIGHT != 0 {
+        fsm_parse_regex(opts, "[? ? ? ?]* [? ? [?-\"@0@\"] ?]", None, None)
+            .expect("constant rewrite regex compiles")
     } else {
-        flt = fsm_parse_regex(opts, "[? ? ? ?]* [? ? ? [?-\"@0@\"]]", None, None)
-            .expect("constant rewrite regex compiles");
-    }
+        fsm_parse_regex(opts, "[? ? ? ?]* [? ? ? [?-\"@0@\"]]", None, None)
+            .expect("constant rewrite regex compiles")
+    };
     fsm_minimize(
         opts,
         fsm_intersect(opts, fsm_intersect(opts, nl, fsm_copy(lang)), flt),
@@ -947,27 +945,25 @@ pub fn rewrite_two_level(
     let mut lang = lang;
     let lower = rewrite_lower(opts, rb, fsm_minimize(opts, fsm_lower(fsm_copy(&mut lang))));
     let upper = rewrite_upper(opts, rb, fsm_minimize(opts, fsm_upper(lang)));
-    let result;
     if rightside == 1 {
-        result = fsm_minimize(
+        fsm_minimize(
             opts,
             fsm_intersect(
                 opts,
                 fsm_concat(opts, lower, rewrite_any_4tape(opts, rb)),
                 fsm_concat(opts, upper, rewrite_any_4tape(opts, rb)),
             ),
-        );
+        )
     } else {
-        result = fsm_minimize(
+        fsm_minimize(
             opts,
             fsm_intersect(
                 opts,
                 fsm_concat(opts, rewrite_any_4tape(opts, rb), lower),
                 fsm_concat(opts, rewrite_any_4tape(opts, rb), upper),
             ),
-        );
+        )
     }
-    result
 }
 
 // [spec:foma:def:rewrite.rewrite-lower-fn]
@@ -1639,9 +1635,8 @@ pub fn rewr_context_restrict(
 
     let mut pairs = lr;
     while let Some(p) = pairs {
-        let left;
-        if p.left.is_none() {
-            left = fsm_empty_string();
+        let left = if p.left.is_none() {
+            fsm_empty_string()
         } else {
             let mut l = fsm_copy(
                 p.cpleft
@@ -1650,11 +1645,10 @@ pub fn rewr_context_restrict(
             );
             sigma_add("@VARX@", &mut l.sigma);
             sigma_sort(&mut l);
-            left = l;
-        }
-        let right;
-        if p.right.is_none() {
-            right = fsm_empty_string();
+            l
+        };
+        let right = if p.right.is_none() {
+            fsm_empty_string()
         } else {
             let mut r = fsm_copy(
                 p.cpright
@@ -1663,8 +1657,8 @@ pub fn rewr_context_restrict(
             );
             sigma_add("@VARX@", &mut r.sigma);
             sigma_sort(&mut r);
-            right = r;
-        }
+            r
+        };
         union_p = fsm_union(
             opts,
             fsm_concat(

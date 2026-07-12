@@ -231,7 +231,7 @@ pub fn foma_write_prolog(net: &mut Fsm, filename: Option<&str>) -> Result<(), Fo
     let identifier = net.name.clone();
 
     /* Print identifier: fprintf(out, "%s%s%s", "network(", identifier, ").\n") */
-    write!(out, "network({}).\n", identifier)?;
+    writeln!(out, "network({}).", identifier)?;
 
     let mut i = 0usize;
     while net.states[i].state_no != -1 {
@@ -263,7 +263,7 @@ pub fn foma_write_prolog(net: &mut Fsm, filename: Option<&str>) -> Result<(), Fo
             }
             write!(out, "symbol({}, \"", identifier)?;
             escape_print(&mut out, instring)?;
-            write!(out, "\").\n")?;
+            writeln!(out, "\").")?;
         }
     }
 
@@ -280,18 +280,14 @@ pub fn foma_write_prolog(net: &mut Fsm, filename: Option<&str>) -> Result<(), Fo
         write!(out, "arc({}, {}, {}, ", identifier, state_no, target)?;
         let mut instring: &str = if in_ == 0 {
             "0"
-        } else if in_ == 1 {
-            "?"
-        } else if in_ == 2 {
+        } else if in_ == 1 || in_ == 2 {
             "?"
         } else {
             sigma_string(in_, &net.sigma).expect("symbol number resolves in the net sigma")
         };
         let mut outstring: &str = if out_ == 0 {
             "0"
-        } else if out_ == 1 {
-            "?"
-        } else if out_ == 2 {
+        } else if out_ == 1 || out_ == 2 {
             "?"
         } else {
             sigma_string(out_, &net.sigma).expect("symbol number resolves in the net sigma")
@@ -313,28 +309,28 @@ pub fn foma_write_prolog(net: &mut Fsm, filename: Option<&str>) -> Result<(), Fo
         }
 
         if net.arity == 2 && in_ == IDENTITY && out_ == IDENTITY {
-            write!(out, "\"?\").\n")?;
+            writeln!(out, "\"?\").")?;
         } else if net.arity == 2 && in_ == out_ && in_ != UNKNOWN {
             write!(out, "\"")?;
             escape_print(&mut out, instring)?;
-            write!(out, "\").\n")?;
+            writeln!(out, "\").")?;
         } else if net.arity == 2 {
             write!(out, "\"")?;
             escape_print(&mut out, instring)?;
             write!(out, "\":\"")?;
             escape_print(&mut out, outstring)?;
-            write!(out, "\").\n")?;
+            writeln!(out, "\").")?;
         } else if net.arity == 1 {
             write!(out, "\"")?;
             escape_print(&mut out, instring)?;
-            write!(out, "\").\n")?;
+            writeln!(out, "\").")?;
         }
         i += 1;
     }
 
     for k in 0..net.statecount {
         if finals[k as usize] != 0 {
-            write!(out, "final({}, {}).\n", identifier, k)?;
+            writeln!(out, "final({}, {}).", identifier, k)?;
         }
     }
     /* if (filename != NULL) fclose(out); — the File is dropped here either way;
@@ -481,7 +477,7 @@ pub fn fsm_read_prolog(filename: &str) -> Option<Box<Fsm>> {
             continue;
         }
         if buf.starts_with("arc(") {
-            let mut in_ = String::new();
+            let mut in_: String;
             let mut out_ = String::new();
 
             let arity = if buf.find("\":\"").is_none() || buf.find(", \":\").").is_some() {
@@ -574,6 +570,7 @@ pub fn io_init() -> Box<IoBufHandle> {
 
 // [spec:foma:def:io.io-free-fn]
 // [spec:foma:sem:io.io-free-fn]
+#[allow(clippy::boxed_local)]
 pub fn io_free(mut iobh: Box<IoBufHandle>) {
     if iobh.io_buf.is_some() {
         /* free(io_buf); io_buf = NULL */
@@ -1205,9 +1202,9 @@ pub fn foma_net_print<W: std::io::Write + ?Sized>(
 
     let extras = net.is_completed | (net.arcs_sorted_in << 2) | (net.arcs_sorted_out << 4);
 
-    write!(
+    writeln!(
         outfile,
-        "{} {} {} {} {} {} {} {} {} {} {} {} {}\n",
+        "{} {} {} {} {} {} {} {} {} {} {} {} {}",
         net.arity,
         net.arccount,
         net.statecount,
@@ -1228,7 +1225,7 @@ pub fn foma_net_print<W: std::io::Write + ?Sized>(
     for s in &net.sigma {
         /* gzprintf("%i %s\n", ...) — one "number symbol" line per entry, in
         alphabet order */
-        write!(outfile, "{} {}\n", s.number, s.symbol)?;
+        writeln!(outfile, "{} {}", s.number, s.symbol)?;
     }
 
     /* State array */
@@ -1239,22 +1236,22 @@ pub fn foma_net_print<W: std::io::Write + ?Sized>(
         let fsm = &net.states[i];
         if fsm.state_no != laststate {
             if fsm.r#in != fsm.out {
-                write!(
+                writeln!(
                     outfile,
-                    "{} {} {} {} {}\n",
+                    "{} {} {} {} {}",
                     fsm.state_no, fsm.r#in, fsm.out, fsm.target, fsm.final_state
                 )?;
             } else {
-                write!(
+                writeln!(
                     outfile,
-                    "{} {} {} {}\n",
+                    "{} {} {} {}",
                     fsm.state_no, fsm.r#in, fsm.target, fsm.final_state
                 )?;
             }
         } else if fsm.r#in != fsm.out {
-            write!(outfile, "{} {} {}\n", fsm.r#in, fsm.out, fsm.target)?;
+            writeln!(outfile, "{} {} {}", fsm.r#in, fsm.out, fsm.target)?;
         } else {
-            write!(outfile, "{} {}\n", fsm.r#in, fsm.target)?;
+            writeln!(outfile, "{} {}", fsm.r#in, fsm.target)?;
         }
         laststate = fsm.state_no;
         i += 1;
@@ -1269,7 +1266,7 @@ pub fn foma_net_print<W: std::io::Write + ?Sized>(
             outfile.write_all(b"##cmatrix##\n")?;
             let maxsigma = sigma_max(&net.sigma) + 1;
             for k in 0..(maxsigma * maxsigma) {
-                write!(outfile, "{}\n", ml.confusion_matrix[k as usize])?;
+                writeln!(outfile, "{}", ml.confusion_matrix[k as usize])?;
             }
         }
     }
@@ -1297,9 +1294,9 @@ pub fn net_print_att<W: std::io::Write + ?Sized>(
     while net.states[i].state_no != -1 {
         let fsm = &net.states[i];
         if fsm.target != -1 {
-            write!(
+            writeln!(
                 outfile,
-                "{}\t{}\t{}\t{}\n",
+                "{}\t{}\t{}\t{}",
                 fsm.state_no,
                 fsm.target,
                 sl[fsm.r#in as usize].symbol.as_deref().unwrap_or("(null)"),
@@ -1313,7 +1310,7 @@ pub fn net_print_att<W: std::io::Write + ?Sized>(
     while net.states[i].state_no != -1 {
         let fsm = &net.states[i];
         if fsm.state_no != prev && fsm.final_state == 1 {
-            write!(outfile, "{}\n", fsm.state_no)?;
+            writeln!(outfile, "{}", fsm.state_no)?;
         }
         prev = fsm.state_no;
         i += 1;
@@ -2369,7 +2366,7 @@ mod tests {
         let s = String::from_utf8(text).unwrap();
         let cut = s.find("##states##").expect("net text has a states section");
         let mut iobh = io_init();
-        iobh.io_buf = Some(s[..cut].as_bytes().to_vec());
+        iobh.io_buf = Some(s.as_bytes()[..cut].to_vec());
         iobh.io_buf_ptr = 0;
         assert!(matches!(io_net_read(&mut iobh), Err(FomaError::Format(_))));
     }

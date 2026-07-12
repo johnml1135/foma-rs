@@ -8,7 +8,7 @@ use super::*;
 // errno (set by the preceding failed syscall) and its Display is close to
 // strerror (adds "(os error N)"). Unannotated plumbing shared across submodules.
 pub(crate) fn perror(s: &str) {
-    eprint!("{}: {}\n", s, std::io::Error::last_os_error());
+    eprintln!("{}: {}", s, std::io::Error::last_os_error());
 }
 
 // [spec:foma:def:iface.sigptr-fn]
@@ -56,14 +56,14 @@ pub(crate) fn print_net(net: &mut Fsm, filename: Option<&str>) {
         Some(name) => match File::create(name) {
             Ok(f) => Output::File(f),
             Err(_) => {
-                print!("Error writing to file {}. Using stdout.\n", name);
+                println!("Error writing to file {}. Using stdout.", name);
                 Output::Stdout(std::io::stdout())
             }
         },
     };
     // C prints this unconditionally after the fopen block (even after fallback).
     if let Some(name) = filename {
-        print!("Writing network to file {}.\n", name);
+        println!("Writing network to file {}.", name);
     }
     fsm_count(net);
     let mut finals = vec![0i32; net.statecount as usize];
@@ -83,7 +83,7 @@ pub(crate) fn print_net(net: &mut Fsm, filename: Option<&str>) {
         i += 1;
     }
     print_sigma(&net.sigma, &mut out);
-    write!(out, "Net: {}\n", net.name).expect("writing net");
+    writeln!(out, "Net: {}", net.name).expect("writing net");
     write!(out, "Flags: ").expect("writing net");
     if net.is_deterministic == YES {
         write!(out, "deterministic ").expect("writing net");
@@ -106,8 +106,8 @@ pub(crate) fn print_net(net: &mut Fsm, filename: Option<&str>) {
     if net.arcs_sorted_out != 0 {
         write!(out, "arcs_sorted_out ").expect("writing net");
     }
-    write!(out, "\n").expect("writing net");
-    write!(out, "Arity: {}\n", net.arity).expect("writing net");
+    writeln!(out).expect("writing net");
+    writeln!(out, "Arity: {}", net.arity).expect("writing net");
     let mut previous_state: i32 = -1;
     let mut i = 0usize;
     loop {
@@ -128,7 +128,7 @@ pub(crate) fn print_net(net: &mut Fsm, filename: Option<&str>) {
                 write!(out, "f").expect("writing net");
             }
             if in_ == -1 {
-                write!(out, "s{}:\t(no arcs).\n", state_no).expect("writing net");
+                writeln!(out, "s{}:\t(no arcs).", state_no).expect("writing net");
                 i += 1;
                 continue;
             } else {
@@ -160,7 +160,7 @@ pub(crate) fn print_net(net: &mut Fsm, filename: Option<&str>) {
         if net.states[i + 1].state_no == state_no {
             write!(out, ", ").expect("writing net");
         } else {
-            write!(out, ".\n").expect("writing net");
+            writeln!(out, ".").expect("writing net");
         }
         i += 1;
     }
@@ -191,9 +191,9 @@ pub(crate) fn print_mem_size(net: &Fsm) {
     let size: String;
     if s < 1024 {
         size = format!("{} bytes. ", s);
-    } else if s >= 1024 && s < 1048576 {
+    } else if (1024..1048576).contains(&s) {
         size = format!("{:.1} kB. ", (sf / 1024.0f32) as f64);
-    } else if s >= 1048576 && s < 1073741824 {
+    } else if (1048576..1073741824).contains(&s) {
         size = format!("{:.1} MB. ", (sf / 1048576.0f32) as f64);
     } else {
         size = format!("{:.1} GB. ", (sf / 1073741824.0f32) as f64);
@@ -230,7 +230,7 @@ pub fn print_stats(net: &Fsm) {
     } else {
         print!("{} paths", net.pathcount);
     }
-    print!(".\n");
+    println!(".");
 }
 
 // [spec:foma:def:iface.print-sigma-fn]
@@ -244,14 +244,14 @@ pub(crate) fn print_sigma<W: std::io::Write + ?Sized>(sigma: &[Sigma], out: &mut
             size += 1;
         }
         if node.number == IDENTITY {
-            write!(out, " {}", "@").expect("writing sigma");
+            write!(out, " @").expect("writing sigma");
         }
         if node.number == UNKNOWN {
-            write!(out, " {}", "?").expect("writing sigma");
+            write!(out, " ?").expect("writing sigma");
         }
     }
-    write!(out, "\n").expect("writing sigma");
-    write!(out, "Size: {}.\n", size).expect("writing sigma");
+    writeln!(out).expect("writing sigma");
+    writeln!(out, "Size: {}.", size).expect("writing sigma");
 }
 
 // [spec:foma:def:iface.print-dot-fn]
@@ -285,10 +285,10 @@ pub(crate) fn print_dot(net: &mut Fsm, filename: Option<&str>) {
     write!(dotfile, "digraph A {{\nrankdir = LR;\n").expect("writing dot graph");
     for i in 0..net.statecount {
         if finals[i as usize] != 0 {
-            write!(dotfile, "node [shape=doublecircle,style=filled] {}\n", i)
+            writeln!(dotfile, "node [shape=doublecircle,style=filled] {}", i)
                 .expect("writing dot graph");
         } else {
-            write!(dotfile, "node [shape=circle,style=filled] {}\n", i).expect("writing dot graph");
+            writeln!(dotfile, "node [shape=circle,style=filled] {}", i).expect("writing dot graph");
         }
     }
     // C: calloc(linecount, sizeof(printed)) allocates sizeof(POINTER) per line
@@ -343,11 +343,11 @@ pub(crate) fn print_dot(net: &mut Fsm, filename: Option<&str>) {
             }
             j += 1;
         }
-        write!(dotfile, "\"];\n").expect("writing dot graph");
+        writeln!(dotfile, "\"];").expect("writing dot graph");
         i += 1;
     }
     // free(finals); free(printed).
-    write!(dotfile, "}}\n").expect("writing dot graph");
+    writeln!(dotfile, "}}").expect("writing dot graph");
     // fclose only when filename != NULL — dropped at scope end.
 }
 
@@ -386,7 +386,7 @@ pub(crate) fn view_net(net: &mut Fsm) {
         .status()
         .is_err()
     {
-        print!("Error writing tempfile.\n");
+        println!("Error writing tempfile.");
     }
     let cmd2 = if cfg!(target_os = "macos") {
         format!("/usr/bin/open {}.png 2>/dev/null &", pngname)
@@ -399,7 +399,7 @@ pub(crate) fn view_net(net: &mut Fsm) {
         .status()
         .is_err()
     {
-        print!("Error opening viewer.\n");
+        println!("Error opening viewer.");
     }
     // free(pngname); free(dotname) — temp files are never deleted (as in C).
 }

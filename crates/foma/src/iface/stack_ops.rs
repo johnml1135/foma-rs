@@ -24,7 +24,7 @@ pub fn iface_load_stack(session: &mut Session, filename: &str) {
 // [spec:foma:sem:foma.iface-pop-fn]
 pub fn iface_pop(session: &mut Session) {
     if session.stack_size() < 1 {
-        print!("Stack is empty.\n");
+        println!("Stack is empty.");
     } else if let Some(net) = session.stack_pop() {
         fsm_destroy(net);
     }
@@ -59,7 +59,7 @@ pub fn iface_print_name(session: &mut Session) {
             return;
         };
         let name = session.stack_entry_fsm(top, |f| f.name.clone());
-        print!("{}\n", name);
+        println!("{}", name);
     }
 }
 
@@ -99,11 +99,11 @@ pub fn iface_save_stack(session: &mut Session, filename: &str) {
         let file = match File::create(filename) {
             Ok(f) => f,
             Err(_) => {
-                print!("Error opening file {} for writing.\n", filename);
+                println!("Error opening file {} for writing.", filename);
                 return;
             }
         };
-        print!("Writing to file {}.\n", filename);
+        println!("Writing to file {}.", filename);
         let mut outfile = GzEncoder::new(file, Compression::default());
         // for (stack_ptr = stack_find_bottom(); stack_ptr->next != NULL; stack_ptr = stack_ptr->next)
         let Some(mut stack_ptr) = session.stack_find_bottom() else {
@@ -114,14 +114,14 @@ pub fn iface_save_stack(session: &mut Session, filename: &str) {
             // silently dropped; C ignored foma_net_print's return entirely.
             if let Err(e) = session.stack_entry_fsm(stack_ptr, |f| foma_net_print(f, &mut outfile))
             {
-                eprint!("Error writing to file {}: {}\n", filename, e);
+                eprintln!("Error writing to file {}: {}", filename, e);
                 return;
             }
             stack_ptr = next;
         }
         // gzclose(outfile)
         if let Err(e) = outfile.finish() {
-            eprint!("Error writing to file {}: {}\n", filename, e);
+            eprintln!("Error writing to file {}: {}", filename, e);
         }
     }
 }

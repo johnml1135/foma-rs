@@ -14,7 +14,7 @@ pub fn next_power_of_two(v: i32) -> i32 {
     let mut i: i32 = 0;
     // C: for (i=0; v > 0; i++) v = v >> 1;
     while v > 0 {
-        v = v >> 1;
+        v >>= 1;
         i += 1;
     }
     // C: 1 << i overflows int for i == 31 (UB in C); Rust yields i32::MIN.

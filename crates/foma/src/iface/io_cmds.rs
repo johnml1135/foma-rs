@@ -10,9 +10,9 @@ pub fn iface_load_defined(session: &mut Session, filename: &str) {
     // C: load_defined(g_defines, filename); the registry is the session's
     // init'd dummy head. The library reader is now silent and returns a Result;
     // the user-facing progress line and any error live here.
-    print!("Loading definitions from {filename}.\n");
+    println!("Loading definitions from {filename}.");
     if let Err(e) = load_defined(&mut session.defines, filename) {
-        eprint!("{e}\n");
+        eprintln!("{e}");
     }
 }
 
@@ -21,7 +21,7 @@ pub fn iface_load_defined(session: &mut Session, filename: &str) {
 // [spec:foma:def:foma.iface-read-att-fn]
 // [spec:foma:sem:foma.iface-read-att-fn]
 pub fn iface_read_att(session: &mut Session, filename: &str) -> bool {
-    print!("Reading AT&T file: {}\n", filename);
+    println!("Reading AT&T file: {}", filename);
     match read_att(&session.opts, filename) {
         None => {
             eprint!("{}: ", filename);
@@ -40,7 +40,7 @@ pub fn iface_read_att(session: &mut Session, filename: &str) -> bool {
 // [spec:foma:def:foma.iface-read-prolog-fn]
 // [spec:foma:sem:foma.iface-read-prolog-fn]
 pub fn iface_read_prolog(session: &mut Session, filename: &str) -> bool {
-    print!("Reading prolog: {}\n", filename);
+    println!("Reading prolog: {}", filename);
     match fsm_read_prolog(filename) {
         None => {
             eprint!("{}: ", filename);
@@ -100,9 +100,9 @@ pub fn iface_save_defined(session: &mut Session, filename: &str) {
     // registry always exists, so that branch is gone. The library writer is now
     // silent and returns a Result; the user-facing progress line and any error
     // live here.
-    print!("Writing definitions to file {filename}.\n");
+    println!("Writing definitions to file {filename}.");
     if let Err(e) = save_defined(&mut session.defines, filename) {
-        eprint!("{e}\n");
+        eprintln!("{e}");
     }
 }
 
@@ -120,7 +120,7 @@ pub fn iface_write_att(session: &mut Session, filename: Option<&str>) -> bool {
     let mut outfile: Output = match filename {
         None => Output::Stdout(std::io::stdout()),
         Some(name) => {
-            print!("Writing AT&T file: {}\n", name);
+            println!("Writing AT&T file: {}", name);
             match File::create(name) {
                 Ok(f) => Output::File(f),
                 Err(_) => {
@@ -136,7 +136,7 @@ pub fn iface_write_att(session: &mut Session, filename: Option<&str>) -> bool {
     if let Err(e) =
         session.stack_entry_fsm_with_opts(top, |opts, f| net_print_att(opts, f, &mut outfile))
     {
-        eprint!("{e}\n");
+        eprintln!("{e}");
         return false;
     }
     // fclose only when filename != NULL; stdout is not closed. Both drop here.
@@ -157,11 +157,11 @@ pub fn iface_write_prolog(session: &mut Session, filename: Option<&str>) {
         // returns a Result). A file-create failure prints the error instead of
         // C's silent stdout fallback.
         if let Some(name) = filename {
-            print!("Writing prolog to file '{name}'.\n");
+            println!("Writing prolog to file '{name}'.");
         }
         let result = session.stack_entry_fsm(top, |f| foma_write_prolog(f, filename));
         if let Err(e) = result {
-            eprint!("{e}\n");
+            eprintln!("{e}");
         }
     }
 }

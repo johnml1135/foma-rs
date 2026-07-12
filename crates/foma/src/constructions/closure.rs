@@ -109,7 +109,7 @@ pub fn fsm_kleene_closure(opts: &FomaOptions, net: Box<Fsm>, operation: i32) -> 
     }
     add_fsm_arc(&mut new_fsm, j, -1, -1, -1, -1, -1, -1);
     j += 1;
-    net.statecount = net.statecount + 1;
+    net.statecount += 1;
     net.linecount = j;
     net.finalcount = if operation == KLEENE_STAR {
         net.finalcount + 1

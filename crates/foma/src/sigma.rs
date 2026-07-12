@@ -36,7 +36,7 @@ pub fn sigma_remove_num(num: i32, sigma: &mut Vec<Sigma>) {
 fn sigma_sorted_insert_pos(sigma: &[Sigma], number: i32) -> usize {
     sigma
         .iter()
-        .position(|s| !(s.number < number))
+        .position(|s| s.number >= number)
         .unwrap_or(sigma.len())
 }
 

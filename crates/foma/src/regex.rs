@@ -305,7 +305,7 @@ fn build_binary(
     mut funcs: Option<&mut DefinedFunctions>,
 ) -> Option<Box<Fsm>> {
     let l = build_net(opts, ps, left, nets.as_deref_mut(), funcs.as_deref_mut())?;
-    let r = build_net(opts, ps, right, nets.as_deref_mut(), funcs.as_deref_mut())?;
+    let r = build_net(opts, ps, right, nets, funcs)?;
     match op {
         BinaryOp::Concatenate => Some(fsm_concat(opts, l, r)),
         BinaryOp::Compose => Some(fsm_compose(opts, l, r)),
@@ -487,15 +487,9 @@ fn function_apply(
         }
     };
 
-    let result = my_yyparse(
-        opts,
-        ps,
-        &regex_str,
-        nets.as_deref_mut(),
-        funcs.as_deref_mut(),
-    );
+    let result = my_yyparse(opts, ps, &regex_str, nets.as_deref_mut(), funcs);
 
-    if let Some(n) = nets.as_deref_mut() {
+    if let Some(n) = nets {
         for r in &created {
             remove_defined(n, Some(r));
         }
@@ -544,9 +538,9 @@ fn build_replace(
     Rule/set ordering is observably irrelevant (the sets are unioned /
     intersected / subtracted and all internal rule markers are erased at the
     end), so we build in source order. */
-    let mut set_nodes: Vec<Box<RewriteSet>> = Vec::new();
+    let mut set_nodes: Vec<RewriteSet> = Vec::new();
     for rule in rules {
-        let mut rule_nodes: Vec<Box<Fsmrules>> = Vec::new();
+        let mut rule_nodes: Vec<Fsmrules> = Vec::new();
         for mapping in &rule.mappings {
             build_mapping(
                 opts,
@@ -561,7 +555,7 @@ fn build_replace(
         let (contexts_chain, direction) = match &rule.contexts {
             Some(rc) => {
                 let dir = mark_to_dir(rc.mark);
-                let mut ctx_nodes: Vec<Box<Fsmcontexts>> = Vec::new();
+                let mut ctx_nodes: Vec<Fsmcontexts> = Vec::new();
                 for item in &rc.items {
                     /* regex.y add_context_pair: a missing side stores
                     fsm_empty_string() (never NULL). */
@@ -585,24 +579,24 @@ fn build_replace(
                         )?,
                         None => fsm_empty_string(),
                     };
-                    ctx_nodes.push(Box::new(Fsmcontexts {
+                    ctx_nodes.push(Fsmcontexts {
                         left: Some(left),
                         right: Some(right),
                         next: None,
                         cpleft: None,
                         cpright: None,
-                    }));
+                    });
                 }
                 (link_fsmcontexts(ctx_nodes), dir)
             }
             None => (None, 0),
         };
-        set_nodes.push(Box::new(RewriteSet {
+        set_nodes.push(RewriteSet {
             rewrite_rules: link_fsmrules(rule_nodes),
             rewrite_contexts: contexts_chain,
             next: None,
             rule_direction: direction,
-        }));
+        });
     }
 
     let mut head = link_rewritesets(set_nodes)?;
@@ -623,7 +617,7 @@ fn build_restriction(
 ) -> Option<Box<Fsm>> {
     /* n0 CRESTRICT n0: fsm_context_restrict(body, contexts). */
     let x = build_net(opts, ps, body, nets.as_deref_mut(), funcs.as_deref_mut())?;
-    let mut ctx_nodes: Vec<Box<Fsmcontexts>> = Vec::new();
+    let mut ctx_nodes: Vec<Fsmcontexts> = Vec::new();
     for item in contexts {
         let left = match &item.left {
             Some(e) => build_net(
@@ -645,13 +639,13 @@ fn build_restriction(
             )?,
             None => fsm_empty_string(),
         };
-        ctx_nodes.push(Box::new(Fsmcontexts {
+        ctx_nodes.push(Fsmcontexts {
             left: Some(left),
             right: Some(right),
             next: None,
             cpleft: None,
             cpright: None,
-        }));
+        });
     }
     Some(fsm_context_restrict(opts, x, link_fsmcontexts(ctx_nodes)))
 }
@@ -661,16 +655,10 @@ fn build_substitute(
     ps: &mut ParseState,
     haystack: &XreExpr,
     what: &SubstituteWhat,
-    mut nets: Option<&mut DefinedNetworks>,
-    mut funcs: Option<&mut DefinedFunctions>,
+    nets: Option<&mut DefinedNetworks>,
+    funcs: Option<&mut DefinedFunctions>,
 ) -> Option<Box<Fsm>> {
-    let net = build_net(
-        opts,
-        ps,
-        haystack,
-        nets.as_deref_mut(),
-        funcs.as_deref_mut(),
-    )?;
+    let net = build_net(opts, ps, haystack, nets, funcs)?;
     match what {
         /* sub1 sub2: fsm_substitute_symbol(net, subval1, subval2) — exactly one
         symbol to one symbol. */
@@ -700,7 +688,7 @@ fn build_mapping(
     ps: &mut ParseState,
     m: &MappingPair,
     arrow_type: i32,
-    out: &mut Vec<Box<Fsmrules>>,
+    out: &mut Vec<Fsmrules>,
     mut nets: Option<&mut DefinedNetworks>,
     mut funcs: Option<&mut DefinedFunctions>,
 ) -> Option<()> {
@@ -730,12 +718,15 @@ fn build_mapping(
         }
         MappingSide::Dotted(None) => {
             /* LDOT RDOT ARROW n0: add_eprule with ARROW_DOTTED. */
-            let (r, r2) = build_rhs(opts, ps, &m.kind, nets.as_deref_mut(), funcs.as_deref_mut())?;
+            let (r, r2) = build_rhs(opts, ps, &m.kind, nets, funcs)?;
             add_eprule(out, r, r2, arrow_type | ARROW_DOTTED);
         }
     }
     Some(())
 }
+
+/// The right-hand side(s) of a mapping: (right, right2).
+type RhsPair = (Option<Box<Fsm>>, Option<Box<Fsm>>);
 
 fn build_rhs(
     opts: &FomaOptions,
@@ -743,7 +734,7 @@ fn build_rhs(
     kind: &MappingKind,
     mut nets: Option<&mut DefinedNetworks>,
     mut funcs: Option<&mut DefinedFunctions>,
-) -> Option<(Option<Box<Fsm>>, Option<Box<Fsm>>)> {
+) -> Option<RhsPair> {
     match kind {
         MappingKind::Plain { lower } => {
             let r = build_side(opts, ps, lower, nets.as_deref_mut(), funcs.as_deref_mut())?;
@@ -756,7 +747,7 @@ fn build_rhs(
                 None => fsm_empty_string(),
             };
             let r2 = match post {
-                Some(s) => build_side(opts, ps, s, nets.as_deref_mut(), funcs.as_deref_mut())?,
+                Some(s) => build_side(opts, ps, s, nets, funcs)?,
                 None => fsm_empty_string(),
             };
             Some((Some(r), Some(r2)))
@@ -784,14 +775,14 @@ fn build_side(
 /// could match the empty string.
 fn add_rule(
     opts: &FomaOptions,
-    out: &mut Vec<Box<Fsmrules>>,
+    out: &mut Vec<Fsmrules>,
     l: Box<Fsm>,
     r: Option<Box<Fsm>>,
     r2: Option<Box<Fsm>>,
     ty: i32,
 ) {
     if (ty & ARROW_DOTTED) == 0 {
-        out.push(Box::new(Fsmrules {
+        out.push(Fsmrules {
             left: Some(l),
             right: r,
             right2: r2,
@@ -799,13 +790,13 @@ fn add_rule(
             next: None,
             arrow_type: ty,
             dotted: 0,
-        }));
+        });
         return;
     }
 
     let mut l = l;
     let main_left = fsm_minus(opts, fsm_copy(&mut l), fsm_empty_string());
-    let mut main = Box::new(Fsmrules {
+    let mut main = Fsmrules {
         left: Some(main_left),
         right: r,
         right2: r2,
@@ -813,14 +804,14 @@ fn add_rule(
         next: None,
         arrow_type: ty - ARROW_DOTTED,
         dotted: 0,
-    });
+    };
 
     /* test = L ∩ [] : add the empty-[..] rule only if non-empty. */
     let mut test = fsm_intersect(opts, l, fsm_empty_string());
     if !fsm_isempty(opts, &mut test) {
         let test_right = main.right.as_deref_mut().map(fsm_copy);
         let test_right2 = main.right2.as_deref_mut().map(fsm_copy);
-        out.push(Box::new(Fsmrules {
+        out.push(Fsmrules {
             left: Some(test),
             right: test_right,
             right2: test_right2,
@@ -828,7 +819,7 @@ fn add_rule(
             next: None,
             arrow_type: ty,
             dotted: 0,
-        }));
+        });
     } else {
         fsm_destroy(test);
     }
@@ -837,8 +828,8 @@ fn add_rule(
 
 /// regex.y add_eprule: `[..] -> R (... R2)` — LHS is the empty string, and the
 /// arrow_type keeps ARROW_DOTTED (unlike add_rule's main rule).
-fn add_eprule(out: &mut Vec<Box<Fsmrules>>, r: Option<Box<Fsm>>, r2: Option<Box<Fsm>>, ty: i32) {
-    out.push(Box::new(Fsmrules {
+fn add_eprule(out: &mut Vec<Fsmrules>, r: Option<Box<Fsm>>, r2: Option<Box<Fsm>>, ty: i32) {
+    out.push(Fsmrules {
         left: Some(fsm_empty_string()),
         right: r,
         right2: r2,
@@ -846,32 +837,32 @@ fn add_eprule(out: &mut Vec<Box<Fsmrules>>, r: Option<Box<Fsm>>, r2: Option<Box<
         next: None,
         arrow_type: ty,
         dotted: 0,
-    }));
+    });
 }
 
-fn link_fsmrules(mut nodes: Vec<Box<Fsmrules>>) -> Option<Box<Fsmrules>> {
+fn link_fsmrules(mut nodes: Vec<Fsmrules>) -> Option<Box<Fsmrules>> {
     let mut head: Option<Box<Fsmrules>> = None;
     while let Some(mut node) = nodes.pop() {
         node.next = head;
-        head = Some(node);
+        head = Some(Box::new(node));
     }
     head
 }
 
-fn link_fsmcontexts(mut nodes: Vec<Box<Fsmcontexts>>) -> Option<Box<Fsmcontexts>> {
+fn link_fsmcontexts(mut nodes: Vec<Fsmcontexts>) -> Option<Box<Fsmcontexts>> {
     let mut head: Option<Box<Fsmcontexts>> = None;
     while let Some(mut node) = nodes.pop() {
         node.next = head;
-        head = Some(node);
+        head = Some(Box::new(node));
     }
     head
 }
 
-fn link_rewritesets(mut nodes: Vec<Box<RewriteSet>>) -> Option<Box<RewriteSet>> {
+fn link_rewritesets(mut nodes: Vec<RewriteSet>) -> Option<Box<RewriteSet>> {
     let mut head: Option<Box<RewriteSet>> = None;
     while let Some(mut node) = nodes.pop() {
         node.next = head;
-        head = Some(node);
+        head = Some(Box::new(node));
     }
     head
 }

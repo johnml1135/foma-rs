@@ -490,31 +490,29 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
                         current_start,
                     );
                 }
-            } else if g_compose_tristate {
-                if aout == EPSILON && mode != 2 {
-                    /* mode -> 1 */
-                    let atarget = net1.states[ai].target;
-                    let target_number = match triplet_hash_find(&th, atarget, b, 1) {
-                        Some(n) => n,
-                        None => {
-                            /* STACK_3_PUSH(1, b, machine_a->target) */
-                            int_stack.push(1);
-                            int_stack.push(b);
-                            int_stack.push(atarget);
-                            triplet_hash_insert(&mut th, atarget, b, 1)
-                        }
-                    };
+            } else if g_compose_tristate && aout == EPSILON && mode != 2 {
+                /* mode -> 1 */
+                let atarget = net1.states[ai].target;
+                let target_number = match triplet_hash_find(&th, atarget, b, 1) {
+                    Some(n) => n,
+                    None => {
+                        /* STACK_3_PUSH(1, b, machine_a->target) */
+                        int_stack.push(1);
+                        int_stack.push(b);
+                        int_stack.push(atarget);
+                        triplet_hash_insert(&mut th, atarget, b, 1)
+                    }
+                };
 
-                    fsm_state_add_arc(
-                        &mut builder,
-                        current_state,
-                        ain,
-                        EPSILON,
-                        target_number,
-                        current_final,
-                        current_start,
-                    );
-                }
+                fsm_state_add_arc(
+                    &mut builder,
+                    current_state,
+                    ain,
+                    EPSILON,
+                    target_number,
+                    current_final,
+                    current_start,
+                );
             }
 
             ai += 1;
@@ -843,15 +841,11 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
         }
         i += 1;
     }
-    if epsilon == 1 {
-        if sigma_find_number(EPSILON, &net1.sigma).is_none() {
-            sigma_add_special(EPSILON, &mut net1.sigma);
-        }
+    if epsilon == 1 && sigma_find_number(EPSILON, &net1.sigma).is_none() {
+        sigma_add_special(EPSILON, &mut net1.sigma);
     }
-    if unknown == 1 {
-        if sigma_find_number(UNKNOWN, &net1.sigma).is_none() {
-            sigma_add_special(UNKNOWN, &mut net1.sigma);
-        }
+    if unknown == 1 && sigma_find_number(UNKNOWN, &net1.sigma).is_none() {
+        sigma_add_special(UNKNOWN, &mut net1.sigma);
     }
     /* free(point_a); free(point_b) */
     drop(point_a);

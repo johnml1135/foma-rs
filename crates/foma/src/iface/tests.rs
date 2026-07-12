@@ -757,7 +757,7 @@ fn load_defined_restores_saved_definitions() {
     let mut session = Session::new();
     iface_load_defined(&mut session, p);
     // Foo is restored and equals [x y].
-    let restored = find_defined(&mut session.defines, "Foo").map(|f| fsm_copy(f));
+    let restored = find_defined(&mut session.defines, "Foo").map(fsm_copy);
     let restored = restored.expect("Foo should be restored");
     let opts = &session.opts.clone();
     let expected = fsm_parse_regex(opts, "x y", None, None).unwrap();
@@ -1129,7 +1129,7 @@ fn save_defined_and_save_stack_roundtrip() {
     iface_save_defined(&mut session, d);
     let mut session = Session::new();
     iface_load_defined(&mut session, d);
-    let restored = find_defined(&mut session.defines, "Foo").map(|f| fsm_copy(f));
+    let restored = find_defined(&mut session.defines, "Foo").map(fsm_copy);
     let expected = fsm_parse_regex(&session.opts, "x y", None, None).unwrap();
     assert!(fsm_equivalent(
         &session.opts,
@@ -1323,37 +1323,37 @@ fn test_family_pins_predicate_and_preserves_stack() {
     // functional: true for a:b, false for a:b|a:c.
     push(&mut session, "a:b");
     let t = session.stack_find_top().unwrap();
-    assert!(session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isfunctional(opts, f)));
+    assert!(session.stack_entry_fsm_with_opts(t, fsm_isfunctional));
     iface_test_functional(&mut session);
     assert_eq!(session.stack_size(), 1);
     let _ = session.stack_pop();
     push(&mut session, "[a:b] | [a:c]");
     let t = session.stack_find_top().unwrap();
-    assert!(!(session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isfunctional(opts, f))));
+    assert!(!(session.stack_entry_fsm_with_opts(t, fsm_isfunctional)));
     iface_test_functional(&mut session);
     let _ = session.stack_pop();
 
     // identity: true for a, false for a:b.
     push(&mut session, "a");
     let t = session.stack_find_top().unwrap();
-    assert!(session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isidentity(opts, f)));
+    assert!(session.stack_entry_fsm_with_opts(t, fsm_isidentity));
     iface_test_identity(&mut session);
     let _ = session.stack_pop();
     push(&mut session, "a:b");
     let t = session.stack_find_top().unwrap();
-    assert!(!(session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isidentity(opts, f))));
+    assert!(!(session.stack_entry_fsm_with_opts(t, fsm_isidentity)));
     iface_test_identity(&mut session);
     let _ = session.stack_pop();
 
     // unambiguous: true for a:b, false for a:b|a:c.
     push(&mut session, "a:b");
     let t = session.stack_find_top().unwrap();
-    assert!(session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isunambiguous(opts, f)));
+    assert!(session.stack_entry_fsm_with_opts(t, fsm_isunambiguous));
     iface_test_unambiguous(&mut session);
     let _ = session.stack_pop();
     push(&mut session, "[a:b] | [a:c]");
     let t = session.stack_find_top().unwrap();
-    assert!(!(session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isunambiguous(opts, f))));
+    assert!(!(session.stack_entry_fsm_with_opts(t, fsm_isunambiguous)));
     iface_test_unambiguous(&mut session);
     let _ = session.stack_pop();
 
@@ -1367,14 +1367,14 @@ fn test_family_pins_predicate_and_preserves_stack() {
     // null / nonnull: empty language vs. non-empty.
     push(&mut session, "[a] - [a]"); // empty
     let t = session.stack_find_top().unwrap();
-    assert!(session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isempty(opts, f)));
+    assert!(session.stack_entry_fsm_with_opts(t, fsm_isempty));
     iface_test_null(&mut session);
     iface_test_nonnull(&mut session);
     assert_eq!(session.stack_size(), 1);
     let _ = session.stack_pop();
     push(&mut session, "a"); // non-empty
     let t = session.stack_find_top().unwrap();
-    assert!(!(session.stack_entry_fsm_with_opts(t, |opts, f| fsm_isempty(opts, f))));
+    assert!(!(session.stack_entry_fsm_with_opts(t, fsm_isempty)));
     iface_test_null(&mut session);
     iface_test_nonnull(&mut session);
     let _ = session.stack_pop();
@@ -1398,8 +1398,8 @@ fn test_family_pins_predicate_and_preserves_stack() {
     assert_eq!(session.stack_size(), 2);
     iface_test_equivalent(&mut session);
     assert_eq!(session.stack_size(), 2);
-    let one = session.stack_entry_fsm(session.stack_find_top().unwrap(), |f| fsm_copy(f));
-    let two = session.stack_entry_fsm(session.stack_find_second().unwrap(), |f| fsm_copy(f));
+    let one = session.stack_entry_fsm(session.stack_find_top().unwrap(), fsm_copy);
+    let two = session.stack_entry_fsm(session.stack_find_second().unwrap(), fsm_copy);
     assert!(fsm_equivalent(&session.opts, one, two));
     session = Session::new();
     push(&mut session, "a");
