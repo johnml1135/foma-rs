@@ -1,4 +1,4 @@
-//! foma/int_stack.c — Wave-4 idiomatization.
+//! foma/int_stack.c — idiomatic Rust port.
 //!
 //! The C used two fixed `int[MAX_STACK]` / `void *[MAX_PTR_STACK]` static
 //! arrays (2^21 slots each, ~16 MB of zeroed BSS) with a manual `top`
@@ -151,7 +151,7 @@ impl PtrStack {
 
 // [spec:foma:def:fomalibconf.int-stack-status-fn]
 // [spec:foma:sem:fomalibconf.int-stack-status-fn+1]
-// Dead prototype: no C definition. Wave 4 surfaces the honest
+// Dead prototype: no C definition. The port surfaces the honest
 // FomaError::Unimplemented (was: panic) instead of a link error.
 pub fn int_stack_status() -> Result<i32, FomaError> {
     Err(FomaError::Unimplemented(
@@ -213,7 +213,7 @@ mod tests {
     // [spec:foma:sem:fomalibconf.int-stack-isfull-fn+1/test]
     #[test]
     fn int_stack_isfull_always_false_with_unbounded_growth() {
-        // Wave 4: the stack grows unbounded, so is_full is never true
+        // The stack grows unbounded, so is_full is never true
         // (was: top == MAX_STACK - 1).
         let mut s = IntStack::new();
         assert!(!s.is_full());
@@ -276,8 +276,8 @@ mod tests {
         s.pop();
     }
 
-    // Dead prototype: no C definition (link error if called). Wave 4
-    // returns FomaError::Unimplemented in place of the Wave-2 panic.
+    // Dead prototype: no C definition (link error if called). The port
+    // returns FomaError::Unimplemented in place of a panic.
     // [spec:foma:sem:fomalibconf.int-stack-status-fn+1/test]
     #[test]
     fn int_stack_status_dead_prototype_is_unimplemented() {

@@ -53,18 +53,9 @@ use crate::types::{ArrowType, Fsm, Fsmcontexts, ReplaceDir, RewriteSet};
 // [spec:foma:def:rewrite.rewrite-batch]
 #[derive(Debug)]
 pub struct RewriteBatch {
-    /* C: struct rewrite_set *rewrite_set — assigned once in fsm_rewrite and
-    never read anywhere. DEVIATION from C (aliases the caller's rule set;
-    safe Rust cannot store the alias — always None here). */
-    pub rewrite_set: Option<Box<RewriteSet>>,
     pub rulenames: Option<Box<Fsm>>,
     pub isyms: Option<Box<Fsm>>,
     pub any: Option<Box<Fsm>>,
-    /// C: declared but never assigned anywhere — always NULL (see the
-    /// rewrite-cleanup sem rule). Always None here.
-    pub iopen: Option<Box<Fsm>>,
-    /// C: declared but never assigned anywhere — always NULL. Always None.
-    pub iclose: Option<Box<Fsm>>,
     pub itape: Option<Box<Fsm>>,
     pub any4tape: Option<Box<Fsm>>,
     pub epextend: Option<Box<Fsm>>,
@@ -105,12 +96,9 @@ pub fn fsm_rewrite(opts: &FomaOptions, all_rules: &mut RewriteSet) -> Box<Fsm> {
 
     /* rb = calloc(1, sizeof(struct rewrite_batch)) */
     let mut rb = RewriteBatch {
-        rewrite_set: None, /* C: rb->rewrite_set = all_rules (never read) */
         rulenames: None,
         isyms: None,
         any: None,
-        iopen: None,
-        iclose: None,
         itape: None,
         any4tape: None,
         epextend: None,
@@ -686,12 +674,6 @@ pub fn rewrite_cleanup(rb: RewriteBatch) {
         fsm_destroy(net);
     }
     if let Some(net) = rb.any {
-        fsm_destroy(net);
-    }
-    if let Some(net) = rb.iopen {
-        fsm_destroy(net);
-    }
-    if let Some(net) = rb.iclose {
         fsm_destroy(net);
     }
     if let Some(net) = rb.itape {
@@ -1998,12 +1980,9 @@ mod tests {
     fn mini_rb() -> RewriteBatch {
         let opts = &FomaOptions::default();
         let mut rb = RewriteBatch {
-            rewrite_set: None,
             rulenames: None,
             isyms: None,
             any: None,
-            iopen: None,
-            iclose: None,
             itape: None,
             any4tape: None,
             epextend: None,

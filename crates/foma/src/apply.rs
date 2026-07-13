@@ -569,7 +569,7 @@ pub fn apply_reset_enumerator(h: &mut ApplyHandle) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Idiomatic iterator front-ends (Wave 4 — additive sugar)            */
+/* Idiomatic iterator front-ends (additive sugar)                    */
 /* ------------------------------------------------------------------ */
 
 /* Which C-shaped entry point an ApplyIter drives. */

@@ -1,4 +1,4 @@
-//! Wave-4 split of constructions.c (see mod.rs). Cross-module and
+//! Split out of constructions.c (see mod.rs). Cross-module and
 //! external names come via `use super::*` (re-exported by mod.rs).
 use super::*;
 use smol_str::SmolStr;

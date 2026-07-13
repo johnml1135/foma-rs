@@ -105,24 +105,20 @@ pub struct TransArray {
 }
 
 /// Per-call subset-construction scratch. The C kept every field below as a
-/// file-static; Wave 4 folds them into one owned struct created fresh in
+/// file-static; the port folds them into one owned struct created fresh in
 /// `fsm_subset`, so a determinize/epsilon-remove call owns all its own state
 /// and nothing persists between calls. `Default` gives the C's zeroed BSS
 /// start (0 / false / empty Vec).
 #[derive(Debug, Default)]
 pub(crate) struct Subset {
-    // C: static int fsm_linecount, num_states, num_symbols, epsilon_symbol,
-    //    *single_sigma_array, *double_sigma_array, limit, num_start_states, op;
-    // written by init to mirror the C statics but never read back in the port
-    #[allow(dead_code)]
-    fsm_linecount: i32,
+    // C: static int num_states, num_symbols, epsilon_symbol,
+    //    *single_sigma_array, *double_sigma_array, num_start_states, op —
+    // scratch statics mirrored on the handle.
     num_states: i32,
     num_symbols: i32,
     epsilon_symbol: i32,
     single_sigma_array: Vec<i32>,
     double_sigma_array: Vec<i32>,
-    #[allow(dead_code)]
-    limit: i32,
     num_start_states: i32,
     op: SubsetOp,
 
@@ -135,9 +131,7 @@ pub(crate) struct Subset {
     // plus malloc'd chain nodes, all in one pool here (see module docs)
     e_closure_memo: Vec<EClosureMemo>,
 
-    // C: int T_last_unmarked, T_limit;
-    #[allow(dead_code)]
-    t_last_unmarked: i32,
+    // C: int T_limit;
     t_limit: i32,
 
     // C: struct trans_list *trans_list_determinize; struct trans_array
@@ -444,11 +438,6 @@ pub(crate) fn init(s: &mut Subset, net: &mut Fsm) {
     (write-before-read scratch) */
     s.temp_move = vec![0; (net.statecount + 1) as usize];
 
-    /* We malloc this much memory to begin with for the new fsm */
-    /* Then grow it by the double as needed */
-
-    s.limit = next_power_of_two(net.linecount);
-    s.fsm_linecount = 0;
     sigma_to_pairs(s, net);
 
     /* Optimistically malloc T_ptr array */
@@ -457,7 +446,6 @@ pub(crate) fn init(s: &mut Subset, net: &mut Fsm) {
     /* Optimistically, we choose the initial size to be the number of */
     /* states in the non-deterministic fsm */
 
-    s.t_last_unmarked = 0;
     s.t_limit = next_power_of_two(s.num_states);
 
     /* T_ptr = calloc(T_limit,sizeof(struct T_memo)); */

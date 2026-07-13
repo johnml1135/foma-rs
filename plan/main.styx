@@ -1409,6 +1409,14 @@ children (
                 id w10-dead-cruft
                 title "Delete dead C-residue + trim hot-path allocs: FsmBuilder.current_fsm_size (Vec self-grows), determinize::Subset write-only mirror fields, RewriteBatch always-None iopen/iclose/rewrite_set, int_stack is_full()/find(); apply_append astring/bstring borrow instead of to_string; fsm_substitute_label needless net clones; drop the \"Wave 4\" comment tag + honest the io.rs last_final=49 magic int"
                 priority 3
+                log (
+                    {
+                        at 2026-07-13T12:58:38.631481Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Todo → Doing (nplan_start)"
+                    }
+                )
             }
 
             {

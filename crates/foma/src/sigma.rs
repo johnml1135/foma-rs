@@ -348,7 +348,7 @@ pub fn sigma_sort(net: &mut Fsm) {
     let max = ssort.len() as i32;
     /* qsort(ssort, max, sizeof(struct ssort), comp) with comp = ssortcmp */
     ssort.sort_by(ssortcmp);
-    // Wave 4 fix: the C read replacearray slots for numbers absent from sigma
+    // DEVIATION from C: the C read replacearray slots for numbers absent from sigma
     // while they were still uninitialized (garbage in C, collapsed to 0 by the
     // Wave-2 port), silently corrupting any arc carrying such a label. Seed the
     // table with the identity map so a label with no sigma entry is left
@@ -1000,7 +1000,7 @@ mod tests {
     // [spec:foma:sem:fomalibconf.sigma-sort-fn+2/test]
     #[test]
     fn sigma_sort_arc_label_absent_from_sigma_kept_unchanged() {
-        /* Wave 4 fix: a label with no sigma entry is left unchanged (identity
+        /* DEVIATION from C: a label with no sigma entry is left unchanged (identity
         map) instead of collapsing to a garbage/zero value. */
         let mut net = fsm_create("t");
         sigma_add_number(&mut net.sigma, "b", 3);

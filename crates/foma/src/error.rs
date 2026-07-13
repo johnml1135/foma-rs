@@ -1,8 +1,8 @@
-//! Library-wide error type for the foma port (Wave 4 idiomatization).
+//! Library-wide error type for the foma port (idiomatic port).
 //!
 //! The Wave-2 library reproduced the C's fatal paths literally: `exit(1)`
 //! on stack overflow, panics on malformed input, dead prototypes that were
-//! link errors in C. Per docs/port/rust-conventions.md (Wave 4), library
+//! link errors in C. Per docs/port/rust-conventions.md, library
 //! code returns a `Result` instead so binaries can translate failures into
 //! exit codes and messages. The enum is hand-rolled (no `thiserror`
 //! dependency): `Display`, `Error` and `From` impls are written out below.

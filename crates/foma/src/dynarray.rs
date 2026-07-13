@@ -1,4 +1,4 @@
-//! foma/dynarray.c — Wave-4 idiomatization of the Wave-2 port per
+//! foma/dynarray.c — idiomatic Rust port per
 //! docs/port/rust-conventions.md. Sem rules: docs/spec/port/foma/dynarray.md
 //! (per-file ids) plus the fomalib.h / fomalibconf.h prototype ids.
 //!
@@ -80,7 +80,6 @@ pub struct SigmaLookup {
 /// `&mut FsmBuilder`, so each build is a self-contained handle.
 #[derive(Debug)]
 pub struct FsmBuilder {
-    current_fsm_size: usize,
     current_fsm_linecount: u32,
     current_state_no: u32,
     current_final: u32,
@@ -105,7 +104,6 @@ impl FsmBuilder {
         let ssize = (sigma_size + 1) as u32;
         FsmBuilder {
             current_fsm_head: Vec::with_capacity(INITIAL_SIZE),
-            current_fsm_size: INITIAL_SIZE,
             current_fsm_linecount: 0,
             ssize,
             slookup: vec![
@@ -208,11 +206,6 @@ impl FsmBuilder {
         }
 
         self.current_trans = 1;
-        if self.current_fsm_linecount as usize >= self.current_fsm_size {
-            /* C doubled a realloc here; Vec growth is implicit — the size
-            counter is kept only to mirror the C bookkeeping. */
-            self.current_fsm_size *= 2;
-        }
         /* in/out truncate int→short, final/start truncate int→char as in C */
         self.current_fsm_head.push(FsmState {
             state_no,

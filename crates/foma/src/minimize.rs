@@ -9,7 +9,7 @@
 //! A C `struct p *` argument into the block pool decomposes to a
 //! (Minimizer, index) pair — see agenda_add.
 //!
-//! Wave 4: the C's file-static scratch (partition/agenda pools, the inverse-arc
+//! The C's file-static scratch (partition/agenda pools, the inverse-arc
 //! index, sigma maps and the loop counters) is owned by a per-call `Minimizer`
 //! struct threaded through the hop pipeline by `&mut` — nothing survives a
 //! call. The shared int stack and the `add_fsm_arc` line writer belong to
@@ -100,7 +100,7 @@ pub struct TransArray {
 }
 
 /// Per-call Hopcroft-minimization scratch. Every field mirrors a C
-/// file-static; Wave 4 folds them into one owned struct created fresh in
+/// file-static; the port folds them into one owned struct created fresh in
 /// `fsm_minimize_hop`, so nothing survives a call. `Default` gives the C's
 /// zeroed BSS start.
 #[derive(Debug, Default)]

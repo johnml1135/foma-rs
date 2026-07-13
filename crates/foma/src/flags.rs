@@ -1256,7 +1256,7 @@ mod tests {
         let src = r#"["@P.F.1@" a "@U.F.1@"] | ["@P.F.2@" b "@U.F.1@"] | ["@P.G.1@" c "@R.G@"] | [d "@R.G@"] | [e "@D.H@"] | ["@P.H.1@" f "@D.H@"]"#;
         let net = fsm_parse_regex(opts, src, None, None).unwrap();
         let result = flag_eliminate(opts, net, None);
-        /* Wave 4 fix (`&` type mask): the body now runs only for U/R/D/E flags.
+        /* DEVIATION from C (`&` type mask): the body now runs only for U/R/D/E flags.
         Because flag_build already classified nothing for the other types, the
         observable flag-filtered language is identical to the pre-fix behavior. */
         assert_eq!(all_words(&result), vec!["a", "c", "e"]);
