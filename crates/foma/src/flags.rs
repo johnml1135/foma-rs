@@ -73,16 +73,16 @@ pub fn flag_eliminate(opts: &FomaOptions, net: Box<Fsm>, name: Option<&str>) -> 
     let flags = flag_extract(&net);
     /* Check that flag actually exists in net */
     if let Some(name) = name {
-        let mut found = 0;
+        let mut found = false;
         let mut f = flags.as_deref();
         while let Some(fl) = f {
             /* strcmp(name, f->name) — C would segfault on a NULL f->name */
             if fl.name.as_deref() == Some(name) {
-                found = 1;
+                found = true;
             }
             f = fl.next.as_deref();
         }
-        if found == 0 {
+        if !found {
             if opts.verbose {
                 tracing::warn!("Flag attribute '{}' does not occur in the network.", name);
             }
@@ -90,7 +90,7 @@ pub fn flag_eliminate(opts: &FomaOptions, net: Box<Fsm>, name: Option<&str>) -> 
         }
     }
 
-    let mut flag = 0;
+    let mut flag = false;
 
     let mut f = flags.as_deref();
     while let Some(fl) = f {
@@ -116,7 +116,7 @@ pub fn flag_eliminate(opts: &FomaOptions, net: Box<Fsm>, name: Option<&str>) -> 
             ));
 
             let mut ff = flags.as_deref();
-            flag = 0;
+            flag = false;
             while let Some(ffl) = ff {
                 let fstatus = flag_build(
                     fl.r#type,
@@ -141,7 +141,7 @@ pub fn flag_eliminate(opts: &FomaOptions, net: Box<Fsm>, name: Option<&str>) -> 
                             ),
                         ),
                     ));
-                    flag = 1;
+                    flag = true;
                 }
                 if fstatus == FlagBuildResult::Succeed {
                     succeed_flags = Some(fsm_minimize(
@@ -158,13 +158,13 @@ pub fn flag_eliminate(opts: &FomaOptions, net: Box<Fsm>, name: Option<&str>) -> 
                             ),
                         ),
                     ));
-                    flag = 1;
+                    flag = true;
                 }
                 ff = ffl.next.as_deref();
             }
         }
 
-        if flag != 0 {
+        if flag {
             let newfilter = if fl.r#type == FLAG_REQUIRE {
                 fsm_complement(
                     opts,
@@ -232,7 +232,7 @@ pub fn flag_eliminate(opts: &FomaOptions, net: Box<Fsm>, name: Option<&str>) -> 
                 Some(filter) => fsm_intersect(opts, filter, newfilter),
             });
         }
-        flag = 0;
+        flag = false;
         f = fl.next.as_deref();
     }
 
@@ -381,14 +381,14 @@ pub fn flag_build(
 pub(crate) fn flag_purge(net: &mut Fsm, name: Option<&str>) {
     let sigmasize = sigma_max(&net.sigma) + 1;
     /* C: malloc'd int array, zeroed by the following loop */
-    let mut ftable: Vec<i32> = vec![0; sigmasize as usize];
+    let mut ftable: Vec<bool> = vec![false; sigmasize as usize];
 
     for s in &net.sigma {
         let symbol = s.symbol.as_str();
         if flag_check(symbol) {
             match name {
                 None => {
-                    ftable[s.number as usize] = 1;
+                    ftable[s.number as usize] = true;
                 }
                 Some(name) => {
                     /* csym = (sigma->symbol) + 3 — skip "@X." (one-byte operator) */
@@ -400,14 +400,14 @@ pub(crate) fn flag_purge(net: &mut Fsm, name: Option<&str>) {
                         && csym.len() > name_b.len()
                         && (csym[name_b.len()] == b'.' || csym[name_b.len()] == b'@')
                     {
-                        ftable[s.number as usize] = 1;
+                        ftable[s.number as usize] = true;
                     }
                 }
             }
         }
     }
     for i in 0..sigmasize {
-        if ftable[i as usize] != 0 {
+        if ftable[i as usize] {
             sigma_remove_num(i, &mut net.sigma);
         }
     }
@@ -416,10 +416,10 @@ pub(crate) fn flag_purge(net: &mut Fsm, name: Option<&str>) {
     let mut i = 0usize;
     while fsm[i].state_no != -1 {
         if fsm[i].r#in >= 0 && fsm[i].out >= 0 {
-            if ftable[fsm[i].r#in as usize] != 0 {
+            if ftable[fsm[i].r#in as usize] {
                 fsm[i].r#in = EPSILON as i16;
             }
-            if ftable[fsm[i].out as usize] != 0 {
+            if ftable[fsm[i].out as usize] {
                 fsm[i].out = EPSILON as i16;
             }
         }
@@ -678,12 +678,12 @@ pub fn flag_twosided(opts: &FomaOptions, mut net: Box<Fsm>) -> Box<Fsm> {
     /* Mark flag symbols */
     let maxsigma = sigma_max(&net.sigma);
     /* C: calloc(maxsigma+1, sizeof(int)) */
-    let mut isflag: Vec<i32> = vec![0; (maxsigma + 1) as usize];
+    let mut isflag: Vec<bool> = vec![false; (maxsigma + 1) as usize];
     for s in &net.sigma {
-        isflag[s.number as usize] = if flag_check(&s.symbol) { 1 } else { 0 };
+        isflag[s.number as usize] = flag_check(&s.symbol);
     }
     let mut maxstate = 0;
-    let mut change = 0;
+    let mut change = false;
     let mut i = 0usize;
     let mut newarcs = 0usize;
     while net.states[i].state_no != -1 {
@@ -696,14 +696,14 @@ pub fn flag_twosided(opts: &FomaOptions, mut net: Box<Fsm>) -> Box<Fsm> {
             i += 1;
             continue;
         }
-        if isflag[net.states[i].r#in as usize] != 0 && net.states[i].out == EPSILON as i16 {
-            change = 1;
+        if isflag[net.states[i].r#in as usize] && net.states[i].out == EPSILON as i16 {
+            change = true;
             net.states[i].out = net.states[i].r#in;
-        } else if isflag[net.states[i].out as usize] != 0 && net.states[i].r#in == EPSILON as i16 {
-            change = 1;
+        } else if isflag[net.states[i].out as usize] && net.states[i].r#in == EPSILON as i16 {
+            change = true;
             net.states[i].r#in = net.states[i].out;
         }
-        if (isflag[net.states[i].r#in as usize] != 0 || isflag[net.states[i].out as usize] != 0)
+        if (isflag[net.states[i].r#in as usize] || isflag[net.states[i].out as usize])
             && net.states[i].r#in != net.states[i].out
         {
             newarcs += 1;
@@ -712,7 +712,7 @@ pub fn flag_twosided(opts: &FomaOptions, mut net: Box<Fsm>) -> Box<Fsm> {
     }
 
     if newarcs == 0 {
-        if change == 1 {
+        if change {
             net.is_deterministic = UNK;
             net.is_minimized = UNK;
             net.is_pruned = UNK;
@@ -743,8 +743,8 @@ pub fn flag_twosided(opts: &FomaOptions, mut net: Box<Fsm>) -> Box<Fsm> {
         let in_i = net.states[i].r#in;
         let out_i = net.states[i].out;
         let target_i = net.states[i].target;
-        if (isflag[in_i as usize] != 0 || isflag[out_i as usize] != 0) && in_i != out_i {
-            if isflag[in_i as usize] != 0 && isflag[out_i as usize] == 0 {
+        if (isflag[in_i as usize] || isflag[out_i as usize]) && in_i != out_i {
+            if isflag[in_i as usize] && !isflag[out_i as usize] {
                 j = add_fsm_arc(
                     &mut net.states,
                     j,
@@ -758,7 +758,7 @@ pub fn flag_twosided(opts: &FomaOptions, mut net: Box<Fsm>) -> Box<Fsm> {
                 net.states[i].out = net.states[i].r#in;
                 net.states[i].target = maxstate;
                 maxstate += 1;
-            } else if isflag[out_i as usize] != 0 && isflag[in_i as usize] == 0 {
+            } else if isflag[out_i as usize] && !isflag[in_i as usize] {
                 j = add_fsm_arc(
                     &mut net.states,
                     j,
@@ -772,7 +772,7 @@ pub fn flag_twosided(opts: &FomaOptions, mut net: Box<Fsm>) -> Box<Fsm> {
                 net.states[i].out = EPSILON as i16;
                 net.states[i].target = maxstate;
                 maxstate += 1;
-            } else if isflag[in_i as usize] != 0 && isflag[out_i as usize] != 0 {
+            } else if isflag[in_i as usize] && isflag[out_i as usize] {
                 j = add_fsm_arc(
                     &mut net.states,
                     j,

@@ -116,10 +116,10 @@ fn apply_set_params_copies_the_four_globals() {
         ..FomaOptions::default()
     };
     iface_apply_set_params(&set_opts, &mut h);
-    assert_eq!(h.print_space, 1);
-    assert_eq!(h.print_pairs, 1);
-    assert_eq!(h.show_flags, 1);
-    assert_eq!(h.obey_flags, 0);
+    assert!(h.print_space);
+    assert!(h.print_pairs);
+    assert!(h.show_flags);
+    assert!(!h.obey_flags);
     apply_clear(h);
 }
 

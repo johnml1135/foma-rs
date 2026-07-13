@@ -89,13 +89,13 @@ fn new_searchstack_frame() -> Searchstack {
     Searchstack {
         offset: 0,
         iptr: None,
-        state_has_index: 0,
+        state_has_index: false,
         opos: 0,
         ipos: 0,
         visitmark: 0,
         flagname: None,
         flagvalue: None,
-        flagneg: 0,
+        flagneg: false,
     }
 }
 
@@ -108,7 +108,7 @@ fn new_searchstack_frame() -> Searchstack {
 // [spec:foma:def:fomalib.apply-set-obey-flags-fn]
 // [spec:foma:sem:fomalib.apply-set-obey-flags-fn]
 pub fn apply_set_obey_flags(h: &mut ApplyHandle, value: i32) {
-    h.obey_flags = value;
+    h.obey_flags = value != 0;
 }
 
 // [spec:foma:def:apply.apply-set-show-flags-fn]
@@ -116,7 +116,7 @@ pub fn apply_set_obey_flags(h: &mut ApplyHandle, value: i32) {
 // [spec:foma:def:fomalib.apply-set-show-flags-fn]
 // [spec:foma:sem:fomalib.apply-set-show-flags-fn]
 pub fn apply_set_show_flags(h: &mut ApplyHandle, value: i32) {
-    h.show_flags = value;
+    h.show_flags = value != 0;
 }
 
 // [spec:foma:def:apply.apply-set-print-space-fn]
@@ -124,7 +124,7 @@ pub fn apply_set_show_flags(h: &mut ApplyHandle, value: i32) {
 // [spec:foma:def:fomalib.apply-set-print-space-fn]
 // [spec:foma:sem:fomalib.apply-set-print-space-fn]
 pub fn apply_set_print_space(h: &mut ApplyHandle, value: i32) {
-    h.print_space = value;
+    h.print_space = value != 0;
     h.space_symbol = Some(" ".into()); // C: strdup(" ")
 }
 
@@ -154,7 +154,7 @@ pub fn apply_set_epsilon(h: &mut ApplyHandle, symbol: &str) {
 // [spec:foma:sem:fomalib.apply-set-space-symbol-fn]
 pub fn apply_set_space_symbol(h: &mut ApplyHandle, space: &str) {
     h.space_symbol = Some(space.into());
-    h.print_space = 1;
+    h.print_space = true;
 }
 
 // [spec:foma:def:apply.apply-set-collect-pairs-fn]
@@ -190,7 +190,7 @@ pub fn apply_last_pairs(h: &ApplyHandle) -> (String, String) {
 // [spec:foma:def:fomalib.apply-set-print-pairs-fn]
 // [spec:foma:sem:fomalib.apply-set-print-pairs-fn]
 pub fn apply_set_print_pairs(h: &mut ApplyHandle, value: i32) {
-    h.print_pairs = value;
+    h.print_pairs = value != 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -210,7 +210,7 @@ pub(crate) fn apply_force_clear_stack(h: &mut ApplyHandle) {
             h.marks[sn as usize] = 0;
         }
         h.iterator = 0;
-        h.iterate_old = 0;
+        h.iterate_old = false;
         apply_stack_clear(h);
     }
 }
@@ -242,12 +242,12 @@ pub(crate) fn apply_stack_pop(h: &mut ApplyHandle) {
     let sn = l_state_no(h, h.ptr);
     h.marks[sn as usize] = ss.visitmark;
 
-    if let (true, Some(name)) = (h.has_flags != 0, ss.flagname.as_deref()) {
+    if let (true, Some(name)) = (h.has_flags, ss.flagname.as_deref()) {
         /* Restore flag */
         match h.flag_state.get_mut(name) {
             Some(flist) => {
                 flist.value = ss.flagvalue.clone();
-                flist.neg = ss.flagneg as i16;
+                flist.neg = ss.flagneg;
             }
             None => {
                 // C: perror("***Nothing to pop") then dereferences NULL (crash).
@@ -266,7 +266,7 @@ pub(crate) fn apply_stack_push(
     vmark: i32,
     sflagname: Option<SmolStr>,
     sflagvalue: Option<SmolStr>,
-    sflagneg: i32,
+    sflagneg: bool,
 ) {
     if h.apply_stack_ptr == h.apply_stack_top {
         // C: realloc to double; failure perror+exit(0). Vec growth aborts on OOM.
@@ -287,7 +287,7 @@ pub(crate) fn apply_stack_push(
     ss.visitmark = vmark;
     ss.iptr = iptr;
     ss.state_has_index = state_has_index;
-    if has_flags != 0 {
+    if has_flags {
         ss.flagname = sflagname;
         ss.flagvalue = sflagvalue;
         ss.flagneg = sflagneg;
@@ -307,16 +307,16 @@ pub fn apply_enumerate(h: &mut ApplyHandle) -> Option<String> {
     if h.last_net.as_ref().is_none_or(|n| n.finalcount == 0) {
         return None;
     }
-    h.binsearch = 0;
+    h.binsearch = false;
     if h.iterator == 0 {
-        h.iterate_old = 0;
+        h.iterate_old = false;
         apply_force_clear_stack(h);
         result = apply_net(h);
         if !h.mode.contains(ApplyMode::RANDOM) {
             h.iterator += 1;
         }
     } else {
-        h.iterate_old = 1;
+        h.iterate_old = true;
         result = apply_net(h);
     }
     result
@@ -422,11 +422,11 @@ pub fn apply_updown(h: &mut ApplyHandle, word: Option<&str>) -> Option<String> {
 
     match word {
         None => {
-            h.iterate_old = 1;
+            h.iterate_old = true;
             result = apply_net(h);
         }
         Some(w) => {
-            h.iterate_old = 0;
+            h.iterate_old = false;
             // C borrows the caller's word pointer; owned copy of the bytes here.
             h.instring = w.to_owned();
             apply_create_sigmatch(h);
@@ -445,17 +445,9 @@ pub fn apply_updown(h: &mut ApplyHandle, word: Option<&str>) -> Option<String> {
 // [spec:foma:sem:fomalib.apply-down-fn]
 pub fn apply_down(h: &mut ApplyHandle, word: Option<&str>) -> Option<String> {
     h.mode = ApplyMode::DOWN;
-    if !h.index_in.is_empty() {
-        h.indexed = 1;
-    } else {
-        h.indexed = 0;
-    }
+    h.indexed = !h.index_in.is_empty();
     // C dereferences last_net before apply_updown's NULL guard.
-    h.binsearch = if last_net(h).arcs_sorted_in == 1 {
-        1
-    } else {
-        0
-    };
+    h.binsearch = last_net(h).arcs_sorted_in == 1;
     apply_updown(h, word)
 }
 
@@ -465,16 +457,8 @@ pub fn apply_down(h: &mut ApplyHandle, word: Option<&str>) -> Option<String> {
 // [spec:foma:sem:fomalib.apply-up-fn]
 pub fn apply_up(h: &mut ApplyHandle, word: Option<&str>) -> Option<String> {
     h.mode = ApplyMode::UP;
-    if !h.index_out.is_empty() {
-        h.indexed = 1;
-    } else {
-        h.indexed = 0;
-    }
-    h.binsearch = if last_net(h).arcs_sorted_out == 1 {
-        1
-    } else {
-        0
-    };
+    h.indexed = !h.index_out.is_empty();
+    h.binsearch = last_net(h).arcs_sorted_out == 1;
     apply_updown(h, word)
 }
 
@@ -506,26 +490,26 @@ pub fn apply_init(net: &Fsm) -> Box<ApplyHandle> {
         sigma_trie: Vec::new(),
         sigmatch_array: Vec::new(),
         sigma_trie_arrays: None,
-        binsearch: 0,
-        indexed: 0,
-        state_has_index: 0,
+        binsearch: false,
+        indexed: false,
+        state_has_index: false,
         sigma_size: 0,
         sigmatch_array_size: 0,
         current_instring_length: 0,
-        has_flags: 0,
-        obey_flags: 0,
-        show_flags: 0,
-        print_space: 0,
+        has_flags: false,
+        obey_flags: false,
+        show_flags: false,
+        print_space: false,
         space_symbol: None,
         separator: None,
         epsilon_symbol: None,
-        print_pairs: 0,
+        print_pairs: false,
         collect_pairs: false,
         pair_segments: Vec::new(),
         apply_stack_ptr: 0,
         apply_stack_top: 0,
-        oldflagneg: 0,
-        iterate_old: 0,
+        oldflagneg: false,
+        iterate_old: false,
         iterator: 0,
         flagstates: Vec::new(),
         outstring: String::new(),
@@ -545,15 +529,15 @@ pub fn apply_init(net: &Fsm) -> Box<ApplyHandle> {
     });
 
     /* Init */
-    h.iterate_old = 0;
+    h.iterate_old = false;
     h.iterator = 0;
     h.instring = String::new();
     h.flag_state = std::collections::HashMap::new();
     h.flag_lookup = Vec::new();
-    h.obey_flags = 1;
-    h.show_flags = 0;
-    h.print_space = 0;
-    h.print_pairs = 0;
+    h.obey_flags = true;
+    h.show_flags = false;
+    h.print_space = false;
+    h.print_pairs = false;
     h.separator = Some(":".into());
     h.epsilon_symbol = Some("0".into());
     // C: h->last_net = net (borrowed). DEVIATION from C (owns a clone; the
@@ -582,7 +566,7 @@ pub fn apply_reset_enumerator(h: &mut ApplyHandle) {
         h.marks[i as usize] = 0;
     }
     h.iterator = 0;
-    h.iterate_old = 0;
+    h.iterate_old = false;
 }
 
 /* ------------------------------------------------------------------ */
@@ -729,7 +713,7 @@ pub fn apply_index(
     mem_limit: i32,
     flags_only: i32,
 ) {
-    if flags_only != 0 && h.has_flags == 0 {
+    if flags_only != 0 && !h.has_flags {
         return;
     }
     let net = last_net(h);
@@ -800,7 +784,7 @@ pub fn apply_index(
     // calloc(statecount) per-state chain heads.
     let mut indexed: Vec<Option<Box<ApplyStateIndex>>> = vec![None; statecount as usize];
 
-    if h.has_flags != 0 && flags_only != 0 && h.flagstates.is_empty() {
+    if h.has_flags && flags_only != 0 && h.flagstates.is_empty() {
         apply_mark_flagstates(h);
     }
 
@@ -817,7 +801,7 @@ pub fn apply_index(
                 continue;
             }
             if ii < densitycutoff
-                && !(h.has_flags != 0
+                && !(h.has_flags
                     && flags_only != 0
                     && !h.flagstates.is_empty()
                     && bittest(&h.flagstates, stateno))
@@ -967,12 +951,12 @@ pub fn apply_follow_next_arc(h: &mut ApplyHandle) -> bool {
     let eatupo: i32;
     let mut symin: i32;
     let mut symout: i32;
-    let fneg: i32;
+    let fneg: bool;
     let mut vcount: i32;
     let mut marksource: i32;
     let mut marktarget: i32;
 
-    if h.state_has_index != 0 {
+    if h.state_has_index {
         while let Some(fsmptr) = h.iptr.as_deref().map(|i| i.fsmptr).filter(|&f| f != -1) {
             h.ptr = fsmptr;
             h.curr_ptr = fsmptr;
@@ -995,8 +979,8 @@ pub fn apply_follow_next_arc(h: &mut ApplyHandle) -> bool {
                 eatupi = apply_match_str(h, symin, h.ipos);
                 if eatupi != -1 {
                     eatupo = apply_append(h, h.curr_ptr, symout);
-                    if h.obey_flags != 0
-                        && h.has_flags != 0
+                    if h.obey_flags
+                        && h.has_flags
                         && (h.flag_lookup[symin as usize].r#type
                             & (FLAG_UNIFY | FLAG_CLEAR | FLAG_POSITIVE | FLAG_NEGATIVE))
                             != 0
@@ -1007,7 +991,7 @@ pub fn apply_follow_next_arc(h: &mut ApplyHandle) -> bool {
                     } else {
                         fname = None;
                         fvalue = None;
-                        fneg = 0;
+                        fneg = false;
                     }
                     apply_stack_push(h, marksource, fname, fvalue, fneg);
                     let tgt2 = l_target(h, h.curr_ptr);
@@ -1021,8 +1005,8 @@ pub fn apply_follow_next_arc(h: &mut ApplyHandle) -> bool {
             h.iptr = h.iptr.as_deref().and_then(|i| i.next.clone());
         }
         false
-    } else if h.binsearch != 0
-        && (h.has_flags == 0 || {
+    } else if h.binsearch
+        && (!h.has_flags || {
             let sn = l_state_no(h, h.ptr);
             !bittest(&h.flagstates, sn)
         })
@@ -1050,7 +1034,7 @@ pub fn apply_follow_next_arc(h: &mut ApplyHandle) -> bool {
                     if eatupi != -1 {
                         eatupo = apply_append(h, h.curr_ptr, symout);
 
-                        apply_stack_push(h, marksource, None, None, 0);
+                        apply_stack_push(h, marksource, None, None, false);
 
                         let tgt2 = l_target(h, h.curr_ptr);
                         h.ptr = h.statemap[tgt2 as usize];
@@ -1117,8 +1101,8 @@ pub fn apply_follow_next_arc(h: &mut ApplyHandle) -> bool {
             eatupi = apply_match_str(h, symin, h.ipos);
             if eatupi != -1 {
                 eatupo = apply_append(h, h.curr_ptr, symout);
-                if h.obey_flags != 0
-                    && h.has_flags != 0
+                if h.obey_flags
+                    && h.has_flags
                     && (h.flag_lookup[symin as usize].r#type
                         & (FLAG_UNIFY | FLAG_CLEAR | FLAG_POSITIVE | FLAG_NEGATIVE))
                         != 0
@@ -1129,7 +1113,7 @@ pub fn apply_follow_next_arc(h: &mut ApplyHandle) -> bool {
                 } else {
                     fname = None;
                     fvalue = None;
-                    fneg = 0;
+                    fneg = false;
                 }
 
                 apply_stack_push(h, marksource, fname, fvalue, fneg);
@@ -1158,7 +1142,7 @@ pub fn apply_return_string(h: &mut ApplyHandle) -> Option<String> {
         if h.lcg.rand() % 2 == 0 {
             apply_stack_clear(h);
             h.iterator = 0;
-            h.iterate_old = 0;
+            h.iterate_old = false;
             return Some(h.outstring.clone());
         }
     } else {
@@ -1198,7 +1182,7 @@ pub fn apply_skip_this_arc(h: &mut ApplyHandle) {
 pub fn apply_at_last_arc(h: &ApplyHandle) -> bool {
     let seeksym: i32;
     let nextsym: i32;
-    if h.state_has_index != 0 {
+    if h.state_has_index {
         let iptr = h
             .iptr
             .as_deref()
@@ -1206,9 +1190,7 @@ pub fn apply_at_last_arc(h: &ApplyHandle) -> bool {
         if iptr.next.as_deref().is_none_or(|n| n.fsmptr == -1) {
             return true;
         }
-    } else if h.binsearch != 0
-        && (h.has_flags == 0 || !bittest(&h.flagstates, l_state_no(h, h.ptr)))
-    {
+    } else if h.binsearch && (!h.has_flags || !bittest(&h.flagstates, l_state_no(h, h.ptr))) {
         if l_state_no(h, h.ptr) != l_state_no(h, h.ptr + 1) {
             return true;
         }
@@ -1250,7 +1232,7 @@ pub fn apply_set_iptr(h: &mut ApplyHandle) {
     }
 
     h.iptr = None;
-    h.state_has_index = 0;
+    h.state_has_index = false;
     let stateno = l_state_no(h, h.ptr);
     if stateno < 0 {
         return;
@@ -1267,14 +1249,14 @@ pub fn apply_set_iptr(h: &mut ApplyHandle) {
     let Some(c) = chain else {
         return;
     };
-    h.state_has_index = 1;
+    h.state_has_index = true;
     if c.fsmptr == -1 {
         // A state that is indexed but has no candidate arcs.
         h.iptr = None;
     } else {
         h.iptr = Some(c);
     }
-    h.state_has_index = 1;
+    h.state_has_index = true;
 }
 
 // [spec:foma:def:apply.apply-net-fn]
@@ -1290,7 +1272,7 @@ pub fn apply_net(h: &mut ApplyHandle) -> Option<String> {
 
     let mut pc: Pc;
 
-    if h.iterate_old == 1 {
+    if h.iterate_old {
         // goto resume
         pc = Pc::Resume;
     } else {
@@ -1302,7 +1284,7 @@ pub fn apply_net(h: &mut ApplyHandle) -> Option<String> {
 
         apply_stack_clear(h);
 
-        if h.has_flags != 0 {
+        if h.has_flags {
             apply_clear_flags(h);
         }
         // goto L2
@@ -1361,7 +1343,7 @@ pub fn apply_net(h: &mut ApplyHandle) -> Option<String> {
     if h.mode.contains(ApplyMode::RANDOM) {
         apply_stack_clear(h);
         h.iterator = 0;
-        h.iterate_old = 0;
+        h.iterate_old = false;
         // RANDOM-mode fall-through: opos has been rewound by backtracking but
         // outstring still holds the last complete word — return it whole (not the
         // [0..opos] prefix).
@@ -1378,10 +1360,8 @@ pub fn apply_append(h: &mut ApplyHandle, cptr: i32, sym: i32) -> i32 {
     let symout = l_out(h, cptr);
 
     // Flag suppression: a suppressed flag diacritic renders as the empty string.
-    let a_suppressed =
-        h.has_flags != 0 && h.show_flags == 0 && h.flag_lookup[symin as usize].r#type != 0;
-    let b_suppressed =
-        h.has_flags != 0 && h.show_flags == 0 && h.flag_lookup[symout as usize].r#type != 0;
+    let a_suppressed = h.has_flags && !h.show_flags && h.flag_lookup[symin as usize].r#type != 0;
+    let b_suppressed = h.has_flags && !h.show_flags && h.flag_lookup[symout as usize].r#type != 0;
     let mut astring: String = if a_suppressed {
         String::new()
     } else {
@@ -1466,7 +1446,7 @@ pub fn apply_append(h: &mut ApplyHandle, cptr: i32, sym: i32) -> i32 {
             };
             h.outstring.push_str(pstring);
         }
-    } else if h.print_pairs != 0 && symin != symout {
+    } else if h.print_pairs && symin != symout {
         /* Print pairs is ON and the symbols differ */
         // C wrote a single input byte into the shared "?" literal (UB). Here the
         // whole input character is used for an UNKNOWN side; sigs is not mutated.
@@ -1505,7 +1485,7 @@ pub fn apply_append(h: &mut ApplyHandle, cptr: i32, sym: i32) -> i32 {
     }
 
     let mut len = (h.outstring.len() - start) as i32;
-    if h.print_space != 0 && len > 0 {
+    if h.print_space && len > 0 {
         // A multi-byte space symbol survives: the return advances by the real
         // number of bytes pushed (C's `len++` clobbered all but its first byte).
         // [spec:foma:sem:apply.apply-append-fn+1]
@@ -1522,7 +1502,7 @@ pub fn apply_match_length(h: &ApplyHandle, symbol: i32) -> i32 {
     if symbol == EPSILON {
         return 0;
     }
-    if h.has_flags != 0 && h.flag_lookup[symbol as usize].r#type != 0 {
+    if h.has_flags && h.flag_lookup[symbol as usize].r#type != 0 {
         return 0;
     }
     if h.mode.contains(ApplyMode::ENUMERATE) {
@@ -1546,8 +1526,8 @@ pub fn apply_match_length(h: &ApplyHandle, symbol: i32) -> i32 {
 // [spec:foma:sem:apply.apply-match-str-fn]
 pub fn apply_match_str(h: &mut ApplyHandle, symbol: i32, position: i32) -> i32 {
     if h.mode.contains(ApplyMode::ENUMERATE) {
-        if h.has_flags != 0 && h.flag_lookup[symbol as usize].r#type != 0 {
-            if h.obey_flags == 0 {
+        if h.has_flags && h.flag_lookup[symbol as usize].r#type != 0 {
+            if !h.obey_flags {
                 return 0;
             }
             let ftype = h.flag_lookup[symbol as usize].r#type;
@@ -1568,8 +1548,8 @@ pub fn apply_match_str(h: &mut ApplyHandle, symbol: i32, position: i32) -> i32 {
     }
 
     /* If symbol is a flag, we need to check consistency */
-    if h.has_flags != 0 && h.flag_lookup[symbol as usize].r#type != 0 {
-        if h.obey_flags == 0 {
+    if h.has_flags && h.flag_lookup[symbol as usize].r#type != 0 {
+        if !h.obey_flags {
             return 0;
         }
         let ftype = h.flag_lookup[symbol as usize].r#type;
@@ -1654,7 +1634,7 @@ pub fn apply_add_sigma_trie(h: &mut ApplyHandle, number: i32, symbol: &str, len:
 // [spec:foma:def:apply.apply-mark-flagstates-fn]
 // [spec:foma:sem:apply.apply-mark-flagstates-fn]
 pub fn apply_mark_flagstates(h: &mut ApplyHandle) {
-    if h.has_flags == 0 || h.flag_lookup.is_empty() {
+    if !h.has_flags || h.flag_lookup.is_empty() {
         return;
     }
     // free previous
@@ -1700,7 +1680,7 @@ pub fn apply_create_sigarray(h: &mut ApplyHandle, net: &Fsm) {
         };
         (maxsigma + 1) as usize
     ];
-    h.has_flags = 0;
+    h.has_flags = false;
     h.flag_state = std::collections::HashMap::new();
 
     // Root level of the trie arena (256 cells) + bookkeeping node.
@@ -1725,7 +1705,7 @@ pub fn apply_create_sigarray(h: &mut ApplyHandle, net: &Fsm) {
 
     for (number, symbol) in &sig_entries {
         if flag_check(symbol) {
-            h.has_flags = 1;
+            h.has_flags = true;
             apply_add_flag(h, flag_get_name(symbol));
         }
         h.sigs[*number as usize].symbol = Some(symbol.clone());
@@ -1746,7 +1726,7 @@ pub fn apply_create_sigarray(h: &mut ApplyHandle, net: &Fsm) {
         h.sigs[IDENTITY as usize].symbol = Some("@".into());
         h.sigs[IDENTITY as usize].length = 1;
     }
-    if h.has_flags != 0 {
+    if h.has_flags {
         h.flag_lookup = vec![
             FlagLookup {
                 r#type: 0,
@@ -1862,7 +1842,7 @@ pub fn apply_add_flag(h: &mut ApplyHandle, name: Option<SmolStr>) {
 pub fn apply_clear_flags(h: &mut ApplyHandle) {
     for flist in h.flag_state.values_mut() {
         flist.value = None;
-        flist.neg = 0;
+        flist.neg = false;
     }
 }
 
@@ -1889,7 +1869,7 @@ pub fn apply_check_flag(
     {
         let flist = h.flag_state.get(name).expect("flag not registered"); // DEVIATION from C (NULL deref; unreachable)
         h.oldflagvalue = flist.value.clone();
-        h.oldflagneg = flist.neg as i32;
+        h.oldflagneg = flist.neg;
     }
 
     if r#type == FLAG_UNIFY {
@@ -1897,11 +1877,11 @@ pub fn apply_check_flag(
         if flist.value.is_none() {
             flist.value = value.map(SmolStr::from);
             return FlagCheck::Succeed;
-        } else if value == flist.value.as_deref() && flist.neg == 0 {
+        } else if value == flist.value.as_deref() && !flist.neg {
             return FlagCheck::Succeed;
-        } else if value != flist.value.as_deref() && flist.neg == 1 {
+        } else if value != flist.value.as_deref() && flist.neg {
             flist.value = value.map(SmolStr::from);
-            flist.neg = 0;
+            flist.neg = false;
             return FlagCheck::Succeed;
         }
         return FlagCheck::Fail;
@@ -1910,7 +1890,7 @@ pub fn apply_check_flag(
     if r#type == FLAG_CLEAR {
         let flist = h.flag_state.get_mut(name).expect("flag not registered");
         flist.value = None;
-        flist.neg = 0;
+        flist.neg = false;
         return FlagCheck::Succeed;
     }
 
@@ -1923,12 +1903,12 @@ pub fn apply_check_flag(
             return FlagCheck::Fail;
         }
         if value != flist.value.as_deref() {
-            if flist.neg == 1 {
+            if flist.neg {
                 return FlagCheck::Fail;
             }
             return FlagCheck::Succeed;
         }
-        if value == flist.value.as_deref() && flist.neg == 1 {
+        if value == flist.value.as_deref() && flist.neg {
             return FlagCheck::Succeed;
         }
         return FlagCheck::Fail;
@@ -1937,14 +1917,14 @@ pub fn apply_check_flag(
     if r#type == FLAG_NEGATIVE {
         let flist = h.flag_state.get_mut(name).expect("flag not registered");
         flist.value = value.map(SmolStr::from);
-        flist.neg = 1;
+        flist.neg = true;
         return FlagCheck::Succeed;
     }
 
     if r#type == FLAG_POSITIVE {
         let flist = h.flag_state.get_mut(name).expect("flag not registered");
         flist.value = value.map(SmolStr::from);
-        flist.neg = 0;
+        flist.neg = false;
         return FlagCheck::Succeed;
     }
 
@@ -1963,7 +1943,7 @@ pub fn apply_check_flag(
             if value != flist.value.as_deref() {
                 return FlagCheck::Fail;
             } else {
-                if flist.neg == 1 {
+                if flist.neg {
                     return FlagCheck::Fail;
                 }
                 return FlagCheck::Succeed;
@@ -1977,7 +1957,7 @@ pub fn apply_check_flag(
             let f2 = h.flag_state.get(value.unwrap_or(""));
             match f2 {
                 Some(n) => (true, n.value.clone(), n.neg),
-                None => (false, None, 0),
+                None => (false, None, false),
             }
         };
         let flist = h.flag_state.get(name).expect("flag not registered");
@@ -2061,10 +2041,10 @@ mod tests {
     fn apply_init_sets_defaults() {
         let net = parse("a:b");
         let h = apply_init(&net);
-        assert_eq!(h.obey_flags, 1);
-        assert_eq!(h.show_flags, 0);
-        assert_eq!(h.print_space, 0);
-        assert_eq!(h.print_pairs, 0);
+        assert!(h.obey_flags);
+        assert!(!h.show_flags);
+        assert!(!h.print_space);
+        assert!(!h.print_pairs);
         assert_eq!(h.separator.as_deref(), Some(":"));
         assert_eq!(h.epsilon_symbol.as_deref(), Some("0"));
         assert!(h.outstring.is_empty());
@@ -2111,7 +2091,7 @@ mod tests {
         assert_eq!(h.sigs[UNKNOWN as usize].symbol.as_deref(), Some("?"));
         assert_eq!(h.sigs[IDENTITY as usize].symbol.as_deref(), Some("@"));
         // no flag diacritics in this net.
-        assert_eq!(h.has_flags, 0);
+        assert!(!h.has_flags);
     }
 
     // [spec:foma:sem:apply.apply-create-sigmatch-fn/test]
@@ -2369,7 +2349,7 @@ mod tests {
         let net = parse("a:b");
         let mut h = apply_init(&net);
         apply_set_print_pairs(&mut h, 1);
-        assert_eq!(h.print_pairs, 1);
+        assert!(h.print_pairs);
         let mut r = apply_down(&mut h, Some("a"));
         let mut got = Vec::new();
         while let Some(s) = r {
@@ -2401,7 +2381,7 @@ mod tests {
         let net = parse("{ab}");
         let mut h = apply_init(&net);
         apply_set_print_space(&mut h, 1);
-        assert_eq!(h.print_space, 1);
+        assert!(h.print_space);
         assert_eq!(h.space_symbol.as_deref(), Some(" "));
         let mut r = apply_down(&mut h, Some("ab"));
         let mut got = Vec::new();
@@ -2415,7 +2395,7 @@ mod tests {
         // space_symbol setter also turns print_space on.
         let mut h2 = apply_init(&net);
         apply_set_space_symbol(&mut h2, "_");
-        assert_eq!(h2.print_space, 1);
+        assert!(h2.print_space);
         assert_eq!(h2.space_symbol.as_deref(), Some("_"));
         let mut r = apply_down(&mut h2, Some("ab"));
         let mut got = Vec::new();
@@ -2467,7 +2447,7 @@ mod tests {
     fn flag_diacritics_end_to_end() {
         let net = parse(r#"[a "@U.F.1@" | b "@U.F.2@"] [c "@R.F.1@" | d "@R.F.2@"]"#);
         let h = apply_init(&net);
-        assert_eq!(h.has_flags, 1);
+        assert!(h.has_flags);
         // states with flag arcs are recorded in flagstates.
         assert!(!h.flagstates.is_empty());
         assert!(h.flagstates.iter().any(|&b| b != 0));
@@ -2602,8 +2582,8 @@ mod tests {
         h.ipos = 5;
         h.opos = 7;
         h.iptr = None;
-        h.state_has_index = 0;
-        apply_stack_push(&mut h, 0, None, None, 0);
+        h.state_has_index = false;
+        apply_stack_push(&mut h, 0, None, None, false);
         assert!(!(apply_stack_isempty(&h)));
         assert_eq!(h.apply_stack_ptr, 1);
         h.ipos = 99;
@@ -2623,12 +2603,12 @@ mod tests {
         h.curr_ptr = 0;
         h.ipos = 0;
         h.opos = 0;
-        apply_stack_push(&mut h, 0, None, None, 0);
+        apply_stack_push(&mut h, 0, None, None, false);
         assert!(!(apply_stack_isempty(&h)));
         apply_force_clear_stack(&mut h);
         assert!(apply_stack_isempty(&h));
         assert_eq!(h.iterator, 0);
-        assert_eq!(h.iterate_old, 0);
+        assert!(!h.iterate_old);
     }
 
     // [spec:foma:sem:apply.apply-binarysearch-fn/test]
@@ -2639,10 +2619,10 @@ mod tests {
         let mut net = parse("{cat}|{car}|{can}");
         fsm_sort_arcs(&mut net, 1);
         assert_eq!(net.arcs_sorted_in, 1);
-        // apply_down sets h.binsearch = 1 from arcs_sorted_in.
+        // apply_down sets h.binsearch = true from arcs_sorted_in.
         let mut h = apply_init(&net);
         let mut r = apply_down(&mut h, Some("cat"));
-        assert_eq!(h.binsearch, 1);
+        assert!(h.binsearch);
         let mut got = Vec::new();
         while let Some(s) = r {
             got.push(s);
@@ -2670,7 +2650,7 @@ mod tests {
         apply_index(&mut h, APPLY_INDEX_INPUT, 0, 1 << 30, 0);
         assert!(!h.index_in.is_empty());
         let mut r = apply_down(&mut h, Some("a"));
-        assert_eq!(h.indexed, 1);
+        assert!(h.indexed);
         let mut got = Vec::new();
         while let Some(s) = r {
             got.push(s);

@@ -113,4 +113,5 @@ assertions (
     {id w10-io-panics, kind @complete, author "brendan@necessary.nu", at 2026-07-12T23:21:37.230931Z}
     {id w10-i32-enums-plain, kind @complete, author "brendan@necessary.nu", at 2026-07-12T23:44:52.982512Z}
     {id w10-i32-bitflags, kind @complete, author "brendan@necessary.nu", at 2026-07-13T00:08:30.001594Z}
+    {id w10-i32-bool-block, kind @doing, author "brendan@necessary.nu", at 2026-07-13T00:10:01.902113Z}
 )

@@ -566,7 +566,7 @@ pub struct ApplyStateIndex {
 #[derive(Debug, Clone, Default)]
 pub struct FlagState {
     pub value: Option<SmolStr>,
-    pub neg: i16,
+    pub neg: bool,
 }
 
 /// (declared inside struct apply_handle in C)
@@ -585,14 +585,14 @@ pub struct Searchstack {
     pub offset: i32,
     // DEVIATION from C (aliases a node inside index_in/index_out chains; owned copy here)
     pub iptr: Option<Box<ApplyStateIndex>>,
-    pub state_has_index: i32,
+    pub state_has_index: bool,
     pub opos: i32,
     pub ipos: i32,
     pub visitmark: i32,
     // DEVIATION from C (flagname/flagvalue alias flag strings owned elsewhere in the handle; owned copies here)
     pub flagname: Option<SmolStr>,
     pub flagvalue: Option<SmolStr>,
-    pub flagneg: i32,
+    pub flagneg: bool,
 }
 
 /// One upper:lower arc segment recorded by apply_append during two-sided
@@ -627,27 +627,27 @@ pub struct ApplyHandle {
     pub sigmatch_array: Vec<SigmatchArray>,
     pub sigma_trie_arrays: Option<Box<SigmaTrieArrays>>,
 
-    pub binsearch: i32,
-    pub indexed: i32,
-    pub state_has_index: i32,
+    pub binsearch: bool,
+    pub indexed: bool,
+    pub state_has_index: bool,
     pub sigma_size: i32,
     pub sigmatch_array_size: i32,
     pub current_instring_length: i32,
-    pub has_flags: i32,
-    pub obey_flags: i32,
-    pub show_flags: i32,
-    pub print_space: i32,
+    pub has_flags: bool,
+    pub obey_flags: bool,
+    pub show_flags: bool,
+    pub print_space: bool,
     pub space_symbol: Option<SmolStr>,
     pub separator: Option<SmolStr>,
     pub epsilon_symbol: Option<SmolStr>,
-    pub print_pairs: i32,
+    pub print_pairs: bool,
     /// Record PairSegments during two-sided enumeration (apply_set_collect_pairs).
     pub collect_pairs: bool,
     pub pair_segments: Vec<PairSegment>,
     pub apply_stack_ptr: i32,
     pub apply_stack_top: i32,
-    pub oldflagneg: i32,
-    pub iterate_old: i32,
+    pub oldflagneg: bool,
+    pub iterate_old: bool,
     pub iterator: i32,
     /// Bit array: one bit per state that has a flag transition
     pub flagstates: Vec<u8>,

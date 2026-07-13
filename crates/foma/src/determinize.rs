@@ -278,7 +278,7 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: SubsetOp) -> Box<Fsm> {
             let setsize = s.t_ptr[T as usize].size as i32;
             let mut theset = s.t_ptr[T as usize].set_offset as usize;
             let mut minsym: i32 = i32::MAX; /* INT_MAX */
-            let mut has_trans = 0;
+            let mut has_trans = false;
             for i in 0..setsize {
                 let stateno = s.set_table[theset + i as usize];
                 let tptr = &mut s.trans_array_determinize[stateno as usize];
@@ -291,10 +291,10 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: SubsetOp) -> Box<Fsm> {
                 let inout0 = s.trans_list_determinize[tbase].inout;
                 if inout0 < minsym {
                     minsym = inout0;
-                    has_trans = 1;
+                    has_trans = true;
                 }
             }
-            if has_trans == 0 {
+            if !has_trans {
                 /* close state */
                 fsm_state_end_state(&mut builder);
                 break 'stateloop; /* continue */
@@ -878,15 +878,15 @@ pub(crate) fn nhash_find_insert(s: &mut Subset, set: &[i32], setsize: i32) -> i3
                 }
                 /* Compare the list at this bucket to the current set by
                 looking at e_table entries */
-                let mut found = 1;
+                let mut found = true;
                 let currlist = tp.set_offset as usize;
                 for j in 0..setsize as usize {
                     if s.e_table[s.set_table[currlist + j] as usize] != mainloop - 1 {
-                        found = 0;
+                        found = false;
                         break;
                     }
                 }
-                if op == SubsetOp::TestStarFree && found == 1 {
+                if op == SubsetOp::TestStarFree && found {
                     for (j, &set_j) in set.iter().enumerate().take(setsize as usize) {
                         if set_j != s.set_table[currlist + j] {
                             /* Set mark (applied after the walk to keep the
@@ -895,7 +895,7 @@ pub(crate) fn nhash_find_insert(s: &mut Subset, set: &[i32], setsize: i32) -> i3
                         }
                     }
                 }
-                if found == 1 {
+                if found {
                     found_setnum = Some(tp.setnum);
                     break;
                 }
@@ -962,7 +962,7 @@ pub(crate) fn move_set(s: &mut Subset, set: &[i32], setsize: i32) -> u32 {
 // [spec:foma:def:determinize.nhash-insert-fn]
 // [spec:foma:sem:determinize.nhash-insert-fn]
 pub(crate) fn nhash_insert(s: &mut Subset, hashval: i32, set: &[i32], setsize: i32) -> i32 {
-    let mut fs = 0;
+    let mut fs = false;
 
     s.current_setnum += 1;
     let current_setnum = s.current_setnum;
@@ -970,7 +970,7 @@ pub(crate) fn nhash_insert(s: &mut Subset, hashval: i32, set: &[i32], setsize: i
     s.nhash_load += 1;
     for i in 0..setsize {
         if s.finals[set[i as usize] as usize] {
-            fs = 1;
+            fs = true;
         }
     }
     let head_empty = s.table[hashval as usize].size == 0;
@@ -981,7 +981,7 @@ pub(crate) fn nhash_insert(s: &mut Subset, hashval: i32, set: &[i32], setsize: i
         tableptr.size = setsize as u32;
         tableptr.setnum = current_setnum;
 
-        add_T_ptr(s, current_setnum, setsize, set_offset, fs);
+        add_T_ptr(s, current_setnum, setsize, set_offset, fs as i32);
         return current_setnum;
     }
 
@@ -998,7 +998,7 @@ pub(crate) fn nhash_insert(s: &mut Subset, hashval: i32, set: &[i32], setsize: i
     });
     head.next = Some(tableptr);
 
-    add_T_ptr(s, current_setnum, setsize, set_offset, fs);
+    add_T_ptr(s, current_setnum, setsize, set_offset, fs as i32);
     current_setnum
 }
 

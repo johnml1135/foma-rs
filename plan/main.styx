@@ -1310,6 +1310,14 @@ children (
                 id w10-i32-bool-block
                 title "Magic-i32 → bool: ApplyHandle has_flags/obey_flags/show_flags/print_space/print_pairs/binsearch/indexed/state_has_index/iterate_old + Searchstack mirrors + FlagState.neg/oldflagneg; flags/determinize locals (found/flag/change/has_trans/fs, isflag/ftable→Vec<bool>). Keep C-ABI setter params value:i32 (do !=0 inside)"
                 priority 2
+                log (
+                    {
+                        at 2026-07-13T00:10:01.902113Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Todo → Doing (nplan_start)"
+                    }
+                )
             }
 
             {
