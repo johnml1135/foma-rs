@@ -11,7 +11,7 @@ use crate::sigma::{sigma_cleanup, sigma_max, sigma_remove_num, sigma_sort};
 use crate::structures::{fsm_copy, fsm_empty_set};
 use crate::topsort::fsm_topsort;
 use crate::types::FlagType;
-use crate::types::{EPSILON, Fsm, FsmState, NO, UNK};
+use crate::types::{EPSILON, Fsm, FsmState, Tern};
 use smol_str::SmolStr;
 
 /// Pairwise flag-compatibility verdict from `flag_build` (C #defines FAIL=1 /
@@ -439,9 +439,9 @@ pub(crate) fn flag_purge(net: &mut Fsm, name: Option<&str>) {
     }
 
     /* free(ftable) — drop */
-    net.is_deterministic = NO;
-    net.is_minimized = NO;
-    net.is_epsilon_free = NO;
+    net.is_deterministic = Tern::No;
+    net.is_minimized = Tern::No;
+    net.is_epsilon_free = Tern::No;
 }
 
 /* Extract all flags from network and place them in struct flag linked list */
@@ -725,9 +725,9 @@ pub fn flag_twosided(opts: &FomaOptions, mut net: Box<Fsm>) -> Box<Fsm> {
 
     if newarcs == 0 {
         if change {
-            net.is_deterministic = UNK;
-            net.is_minimized = UNK;
-            net.is_pruned = UNK;
+            net.is_deterministic = Tern::Unk;
+            net.is_minimized = Tern::Unk;
+            net.is_pruned = Tern::Unk;
             return fsm_topsort(fsm_minimize(opts, net));
         }
         return net;
@@ -803,8 +803,8 @@ pub fn flag_twosided(opts: &FomaOptions, mut net: Box<Fsm>) -> Box<Fsm> {
     }
     /* Add sentinel */
     add_fsm_arc(&mut net.states, j, -1, -1, -1, -1, -1, -1);
-    net.is_deterministic = UNK;
-    net.is_minimized = UNK;
+    net.is_deterministic = Tern::Unk;
+    net.is_minimized = Tern::Unk;
     fsm_topsort(fsm_minimize(opts, net))
 }
 
@@ -1230,9 +1230,9 @@ mod tests {
         let labels = arc_labels(&net);
         assert!(labels.iter().any(|(i, o)| i == "@U.G.1@" && o == "@U.G.1@"));
         assert!(!labels.iter().any(|(i, _)| i == "@U.F.1@"));
-        assert_eq!(net.is_deterministic, NO);
-        assert_eq!(net.is_minimized, NO);
-        assert_eq!(net.is_epsilon_free, NO);
+        assert_eq!(net.is_deterministic, Tern::No);
+        assert_eq!(net.is_minimized, Tern::No);
+        assert_eq!(net.is_epsilon_free, Tern::No);
 
         /* name == None purges every flag. */
         let mut net2 = fsm_parse_regex(opts, r#""@U.F.1@" a "@U.G.1@""#, None, None).unwrap();

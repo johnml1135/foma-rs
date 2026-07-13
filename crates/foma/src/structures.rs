@@ -30,7 +30,7 @@ use crate::sigma::{
 use crate::topsort::fsm_topsort;
 use crate::types::{
     BUILD_VERSION, DefinedQuantifiers, EPSILON, Fsm, FsmState, IDENTITY, MAJOR_VERSION,
-    MINOR_VERSION, NO, OP_IGNORE_ALL, STATUS_VERSION, Sigma, StateArray, UNKNOWN, YES,
+    MINOR_VERSION, NO, OP_IGNORE_ALL, STATUS_VERSION, Sigma, StateArray, Tern, UNKNOWN, YES,
 };
 use smol_str::SmolStr;
 
@@ -216,8 +216,8 @@ pub fn fsm_sigma_net(net: Box<Fsm>) -> Box<Fsm> {
     /* free(net->states) */
     net.states = Vec::new();
     fsm_state_close(&mut builder, &mut net);
-    net.is_minimized = YES;
-    net.is_loop_free = YES;
+    net.is_minimized = Tern::Yes;
+    net.is_loop_free = Tern::Yes;
     net.pathcount = pathcount as i64;
     sigma_cleanup(&mut net, 1);
     net
@@ -266,8 +266,8 @@ pub fn fsm_sigma_pairs_net(net: Box<Fsm>) -> Box<Fsm> {
         fsm_destroy(net);
         return fsm_empty_set();
     }
-    net.is_minimized = YES;
-    net.is_loop_free = YES;
+    net.is_minimized = Tern::Yes;
+    net.is_loop_free = Tern::Yes;
     net.pathcount = pathcount as i64;
     sigma_cleanup(&mut net, 1);
     net
@@ -323,11 +323,11 @@ pub fn fsm_create(name: &str) -> Box<Fsm> {
         linecount: 0,
         finalcount: 0,
         pathcount: 0,
-        is_deterministic: NO,
-        is_pruned: NO,
-        is_minimized: NO,
-        is_epsilon_free: NO,
-        is_loop_free: NO,
+        is_deterministic: Tern::No,
+        is_pruned: Tern::No,
+        is_minimized: Tern::No,
+        is_epsilon_free: Tern::No,
+        is_loop_free: Tern::No,
         is_completed: 0,
         arcs_sorted_in: NO,
         arcs_sorted_out: NO,
@@ -1682,9 +1682,9 @@ mod tests {
         assert_eq!(net.linecount, 2);
         assert_eq!(net.pathcount, 0);
         // flags: det/pru/min/eps/loop YES, completed NO, sort flags cleared
-        assert_eq!(net.is_deterministic, YES);
-        assert_eq!(net.is_minimized, YES);
-        assert_eq!(net.is_loop_free, YES);
+        assert_eq!(net.is_deterministic, Tern::Yes);
+        assert_eq!(net.is_minimized, Tern::Yes);
+        assert_eq!(net.is_loop_free, Tern::Yes);
         assert_eq!(net.is_completed, NO);
         assert_eq!(net.arcs_sorted_in, NO);
     }
@@ -1759,8 +1759,8 @@ mod tests {
         assert_eq!(net.name, "mynet");
         assert_eq!(net.arity, 1);
         assert_eq!(net.arccount, 0);
-        assert_eq!(net.is_deterministic, NO);
-        assert_eq!(net.is_minimized, NO);
+        assert_eq!(net.is_deterministic, Tern::No);
+        assert_eq!(net.is_minimized, Tern::No);
         assert_eq!(net.arcs_sorted_in, NO);
         // sigma = empty alphabet
         assert!(net.sigma.is_empty());
@@ -2115,8 +2115,8 @@ mod tests {
         let net = fsm_sigma_net(parse("a | b | c"));
         assert_eq!(net.pathcount, 3);
         assert_eq!(net.statecount, 2);
-        assert_eq!(net.is_minimized, YES);
-        assert_eq!(net.is_loop_free, YES);
+        assert_eq!(net.is_minimized, Tern::Yes);
+        assert_eq!(net.is_loop_free, Tern::Yes);
 
         // sigma_size == 0 (sigma == NULL) -> destroy and return empty set
         let mut bare = fsm_create("");
@@ -2135,7 +2135,7 @@ mod tests {
         let net = fsm_sigma_pairs_net(parse("a:b | a:c"));
         assert_eq!(net.pathcount, 2);
         assert_eq!(net.statecount, 2);
-        assert_eq!(net.is_minimized, YES);
+        assert_eq!(net.is_minimized, Tern::Yes);
 
         // no arcs in source -> pathcount 0 -> destroy and return empty set
         let res = fsm_sigma_pairs_net(fsm_empty_string());

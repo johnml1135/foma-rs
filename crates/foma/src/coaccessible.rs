@@ -24,7 +24,7 @@ use crate::int_stack::IntStack;
 use crate::options::FomaOptions;
 use crate::sigma::sigma_create;
 use crate::structures::{fsm_empty, fsm_sigma_destroy};
-use crate::types::{Fsm, YES};
+use crate::types::{Fsm, Tern};
 
 // [spec:foma:def:coaccessible.invtable]
 pub struct Invtable {
@@ -142,7 +142,7 @@ pub fn fsm_coaccessible(net: Box<Fsm>) -> Box<Fsm> {
             net.arccount = 0;
             net.linecount = 2;
             net.pathcount = 0;
-            net.is_pruned = YES;
+            net.is_pruned = Tern::Yes;
             return net;
         }
         mapping[0] = 0; /* state 0 always exists */
@@ -226,7 +226,7 @@ pub fn fsm_coaccessible(net: Box<Fsm>) -> Box<Fsm> {
 
     /* printf("Markccount %i \n",markcount); */
 
-    net.is_pruned = YES;
+    net.is_pruned = Tern::Yes;
     net
 }
 
@@ -274,7 +274,7 @@ mod tests {
         assert_eq!(net.statecount, 2);
         assert_eq!(net.linecount, 2);
         assert_eq!(net.arccount, 1);
-        assert_eq!(net.is_pruned, YES);
+        assert_eq!(net.is_pruned, Tern::Yes);
     }
 
     // [spec:foma:sem:coaccessible.fsm-coaccessible-fn/test]
@@ -302,7 +302,7 @@ mod tests {
         assert_eq!(net.statecount, 3);
         assert_eq!(net.linecount, 3);
         assert_eq!(net.arccount, 2);
-        assert_eq!(net.is_pruned, YES);
+        assert_eq!(net.is_pruned, Tern::Yes);
     }
 
     // [spec:foma:sem:coaccessible.fsm-coaccessible-fn+2/test]
@@ -326,14 +326,14 @@ mod tests {
         assert_eq!(net.linecount, 2);
         assert_eq!(net.arccount, 0);
         assert!(net.sigma.is_empty(), "fresh empty sigma");
-        assert_eq!(net.is_pruned, YES);
+        assert_eq!(net.is_pruned, Tern::Yes);
         // Idempotent: re-pruning the empty machine (statecount 1 ⟹ non-empty
         // coacc) returns the same shape instead of indexing coacc out of bounds.
         let net = fsm_coaccessible(net);
         assert_eq!(lines(&net), vec![(0, -1, -1, -1, 0, 1)]);
         assert_eq!(net.statecount, 1);
         assert_eq!(net.linecount, 2);
-        assert_eq!(net.is_pruned, YES);
+        assert_eq!(net.is_pruned, Tern::Yes);
     }
 
     // [spec:foma:sem:coaccessible.fsm-coaccessible-fn/test]
@@ -387,7 +387,7 @@ mod tests {
         assert_eq!(net.statecount, sc);
         assert_eq!(net.linecount, lc);
         assert_eq!(net.arccount, ac);
-        assert_eq!(net.is_pruned, YES);
+        assert_eq!(net.is_pruned, Tern::Yes);
     }
 
     // [spec:foma:sem:coaccessible.fsm-coaccessible-fn+2/test]
@@ -423,6 +423,6 @@ mod tests {
         assert_eq!(net.linecount, 2);
         assert_eq!(net.arccount, 0);
         assert!(net.sigma.is_empty(), "fresh empty sigma");
-        assert_eq!(net.is_pruned, YES);
+        assert_eq!(net.is_pruned, Tern::Yes);
     }
 }

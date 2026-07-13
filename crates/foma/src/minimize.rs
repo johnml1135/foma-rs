@@ -22,7 +22,7 @@ use crate::options::FomaOptions;
 use crate::reverse::fsm_reverse;
 use crate::sigma::sigma_max;
 use crate::structures::{fsm_destroy, fsm_empty_set};
-use crate::types::{EPSILON, Fsm, UNK, UNKNOWN, YES};
+use crate::types::{EPSILON, Fsm, Tern, UNK, UNKNOWN, YES};
 
 // [spec:foma:def:minimize.statesym]
 /* Declared in the C but never used (dead declaration) — kept literally. */
@@ -159,13 +159,13 @@ pub fn fsm_minimize(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
     NULL-able callers keep the check at the call site */
     let mut net = net;
     /* The network needs to be deterministic and trim before we minimize */
-    if net.is_deterministic != YES {
+    if net.is_deterministic != Tern::Yes {
         net = fsm_determinize(net);
     }
-    if net.is_pruned != YES {
+    if net.is_pruned != Tern::Yes {
         net = fsm_coaccessible(net);
     }
-    if net.is_minimized != YES && opts.minimal {
+    if net.is_minimized != Tern::Yes && opts.minimal {
         if opts.minimize_hopcroft {
             net = fsm_minimize_hop(net);
         } else {
@@ -927,8 +927,8 @@ mod tests {
         assert_eq!(m.statecount, 2, "3-state DFA minimizes to 2");
         assert_eq!(m.arccount, 4);
         assert_eq!(m.linecount, 5);
-        assert_eq!(m.is_deterministic, YES);
-        assert_eq!(m.is_minimized, YES);
+        assert_eq!(m.is_deterministic, Tern::Yes);
+        assert_eq!(m.is_minimized, Tern::Yes);
         /* exactly one structural final state (the merged {1,2}) ... */
         let finals: Vec<i32> = m
             .states
@@ -961,8 +961,8 @@ mod tests {
         };
         let m = fsm_minimize(&opts, net);
         assert_eq!(m.statecount, 2);
-        assert_eq!(m.is_deterministic, YES);
-        assert_eq!(m.is_minimized, YES);
+        assert_eq!(m.is_deterministic, Tern::Yes);
+        assert_eq!(m.is_minimized, Tern::Yes);
         assert_eq!(accepts(&m, ""), None);
         assert_eq!(accepts(&m, "a"), Some("a".to_string()));
         assert_eq!(accepts(&m, "abba"), Some("abba".to_string()));
@@ -973,7 +973,7 @@ mod tests {
     #[test]
     fn fsm_minimize_brz_direct() {
         let m = fsm_minimize_brz(build_ab_plus());
-        assert_eq!(m.is_deterministic, YES);
+        assert_eq!(m.is_deterministic, Tern::Yes);
         assert_eq!(m.statecount, 2);
         assert_eq!(accepts(&m, "a"), Some("a".to_string()));
         assert_eq!(accepts(&m, ""), None);
@@ -997,7 +997,7 @@ mod tests {
         assert_eq!(e.finalcount, 0);
         assert_eq!(e.arccount, 0);
         assert_eq!(e.linecount, 2);
-        assert_eq!(e.is_deterministic, YES);
+        assert_eq!(e.is_deterministic, Tern::Yes);
     }
 
     // Property: minimize(net) and determinize(net) accept the same word set

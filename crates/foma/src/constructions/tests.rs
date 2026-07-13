@@ -163,11 +163,11 @@ fn fsm_update_flags_assigns_verbatim_and_clears_arc_sort() {
     net.arcs_sorted_in = YES;
     net.arcs_sorted_out = YES;
     fsm_update_flags(&mut net, 1, 0, 2, 1, 0, 2);
-    assert_eq!(net.is_deterministic, 1);
-    assert_eq!(net.is_pruned, 0);
-    assert_eq!(net.is_minimized, 2);
-    assert_eq!(net.is_epsilon_free, 1);
-    assert_eq!(net.is_loop_free, 0);
+    assert_eq!(net.is_deterministic, Tern::Yes);
+    assert_eq!(net.is_pruned, Tern::No);
+    assert_eq!(net.is_minimized, Tern::Unk);
+    assert_eq!(net.is_epsilon_free, Tern::Yes);
+    assert_eq!(net.is_loop_free, Tern::No);
     assert_eq!(net.is_completed, 2);
     assert_eq!(net.arcs_sorted_in, NO);
     assert_eq!(net.arcs_sorted_out, NO);
@@ -612,7 +612,8 @@ fn fsm_union_epsilon_start_construction() {
     );
     assert_eq!(net_counts(&u), (5, 7, 4, 2));
     assert_eq!(
-        u.is_deterministic, NO,
+        u.is_deterministic,
+        Tern::No,
         "union leaves a nondeterministic net"
     );
 }
@@ -733,7 +734,7 @@ fn fsm_optionality_short_circuits_to_union_with_empty_string() {
     let o = fsm_optionality(opts, re("a"));
     assert_eq!(words(&o), ws(&["", "a"]));
     // Built by the union construction, so nondeterministic with an epsilon start.
-    assert_eq!(o.is_deterministic, NO);
+    assert_eq!(o.is_deterministic, Tern::No);
     assert!(sigma_find_number(EPSILON, &o.sigma).is_some());
 }
 
@@ -777,9 +778,9 @@ fn fsm_symbol_ordinary_exact_shape_flags_and_language() {
     assert_eq!(sigma_pairs(&net), vec![(3, "a".to_string())]);
     assert_eq!(net_counts(&net), (2, 2, 1, 1));
     assert_eq!((net.arity, net.pathcount), (1, 1));
-    assert_eq!(net.is_deterministic, YES);
-    assert_eq!(net.is_minimized, YES);
-    assert_eq!(net.is_epsilon_free, YES);
+    assert_eq!(net.is_deterministic, Tern::Yes);
+    assert_eq!(net.is_minimized, Tern::Yes);
+    assert_eq!(net.is_epsilon_free, Tern::Yes);
     assert_eq!((net.arcs_sorted_in, net.arcs_sorted_out), (YES, YES));
     assert_eq!(down(&net, "a"), ws(&["a"]));
 }
@@ -797,9 +798,9 @@ fn fsm_symbol_epsilon_is_final_start_with_overridden_no_flags() {
     assert_eq!(net_counts(&net), (1, 1, 0, 1));
     // Literal quirk: the epsilon machine is trivially det/min/eps-free but
     // fsm_symbol overrides all three to NO.
-    assert_eq!(net.is_deterministic, NO);
-    assert_eq!(net.is_minimized, NO);
-    assert_eq!(net.is_epsilon_free, NO);
+    assert_eq!(net.is_deterministic, Tern::No);
+    assert_eq!(net.is_minimized, Tern::No);
+    assert_eq!(net.is_epsilon_free, Tern::No);
     assert_eq!(words(&net), ws(&[""]));
 }
 

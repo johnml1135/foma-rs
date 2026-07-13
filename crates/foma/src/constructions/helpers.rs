@@ -35,11 +35,11 @@ pub fn fsm_update_flags(
     r#loop: i32,
     completed: i32,
 ) {
-    net.is_deterministic = det;
-    net.is_pruned = pru;
-    net.is_minimized = min;
-    net.is_epsilon_free = eps;
-    net.is_loop_free = r#loop;
+    net.is_deterministic = Tern::from_wire(det);
+    net.is_pruned = Tern::from_wire(pru);
+    net.is_minimized = Tern::from_wire(min);
+    net.is_epsilon_free = Tern::from_wire(eps);
+    net.is_loop_free = Tern::from_wire(r#loop);
     net.is_completed = completed;
     net.arcs_sorted_in = NO;
     net.arcs_sorted_out = NO;

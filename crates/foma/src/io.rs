@@ -37,7 +37,8 @@ use crate::trie::{
     fsm_trie_add_word, fsm_trie_done, fsm_trie_end_word, fsm_trie_init, fsm_trie_symbol,
 };
 use crate::types::{
-    DefinedNetworks, Fsm, FsmConstructHandle, FsmReadBinaryHandle, FsmState, IDENTITY, UNKNOWN,
+    DefinedNetworks, Fsm, FsmConstructHandle, FsmReadBinaryHandle, FsmState, IDENTITY, Tern,
+    UNKNOWN,
 };
 use smol_str::SmolStr;
 
@@ -972,19 +973,19 @@ pub fn io_net_read(iobh: &mut IoBufHandle) -> Result<Option<Box<Fsm>>, FomaError
             net.pathcount = parse_leading_i64(toks[5]);
         }
         if toks.len() > 6 {
-            net.is_deterministic = parse_leading_i32(toks[6]);
+            net.is_deterministic = Tern::from_wire(parse_leading_i32(toks[6]));
         }
         if toks.len() > 7 {
-            net.is_pruned = parse_leading_i32(toks[7]);
+            net.is_pruned = Tern::from_wire(parse_leading_i32(toks[7]));
         }
         if toks.len() > 8 {
-            net.is_minimized = parse_leading_i32(toks[8]);
+            net.is_minimized = Tern::from_wire(parse_leading_i32(toks[8]));
         }
         if toks.len() > 9 {
-            net.is_epsilon_free = parse_leading_i32(toks[9]);
+            net.is_epsilon_free = Tern::from_wire(parse_leading_i32(toks[9]));
         }
         if toks.len() > 10 {
-            net.is_loop_free = parse_leading_i32(toks[10]);
+            net.is_loop_free = Tern::from_wire(parse_leading_i32(toks[10]));
         }
         if toks.len() > 11 {
             extras = parse_leading_i32(toks[11]);
@@ -1220,11 +1221,11 @@ pub fn foma_net_print<W: std::io::Write + ?Sized>(
         net.linecount,
         net.finalcount,
         net.pathcount,
-        net.is_deterministic,
-        net.is_pruned,
-        net.is_minimized,
-        net.is_epsilon_free,
-        net.is_loop_free,
+        net.is_deterministic as i32,
+        net.is_pruned as i32,
+        net.is_minimized as i32,
+        net.is_epsilon_free as i32,
+        net.is_loop_free as i32,
         extras,
         net.name
     )?;
@@ -1646,11 +1647,11 @@ mod tests {
         net.linecount = 3;
         net.finalcount = 1;
         net.pathcount = 1;
-        net.is_deterministic = 1;
-        net.is_pruned = 1;
-        net.is_minimized = 1;
-        net.is_epsilon_free = 1;
-        net.is_loop_free = 1;
+        net.is_deterministic = Tern::Yes;
+        net.is_pruned = Tern::Yes;
+        net.is_minimized = Tern::Yes;
+        net.is_epsilon_free = Tern::Yes;
+        net.is_loop_free = Tern::Yes;
         net.is_completed = 2;
         net.arcs_sorted_in = 0;
         net.arcs_sorted_out = 0;
@@ -1787,6 +1788,42 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
         foma_net_print(&net, &mut buf).expect("writing net to in-memory buffer");
         assert_eq!(String::from_utf8(buf).unwrap(), AB_FOMA_TEXT);
+    }
+
+    // [spec:foma:sem:io.foma-net-print-fn+1/test]
+    // [spec:foma:sem:io.io-net-read-fn/test]
+    #[test]
+    fn tern_props_survive_the_wire_in_all_three_states() {
+        /* The tri-state property flags cross the wire as their raw discriminant:
+        No→0, Yes→1, Unk→2. The exact-image test above only covers Yes; this pins
+        `Tern::from_wire` (read) and `self as i32` (write) for No and Unk too. */
+        let mut net = craft_ab_net("tern");
+        net.is_deterministic = Tern::No;
+        net.is_pruned = Tern::Yes;
+        net.is_minimized = Tern::Unk;
+        net.is_epsilon_free = Tern::No;
+        net.is_loop_free = Tern::Unk;
+
+        let mut buf: Vec<u8> = Vec::new();
+        foma_net_print(&net, &mut buf).expect("writing net to in-memory buffer");
+        let text = String::from_utf8(buf).unwrap();
+        assert!(
+            text.contains("2 1 2 3 1 1 0 1 2 0 2 2 tern\n"),
+            "props line carries raw 0/1/2 discriminants: {text}"
+        );
+
+        let mut rbuf = text.into_bytes();
+        rbuf.push(0);
+        let mut h = IoBufHandle {
+            io_buf: Some(rbuf),
+            io_buf_ptr: 0,
+        };
+        let back = io_net_read(&mut h).unwrap().unwrap();
+        assert_eq!(back.is_deterministic, Tern::No);
+        assert_eq!(back.is_pruned, Tern::Yes);
+        assert_eq!(back.is_minimized, Tern::Unk);
+        assert_eq!(back.is_epsilon_free, Tern::No);
+        assert_eq!(back.is_loop_free, Tern::Unk);
     }
 
     // [spec:foma:sem:io.foma-net-print-fn+1/test]

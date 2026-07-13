@@ -16,7 +16,7 @@ use crate::dynarray::{
 #[cfg(test)]
 use crate::options::FomaOptions;
 use crate::structures::fsm_destroy;
-use crate::types::{EPSILON, Fsm};
+use crate::types::{EPSILON, Fsm, Tern};
 
 // [spec:foma:def:reverse.fsm-reverse-fn]
 // [spec:foma:sem:reverse.fsm-reverse-fn]
@@ -57,8 +57,8 @@ pub fn fsm_reverse(net: Box<Fsm>) -> Box<Fsm> {
     fsm_construct_set_initial(&mut revh, 0);
     let net = fsm_read_done(inh);
     let mut revnet = fsm_construct_done(revh);
-    revnet.is_deterministic = 0;
-    revnet.is_epsilon_free = 0;
+    revnet.is_deterministic = Tern::No;
+    revnet.is_epsilon_free = Tern::No;
     fsm_destroy(net);
     revnet
 }
@@ -105,8 +105,8 @@ mod tests {
         let rev = fsm_reverse(net);
         /* exact state+1 shift: one brand-new state 0 */
         assert_eq!(rev.statecount, old_statecount + 1);
-        assert_eq!(rev.is_deterministic, 0);
-        assert_eq!(rev.is_epsilon_free, 0);
+        assert_eq!(rev.is_deterministic, Tern::No);
+        assert_eq!(rev.is_epsilon_free, Tern::No);
 
         let rev_lines = real_lines(&rev);
         let rev_arcs: Vec<(i32, i16, i16, i32)> = rev_lines

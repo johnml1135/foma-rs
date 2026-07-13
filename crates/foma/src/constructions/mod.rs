@@ -41,7 +41,7 @@ pub(crate) use crate::structures::{
 pub(crate) use crate::topsort::fsm_topsort;
 pub(crate) use crate::types::{
     EPSILON, Fsm, FsmState, Fsmcontexts, IDENTITY, NO, OP_IGNORE_ALL, OP_IGNORE_INTERNAL,
-    PATHCOUNT_CYCLIC, PATHCOUNT_UNKNOWN, Sides, Sigma, UNK, UNKNOWN, YES,
+    PATHCOUNT_CYCLIC, PATHCOUNT_UNKNOWN, Sides, Sigma, Tern, UNK, UNKNOWN, YES,
 };
 
 /* C: #define KLEENE_STAR 0 / KLEENE_PLUS 1 / OPTIONALITY 2 and

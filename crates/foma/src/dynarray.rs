@@ -23,7 +23,7 @@ use crate::sigma::{sigma_max, sigma_sort, sigma_to_list};
 use crate::structures::{fsm_create, fsm_destroy, fsm_empty_set};
 use crate::types::{
     EPSILON, Fsm, FsmConstructHandle, FsmReadHandle, FsmSigmaHash, FsmSigmaList, FsmState,
-    FsmStateList, FsmTransList, IDENTITY, PATHCOUNT_UNKNOWN, Sigma, UNK, UNKNOWN,
+    FsmStateList, FsmTransList, IDENTITY, PATHCOUNT_UNKNOWN, Sigma, Tern, UNK, UNKNOWN,
 };
 use smol_str::SmolStr;
 
@@ -241,11 +241,11 @@ impl FsmBuilder {
         if self.num_initials > 1 {
             self.is_deterministic = false;
         }
-        net.is_deterministic = self.is_deterministic as i32;
-        net.is_pruned = UNK;
-        net.is_minimized = UNK;
-        net.is_epsilon_free = self.is_epsilon_free as i32;
-        net.is_loop_free = UNK;
+        net.is_deterministic = Tern::from_wire(self.is_deterministic as i32);
+        net.is_pruned = Tern::Unk;
+        net.is_minimized = Tern::Unk;
+        net.is_epsilon_free = Tern::from_wire(self.is_epsilon_free as i32);
+        net.is_loop_free = Tern::Unk;
         net.is_completed = UNK;
         net.arcs_sorted_in = 0;
         net.arcs_sorted_out = 0;
@@ -1318,11 +1318,11 @@ mod tests {
         assert_eq!(net.linecount, 3);
         assert_eq!(net.finalcount, 1);
         assert_eq!(net.pathcount, PATHCOUNT_UNKNOWN);
-        assert_eq!(net.is_deterministic, 1);
-        assert_eq!(net.is_epsilon_free, 1);
-        assert_eq!(net.is_pruned, UNK);
-        assert_eq!(net.is_minimized, UNK);
-        assert_eq!(net.is_loop_free, UNK);
+        assert_eq!(net.is_deterministic, Tern::Yes);
+        assert_eq!(net.is_epsilon_free, Tern::Yes);
+        assert_eq!(net.is_pruned, Tern::Unk);
+        assert_eq!(net.is_minimized, Tern::Unk);
+        assert_eq!(net.is_loop_free, Tern::Unk);
         assert_eq!(net.is_completed, UNK);
         assert_eq!(net.arcs_sorted_in, 0);
         assert_eq!(net.arcs_sorted_out, 0);
@@ -1412,7 +1412,7 @@ mod tests {
         let mut net = fsm_create("");
         fsm_state_close(&mut b, &mut net);
         /* num_initials > 1 forces is_deterministic = 0 even with no dup arcs */
-        assert_eq!(net.is_deterministic, 0);
+        assert_eq!(net.is_deterministic, Tern::No);
         /* and slookup is freed */
         assert!(b.slookup.is_empty());
     }
@@ -1644,8 +1644,8 @@ mod tests {
         assert_eq!(net.linecount, 3);
         assert_eq!(net.pathcount, PATHCOUNT_UNKNOWN);
         assert_eq!(net.arity, 1);
-        assert_eq!(net.is_deterministic, 1);
-        assert_eq!(net.is_epsilon_free, 1);
+        assert_eq!(net.is_deterministic, Tern::Yes);
+        assert_eq!(net.is_epsilon_free, Tern::Yes);
         /* line table: arc line, state-1 placeholder, sentinel */
         assert_eq!(line(&net.states[0]), (0, 3, 3, 1, 0, 1));
         assert_eq!(line(&net.states[1]), (1, -1, -1, -1, 1, 0));

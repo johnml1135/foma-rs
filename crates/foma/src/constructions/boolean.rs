@@ -115,10 +115,10 @@ pub fn fsm_concat(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm
         sigma_add_special(EPSILON, &mut net1.sigma);
     }
     fsm_count(&mut net1);
-    net1.is_epsilon_free = NO;
-    net1.is_deterministic = NO;
-    net1.is_minimized = NO;
-    net1.is_pruned = NO;
+    net1.is_epsilon_free = Tern::No;
+    net1.is_deterministic = Tern::No;
+    net1.is_minimized = Tern::No;
+    net1.is_pruned = Tern::No;
     fsm_minimize(opts, net1)
 }
 
@@ -240,7 +240,7 @@ pub fn fsm_completes(opts: &FomaOptions, net: Box<Fsm>, operation: i32) -> Box<F
     /* TODO: check arity */
 
     let mut net = net;
-    if net.is_minimized != YES {
+    if net.is_minimized != Tern::Yes {
         net = fsm_minimize(opts, net);
     }
 
@@ -305,7 +305,7 @@ pub fn fsm_completes(opts: &FomaOptions, net: Box<Fsm>, operation: i32) -> Box<F
         i += 1;
     }
 
-    net.is_loop_free = NO;
+    net.is_loop_free = Tern::No;
     net.pathcount = PATHCOUNT_CYCLIC;
 
     if incomplete == 0 && arccount == sigsize * statecount {
@@ -324,9 +324,9 @@ pub fn fsm_completes(opts: &FomaOptions, net: Box<Fsm>, operation: i32) -> Box<F
         drop(finals);
         drop(sinks);
         net.is_completed = YES;
-        net.is_minimized = YES;
-        net.is_pruned = NO;
-        net.is_deterministic = YES;
+        net.is_minimized = Tern::Yes;
+        net.is_pruned = Tern::No;
+        net.is_deterministic = Tern::Yes;
         return net;
     }
 
@@ -436,8 +436,8 @@ pub fn fsm_completes(opts: &FomaOptions, net: Box<Fsm>, operation: i32) -> Box<F
     drop(finals);
     drop(sinks);
     drop(state_table);
-    net.is_minimized = NO;
-    net.is_pruned = NO;
+    net.is_minimized = Tern::No;
+    net.is_pruned = Tern::No;
     net.is_completed = YES;
     net.statecount = statecount;
     net

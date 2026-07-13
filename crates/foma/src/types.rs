@@ -86,6 +86,29 @@ pub const NO: i32 = 0;
 pub const YES: i32 = 1;
 pub const UNK: i32 = 2;
 
+/// Tri-state Fsm property flag (C: `NO`=0 / `YES`=1 / `UNK`=2 on `fsm.is_*`).
+/// `Unk` ("unknown") is why these can't be `bool`. `#[repr(i32)]` keeps the
+/// discriminants equal to the on-disk values, so `self as i32` is the wire form.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum Tern {
+    No = 0,
+    Yes = 1,
+    Unk = 2,
+}
+
+impl Tern {
+    /// Decode an on-disk / setter integer. foma only ever writes 0/1/2; any
+    /// other value (which C would have stored verbatim) is read as `Unk`.
+    pub fn from_wire(v: i32) -> Tern {
+        match v {
+            0 => Tern::No,
+            1 => Tern::Yes,
+            _ => Tern::Unk,
+        }
+    }
+}
+
 /* Compared against fsm.pathcount (long long in C) */
 pub const PATHCOUNT_CYCLIC: i64 = -1;
 pub const PATHCOUNT_OVERFLOW: i64 = -2;
@@ -202,11 +225,11 @@ pub struct Fsm {
     pub linecount: i32,
     pub finalcount: i32,
     pub pathcount: i64,
-    pub is_deterministic: i32,
-    pub is_pruned: i32,
-    pub is_minimized: i32,
-    pub is_epsilon_free: i32,
-    pub is_loop_free: i32,
+    pub is_deterministic: Tern,
+    pub is_pruned: Tern,
+    pub is_minimized: Tern,
+    pub is_epsilon_free: Tern,
+    pub is_loop_free: Tern,
     pub is_completed: i32,
     pub arcs_sorted_in: i32,
     pub arcs_sorted_out: i32,

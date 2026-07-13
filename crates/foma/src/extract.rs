@@ -124,7 +124,7 @@ mod tests {
     use super::*;
     use crate::apply::{apply_down, apply_init};
     use crate::regex::fsm_parse_regex;
-    use crate::types::EPSILON;
+    use crate::types::{EPSILON, Tern};
 
     fn sigma_syms(net: &Fsm) -> Vec<(i32, String)> {
         net.sigma
@@ -158,11 +158,11 @@ mod tests {
         assert!(syms.contains(&"b".to_string()));
         assert!(!syms.contains(&"a".to_string()));
         /* fsm_update_flags(net, NO, NO, NO, UNK, UNK, UNK) */
-        assert_eq!(net.is_deterministic, NO);
-        assert_eq!(net.is_pruned, NO);
-        assert_eq!(net.is_minimized, NO);
-        assert_eq!(net.is_epsilon_free, UNK);
-        assert_eq!(net.is_loop_free, UNK);
+        assert_eq!(net.is_deterministic, Tern::No);
+        assert_eq!(net.is_pruned, Tern::No);
+        assert_eq!(net.is_minimized, Tern::No);
+        assert_eq!(net.is_epsilon_free, Tern::Unk);
+        assert_eq!(net.is_loop_free, Tern::Unk);
         assert_eq!(net.is_completed, UNK);
         /* resulting language is {b} */
         let mut h = apply_init(&net);
@@ -183,11 +183,11 @@ mod tests {
         let syms: Vec<String> = sigma_syms(&net).into_iter().map(|(_, s)| s).collect();
         assert!(syms.contains(&"a".to_string()));
         assert!(!syms.contains(&"b".to_string()));
-        assert_eq!(net.is_deterministic, NO);
-        assert_eq!(net.is_pruned, NO);
-        assert_eq!(net.is_minimized, NO);
-        assert_eq!(net.is_epsilon_free, UNK);
-        assert_eq!(net.is_loop_free, UNK);
+        assert_eq!(net.is_deterministic, Tern::No);
+        assert_eq!(net.is_pruned, Tern::No);
+        assert_eq!(net.is_minimized, Tern::No);
+        assert_eq!(net.is_epsilon_free, Tern::Unk);
+        assert_eq!(net.is_loop_free, Tern::Unk);
         assert_eq!(net.is_completed, UNK);
         /* resulting language is {a} */
         let mut h = apply_init(&net);

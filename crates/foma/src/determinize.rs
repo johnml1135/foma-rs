@@ -31,7 +31,7 @@ use crate::dynarray::{
 use crate::int_stack::{IntStack, PtrStack};
 use crate::mem::next_power_of_two;
 use crate::sigma::sigma_max;
-use crate::types::{EPSILON, Fsm, FsmState, UNKNOWN, YES};
+use crate::types::{EPSILON, Fsm, FsmState, Tern, UNKNOWN};
 
 /* C: #define SUBSET_EPSILON_REMOVE 1 / SUBSET_DETERMINIZE 2 /
 SUBSET_TEST_STAR_FREE 3 — the subset-construction mode. Default is arbitrary
@@ -206,7 +206,7 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: SubsetOp) -> Box<Fsm> {
     let mut T: i32;
     let mut U: i32;
 
-    if net.is_deterministic == YES && operation != SubsetOp::TestStarFree {
+    if net.is_deterministic == Tern::Yes && operation != SubsetOp::TestStarFree {
         return net;
     }
     /* all subset-construction scratch is owned here and dropped on return */
@@ -232,15 +232,15 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: SubsetOp) -> Box<Fsm> {
     but it only gates the already-deterministic shortcut — never the result
     (the full path below produces the same language). */
     if s.deterministic && s.epsilon_symbol == -1 && s.num_start_states == 1 && !s.numss {
-        net.is_deterministic = YES;
-        net.is_epsilon_free = YES;
+        net.is_deterministic = Tern::Yes;
+        net.is_epsilon_free = Tern::Yes;
         /* iterative free of the nhash Box chains; dropping `s` frees the rest */
         nhash_free(std::mem::take(&mut s.table), s.nhash_tablesize);
         return net;
     }
 
     if operation == SubsetOp::EpsilonRemove && s.epsilon_symbol == -1 {
-        net.is_epsilon_free = YES;
+        net.is_epsilon_free = Tern::Yes;
         nhash_free(std::mem::take(&mut s.table), s.nhash_tablesize);
         return net;
     }
@@ -1102,7 +1102,7 @@ mod tests {
         fsm_construct_add_arc, fsm_construct_done, fsm_construct_init, fsm_construct_set_final,
         fsm_construct_set_initial,
     };
-    use crate::types::{Fsm, NO, UNK};
+    use crate::types::Fsm;
 
     fn accepts(net: &Fsm, word: &str) -> Option<String> {
         let mut h = apply_init(net);
@@ -1153,14 +1153,18 @@ mod tests {
     #[test]
     fn determinize_subset_construction_shape() {
         let net = build_a_ge2();
-        assert_ne!(net.is_deterministic, YES, "input NFA is nondeterministic");
+        assert_ne!(
+            net.is_deterministic,
+            Tern::Yes,
+            "input NFA is nondeterministic"
+        );
         let d = fsm_determinize(net);
         /* subsets {0}, {0,1}, {0,1,2 final}: 3 states, 3 arcs, 1 final */
         assert_eq!(d.statecount, 3);
         assert_eq!(d.arccount, 3);
         assert_eq!(d.finalcount, 1);
-        assert_eq!(d.is_deterministic, YES);
-        assert_eq!(d.is_epsilon_free, YES);
+        assert_eq!(d.is_deterministic, Tern::Yes);
+        assert_eq!(d.is_epsilon_free, Tern::Yes);
         /* start state renumbered to 0, densely numbered result */
         assert_eq!(
             d.states
@@ -1190,9 +1194,9 @@ mod tests {
         fsm_construct_add_arc(&mut hc, 1, 1, "a", "a");
         fsm_construct_set_final(&mut hc, 1);
         let net = fsm_construct_done(hc);
-        assert_eq!(net.is_epsilon_free, NO);
+        assert_eq!(net.is_epsilon_free, Tern::No);
         let er = fsm_epsilon_remove(net);
-        assert_eq!(er.is_epsilon_free, YES);
+        assert_eq!(er.is_epsilon_free, Tern::Yes);
         /* no (EPSILON:EPSILON) arc survives */
         assert!(
             !er.states
@@ -1218,14 +1222,15 @@ mod tests {
         fsm_construct_set_final(&mut hc, 1);
         fsm_construct_set_final(&mut hc, 2);
         let net = fsm_construct_done(hc);
-        assert_ne!(net.is_deterministic, YES);
+        assert_ne!(net.is_deterministic, Tern::Yes);
         let sc = net.statecount;
         let before = lines(&net);
         let er = fsm_epsilon_remove(net);
-        assert_eq!(er.is_epsilon_free, YES);
+        assert_eq!(er.is_epsilon_free, Tern::Yes);
         assert_eq!(er.statecount, sc);
         assert_ne!(
-            er.is_deterministic, YES,
+            er.is_deterministic,
+            Tern::Yes,
             "not determinized on the eps-free path"
         );
         assert_eq!(lines(&er), before, "line table returned untouched");
@@ -1245,15 +1250,19 @@ mod tests {
         fsm_construct_set_final(&mut hc, 1);
         fsm_construct_add_arc(&mut hc, 1, 1, "a", "a");
         let mut net = fsm_construct_done(hc);
-        net.is_deterministic = UNK; /* skip the top-level early return */
-        net.is_pruned = YES;
-        net.is_minimized = YES;
+        net.is_deterministic = Tern::Unk; /* skip the top-level early return */
+        net.is_pruned = Tern::Yes;
+        net.is_minimized = Tern::Yes;
         let before = lines(&net);
         let d = fsm_determinize(net);
-        assert_eq!(d.is_deterministic, YES);
-        assert_eq!(d.is_epsilon_free, YES);
-        assert_eq!(d.is_pruned, YES, "shortcut does not touch is_pruned");
-        assert_eq!(d.is_minimized, YES, "shortcut does not touch is_minimized");
+        assert_eq!(d.is_deterministic, Tern::Yes);
+        assert_eq!(d.is_epsilon_free, Tern::Yes);
+        assert_eq!(d.is_pruned, Tern::Yes, "shortcut does not touch is_pruned");
+        assert_eq!(
+            d.is_minimized,
+            Tern::Yes,
+            "shortcut does not touch is_minimized"
+        );
         assert_eq!(lines(&d), before, "line table not rebuilt");
     }
 
@@ -1270,13 +1279,13 @@ mod tests {
         fsm_construct_add_arc(&mut hc, 1, 0, "a", "a");
         fsm_construct_set_final(&mut hc, 0);
         let mut net = fsm_construct_done(hc);
-        net.is_deterministic = UNK;
-        net.is_pruned = YES;
-        net.is_minimized = YES;
+        net.is_deterministic = Tern::Unk;
+        net.is_pruned = Tern::Yes;
+        net.is_minimized = Tern::Yes;
         let d = fsm_determinize(net);
         /* full path taken -> the builder close resets these to UNK */
-        assert_eq!(d.is_pruned, UNK);
-        assert_eq!(d.is_minimized, UNK);
+        assert_eq!(d.is_pruned, Tern::Unk);
+        assert_eq!(d.is_minimized, Tern::Unk);
         let start_states: Vec<i32> = d
             .states
             .iter()

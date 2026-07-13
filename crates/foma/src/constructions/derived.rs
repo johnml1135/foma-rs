@@ -160,9 +160,9 @@ pub fn fsm_symbol(symbol: &str) -> Box<Fsm> {
         net.statecount = 1;
         net.linecount = 1;
         net.finalcount = 1;
-        net.is_deterministic = NO;
-        net.is_minimized = NO;
-        net.is_epsilon_free = NO;
+        net.is_deterministic = Tern::No;
+        net.is_minimized = Tern::No;
+        net.is_epsilon_free = Tern::No;
     } else {
         let symbol_no = if symbol == "@_IDENTITY_SYMBOL_@" {
             sigma_add_special(IDENTITY, &mut net.sigma)
@@ -192,9 +192,9 @@ pub fn fsm_symbol(symbol: &str) -> Box<Fsm> {
         net.finalcount = 1;
         net.arcs_sorted_in = YES;
         net.arcs_sorted_out = YES;
-        net.is_deterministic = YES;
-        net.is_minimized = YES;
-        net.is_epsilon_free = YES;
+        net.is_deterministic = Tern::Yes;
+        net.is_minimized = Tern::Yes;
+        net.is_epsilon_free = Tern::Yes;
     }
     net
 }
@@ -379,7 +379,7 @@ pub fn fsm_substitute_symbol(net: Box<Fsm>, original: &str, substitute: &str) ->
     fsm_update_flags(&mut net, NO, NO, NO, NO, NO, NO);
     sigma_cleanup(&mut net, 0);
     /* if s = epsilon */
-    net.is_minimized = NO;
+    net.is_minimized = Tern::No;
     fsm_determinize(net)
 }
 

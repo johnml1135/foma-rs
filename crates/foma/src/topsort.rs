@@ -13,7 +13,7 @@ use crate::constructions::{add_fsm_arc, fsm_count};
 use crate::int_stack::IntStack;
 #[cfg(test)]
 use crate::options::FomaOptions;
-use crate::types::{Fsm, FsmState, PATHCOUNT_CYCLIC, PATHCOUNT_OVERFLOW};
+use crate::types::{Fsm, FsmState, PATHCOUNT_CYCLIC, PATHCOUNT_OVERFLOW, Tern};
 
 // [spec:foma:def:topsort.fsm-topsort-fn]
 // [spec:foma:sem:topsort.fsm-topsort-fn+1]
@@ -70,7 +70,7 @@ pub fn fsm_topsort(net: Box<Fsm>) -> Box<Fsm> {
                 /* Do a fast check here to see if we have a selfloop */
                 if net.states[i as usize].state_no == target {
                     net.pathcount = PATHCOUNT_CYCLIC;
-                    net.is_loop_free = 0;
+                    net.is_loop_free = Tern::No;
                     break 'cyclic;
                 }
             }
@@ -117,7 +117,7 @@ pub fn fsm_topsort(net: Box<Fsm>) -> Box<Fsm> {
                     /* Case (1) for cyclic */
                     if treated[target as usize] == 1 {
                         net.pathcount = PATHCOUNT_CYCLIC;
-                        net.is_loop_free = 0;
+                        net.is_loop_free = Tern::No;
                         break 'cyclic;
                     }
                     if invcount[target as usize] == 0 {
@@ -132,7 +132,7 @@ pub fn fsm_topsort(net: Box<Fsm>) -> Box<Fsm> {
         /* Case (2) */
         if treatcount > 0 {
             net.pathcount = PATHCOUNT_CYCLIC;
-            net.is_loop_free = 0;
+            net.is_loop_free = Tern::No;
             break 'cyclic;
         }
 
@@ -202,7 +202,7 @@ pub fn fsm_topsort(net: Box<Fsm>) -> Box<Fsm> {
         by the assignment */
         net.states = new_fsm;
         net.pathcount = grand_pathcount;
-        net.is_loop_free = 1;
+        net.is_loop_free = Tern::Yes;
         if overflow == 1 {
             net.pathcount = PATHCOUNT_OVERFLOW;
         }
@@ -264,7 +264,7 @@ mod tests {
         /* terminator line appended after the rebuilt lines */
         assert_eq!(net.states[3].state_no, -1);
         assert_eq!(net.pathcount, 1);
-        assert_eq!(net.is_loop_free, 1);
+        assert_eq!(net.is_loop_free, Tern::Yes);
     }
 
     // [spec:foma:sem:topsort.fsm-topsort-fn+1/test]
@@ -275,7 +275,7 @@ mod tests {
         for (re, expected) in [("[a|b] c", 2i64), ("[a|b] [c|d]", 4), ("a b c", 1)] {
             let net = fsm_topsort(fsm_parse_regex(opts, re, None, None).unwrap());
             assert_eq!(net.pathcount, expected, "pathcount of {re}");
-            assert_eq!(net.is_loop_free, 1, "loop-free flag of {re}");
+            assert_eq!(net.is_loop_free, Tern::Yes, "loop-free flag of {re}");
             /* state numbers equal topological rank: lines stay grouped in
             ascending new order and every arc goes low -> high */
             let mut prev = 0i32;
@@ -306,7 +306,7 @@ mod tests {
         let net = fsm_topsort(net);
         assert_eq!(net.pathcount, PATHCOUNT_CYCLIC);
         assert_eq!(net.pathcount, -1);
-        assert_eq!(net.is_loop_free, 0);
+        assert_eq!(net.is_loop_free, Tern::No);
         assert_eq!(lines(&net), before, "state array left untouched");
     }
 
@@ -321,7 +321,7 @@ mod tests {
         let before = lines(&net);
         let net = fsm_topsort(net);
         assert_eq!(net.pathcount, PATHCOUNT_CYCLIC);
-        assert_eq!(net.is_loop_free, 0);
+        assert_eq!(net.is_loop_free, Tern::No);
         assert_eq!(lines(&net), before, "state array left untouched");
     }
 
@@ -336,7 +336,7 @@ mod tests {
         let before = lines(&net);
         let net = fsm_topsort(net);
         assert_eq!(net.pathcount, PATHCOUNT_CYCLIC);
-        assert_eq!(net.is_loop_free, 0);
+        assert_eq!(net.is_loop_free, Tern::No);
         assert_eq!(lines(&net), before, "state array left untouched");
     }
 }

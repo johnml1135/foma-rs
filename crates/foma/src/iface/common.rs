@@ -85,19 +85,19 @@ pub(crate) fn print_net(net: &mut Fsm, filename: Option<&str>) {
     print_sigma(&net.sigma, &mut out);
     writeln!(out, "Net: {}", net.name).expect("writing net");
     write!(out, "Flags: ").expect("writing net");
-    if net.is_deterministic == YES {
+    if net.is_deterministic == Tern::Yes {
         write!(out, "deterministic ").expect("writing net");
     }
-    if net.is_pruned == YES {
+    if net.is_pruned == Tern::Yes {
         write!(out, "pruned ").expect("writing net");
     }
-    if net.is_minimized == YES {
+    if net.is_minimized == Tern::Yes {
         write!(out, "minimized ").expect("writing net");
     }
-    if net.is_epsilon_free == YES {
+    if net.is_epsilon_free == Tern::Yes {
         write!(out, "epsilon_free ").expect("writing net");
     }
-    if net.is_loop_free != 0 {
+    if net.is_loop_free != Tern::No {
         write!(out, "loop_free ").expect("writing net");
     }
     if net.arcs_sorted_in != 0 {
