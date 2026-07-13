@@ -112,5 +112,5 @@ assertions (
     {id w10-unwrap-sweep, kind @complete, author "brendan@necessary.nu", at 2026-07-12T23:00:09.021222Z}
     {id w10-io-panics, kind @complete, author "brendan@necessary.nu", at 2026-07-12T23:21:37.230931Z}
     {id w10-i32-enums-plain, kind @complete, author "brendan@necessary.nu", at 2026-07-12T23:44:52.982512Z}
-    {id w10-i32-bitflags, kind @doing, author "brendan@necessary.nu", at 2026-07-12T23:57:48.272528Z}
+    {id w10-i32-bitflags, kind @complete, author "brendan@necessary.nu", at 2026-07-13T00:08:30.001594Z}
 )
