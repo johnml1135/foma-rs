@@ -1352,6 +1352,13 @@ children (
                         kind @note
                         text "Proven tri-state (something assigns UNK=2), so bool would silently collapse Unk→Yes and change both the props line and the minimize/determinize fast-path decisions: is_deterministic (flags.rs:712/790, determinize.rs:1242/1267 set UNK), is_pruned (dynarray.rs:245, flags.rs:714), is_minimized (dynarray.rs:246, flags.rs:713/791), is_epsilon_free (extract.rs:164/189 assert UNK), is_loop_free (dynarray.rs:248). Shared enum Tern{No=0,Yes=1,Unk=2} #[repr(i32)]; from_i32 handles 0/1/2 and defensively maps other ints as C stored them raw. Wire shim: props-line read Tern::from_i32(parse_leading_i32(tok)), write writeln!(\"{}\", flag as i32) — fields is_deterministic/is_pruned/is_minimized/is_epsilon_free are props fields 7-10, is_loop_free is field 11. Natural conversion seam is the FsmBuilder widening at dynarray.rs:244-249 (builder holds native bools/UNK, widens to net i32). GATE: the existing round-trip test at io.rs:1591-1660 asserts all eight property flags survive write/read; add a byte-identical golden-file check before landing."
                     }
+
+                    {
+                        at 2026-07-13T10:07:23.506909Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Todo → Done (nplan_complete)"
+                    }
                 )
             }
 

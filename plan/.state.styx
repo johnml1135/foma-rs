@@ -115,4 +115,5 @@ assertions (
     {id w10-i32-bitflags, kind @complete, author "brendan@necessary.nu", at 2026-07-13T00:08:30.001594Z}
     {id w10-i32-bool-block, kind @complete, author "brendan@necessary.nu", at 2026-07-13T00:23:10.863007Z}
     {id w10-i32-flagtype, kind @complete, author "brendan@necessary.nu", at 2026-07-13T09:47:40.71126Z}
+    {id w10-i32-tern, kind @complete, author "brendan@necessary.nu", at 2026-07-13T10:07:23.506909Z}
 )
