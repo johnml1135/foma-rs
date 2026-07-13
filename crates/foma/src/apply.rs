@@ -1358,6 +1358,7 @@ pub fn apply_net(h: &mut ApplyHandle) -> Option<String> {
 // [spec:foma:def:apply.apply-append-fn]
 // [spec:foma:sem:apply.apply-append-fn+1]
 pub fn apply_append(h: &mut ApplyHandle, cptr: i32, sym: i32) -> i32 {
+    use std::borrow::Cow;
     let symin = l_in(h, cptr);
     let symout = l_out(h, cptr);
 
@@ -1366,29 +1367,24 @@ pub fn apply_append(h: &mut ApplyHandle, cptr: i32, sym: i32) -> i32 {
         h.has_flags && !h.show_flags && !h.flag_lookup[symin as usize].r#type.is_empty();
     let b_suppressed =
         h.has_flags && !h.show_flags && !h.flag_lookup[symout as usize].r#type.is_empty();
-    let mut astring: String = if a_suppressed {
-        String::new()
+    // Borrow the display strings straight from the sigs table (a suppressed flag
+    // or an absent symbol renders empty). Only the print-pairs UNKNOWN branch
+    // below needs a fresh owned string, so Cow keeps the common path alloc-free.
+    let mut astring: Cow<str> = if a_suppressed {
+        Cow::Borrowed("")
     } else {
-        h.sigs[symin as usize]
-            .symbol
-            .as_deref()
-            .unwrap_or("")
-            .to_string()
+        Cow::Borrowed(h.sigs[symin as usize].symbol.as_deref().unwrap_or(""))
     };
-    let mut bstring: String = if b_suppressed {
-        String::new()
+    let mut bstring: Cow<str> = if b_suppressed {
+        Cow::Borrowed("")
     } else {
-        h.sigs[symout as usize]
-            .symbol
-            .as_deref()
-            .unwrap_or("")
-            .to_string()
+        Cow::Borrowed(h.sigs[symout as usize].symbol.as_deref().unwrap_or(""))
     };
     // Pointer-equality of the two display strings (see module notes): both
     // suppressed, or neither suppressed and the same sigs slot.
     let astring_eq_bstring =
         (a_suppressed && b_suppressed) || (!a_suppressed && !b_suppressed && symin == symout);
-    let sep = h.separator.as_deref().unwrap_or("").to_string();
+    let sep = h.separator.as_deref().unwrap_or("");
 
     // Build the append contiguously at opos, discarding whatever a prior
     // (backtracked) branch left beyond it. opos always lands on a char boundary
@@ -1401,7 +1397,7 @@ pub fn apply_append(h: &mut ApplyHandle, cptr: i32, sym: i32) -> i32 {
             /* Print both sides, colon-separated (unless identical) */
             h.outstring.push_str(&astring);
             if !astring_eq_bstring {
-                h.outstring.push_str(&sep);
+                h.outstring.push_str(sep);
                 h.outstring.push_str(&bstring);
             }
             if h.collect_pairs {
@@ -1420,14 +1416,14 @@ pub fn apply_append(h: &mut ApplyHandle, cptr: i32, sym: i32) -> i32 {
                     upper: if symin == EPSILON {
                         String::new()
                     } else {
-                        astring.clone()
+                        astring.to_string()
                     },
                     lower: if astring_eq_bstring {
                         None
                     } else if symout == EPSILON {
                         Some(String::new())
                     } else {
-                        Some(bstring.clone())
+                        Some(bstring.to_string())
                     },
                 });
             }
@@ -1436,12 +1432,12 @@ pub fn apply_append(h: &mut ApplyHandle, cptr: i32, sym: i32) -> i32 {
             let a = if symin == EPSILON {
                 ""
             } else {
-                astring.as_str()
+                astring.as_ref()
             };
             let b = if symout == EPSILON {
                 ""
             } else {
-                bstring.as_str()
+                bstring.as_ref()
             };
             let pstring = if (h.mode & (ApplyMode::UPPER | ApplyMode::LOWER)) == ApplyMode::UPPER {
                 a
@@ -1456,17 +1452,17 @@ pub fn apply_append(h: &mut ApplyHandle, cptr: i32, sym: i32) -> i32 {
         // whole input character is used for an UNKNOWN side; sigs is not mutated.
         if symin == UNKNOWN && h.mode.contains(ApplyMode::DOWN) {
             if let Some(c) = h.instring[h.ipos as usize..].chars().next() {
-                astring = c.to_string();
+                astring = Cow::Owned(c.to_string());
             }
         }
         if symout == UNKNOWN && h.mode.contains(ApplyMode::UP) {
             if let Some(c) = h.instring[h.ipos as usize..].chars().next() {
-                bstring = c.to_string();
+                bstring = Cow::Owned(c.to_string());
             }
         }
         h.outstring.push('<');
         h.outstring.push_str(&astring);
-        h.outstring.push_str(&sep);
+        h.outstring.push_str(sep);
         h.outstring.push_str(&bstring);
         h.outstring.push('>');
     } else if sym == IDENTITY {
@@ -1475,15 +1471,15 @@ pub fn apply_append(h: &mut ApplyHandle, cptr: i32, sym: i32) -> i32 {
         let idlen = h.sigmatch_array[h.ipos as usize].consumes as usize;
         let ip = h.ipos as usize;
         let end = (ip + idlen).min(h.instring.len());
-        let chunk = h.instring[ip..end].to_string();
-        h.outstring.push_str(&chunk);
+        let chunk = &h.instring[ip..end];
+        h.outstring.push_str(chunk);
     } else if sym == EPSILON {
         return 0;
     } else {
         let pstring = if h.mode.contains(ApplyMode::DOWN) {
-            &bstring
+            bstring.as_ref()
         } else {
-            &astring
+            astring.as_ref()
         };
         h.outstring.push_str(pstring);
     }
