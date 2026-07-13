@@ -493,12 +493,12 @@ fn shortest_acyclic_length(net: &crate::types::Fsm) -> i32 {
     let n = net.statecount as usize;
     let mut adj: Vec<Vec<i32>> = vec![Vec::new(); n];
     let mut is_final = vec![false; n];
-    let mut start: i32 = -1;
+    let mut start: Option<i32> = None;
     let mut i = 0usize;
     while net.states[i].state_no != -1 {
         let s = net.states[i].state_no;
         if net.states[i].start_state != 0 {
-            start = s;
+            start = Some(s);
         }
         if net.states[i].final_state != 0 {
             is_final[s as usize] = true;
@@ -509,20 +509,20 @@ fn shortest_acyclic_length(net: &crate::types::Fsm) -> i32 {
         }
         i += 1;
     }
-    if start < 0 {
+    let Some(start) = start else {
         return 0;
-    }
-    let mut dist = vec![-1i32; n];
+    };
+    let mut dist: Vec<Option<i32>> = vec![None; n];
     let mut q: VecDeque<i32> = VecDeque::new();
-    dist[start as usize] = 0;
+    dist[start as usize] = Some(0);
     q.push_back(start);
     while let Some(u) = q.pop_front() {
         if is_final[u as usize] {
-            return dist[u as usize];
+            return dist[u as usize].expect("queued nodes have a distance");
         }
         for &v in &adj[u as usize] {
-            if dist[v as usize] == -1 {
-                dist[v as usize] = dist[u as usize] + 1;
+            if dist[v as usize].is_none() {
+                dist[v as usize] = Some(dist[u as usize].expect("current node has a distance") + 1);
                 q.push_back(v);
             }
         }

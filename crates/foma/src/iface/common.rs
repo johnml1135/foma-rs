@@ -108,7 +108,7 @@ pub(crate) fn print_net(net: &mut Fsm, filename: Option<&str>) {
     }
     writeln!(out).expect("writing net");
     writeln!(out, "Arity: {}", net.arity).expect("writing net");
-    let mut previous_state: i32 = -1;
+    let mut previous_state: Option<i32> = None;
     let mut i = 0usize;
     loop {
         let state_no = net.states[i].state_no;
@@ -120,7 +120,7 @@ pub(crate) fn print_net(net: &mut Fsm, filename: Option<&str>) {
         let in_ = net.states[i].r#in as i32;
         let out_ = net.states[i].out as i32;
         let target = net.states[i].target;
-        if state_no != previous_state {
+        if Some(state_no) != previous_state {
             if start_state != 0 {
                 write!(out, "S").expect("writing net");
             }
@@ -135,7 +135,7 @@ pub(crate) fn print_net(net: &mut Fsm, filename: Option<&str>) {
                 write!(out, "s{}:\t", state_no).expect("writing net");
             }
         }
-        previous_state = state_no;
+        previous_state = Some(state_no);
         if in_ == out_ {
             if in_ == IDENTITY {
                 write!(out, "@ -> ").expect("writing net");

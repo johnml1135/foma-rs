@@ -119,4 +119,5 @@ assertions (
     {id w10-i32-extras-props, kind @complete, author "brendan@necessary.nu", at 2026-07-13T12:14:10.824018Z}
     {id w10-structural-smells, kind @complete, author "brendan@necessary.nu", at 2026-07-13T12:56:15.428811Z}
     {id w10-dead-cruft, kind @complete, author "brendan@necessary.nu", at 2026-07-13T14:40:40.80419Z}
+    {id w10-i32-option-sentinels, kind @doing, author "brendan@necessary.nu", at 2026-07-13T14:41:47.874324Z}
 )

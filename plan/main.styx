@@ -1430,6 +1430,14 @@ children (
                 id w10-i32-option-sentinels
                 title "Optional: local -1 sentinels → Option (iface shortest_acyclic_length start/dist apply_cmds.rs:496/515, print_net previous_state common.rs:111). Low value, purely local; the Fsm line-table state_no/target -1 sentinel stays (kept design)"
                 priority 3
+                log (
+                    {
+                        at 2026-07-13T14:41:47.874324Z
+                        author "brendan@necessary.nu"
+                        kind @status
+                        text "Todo → Doing (nplan_start)"
+                    }
+                )
             }
         )
         log (
