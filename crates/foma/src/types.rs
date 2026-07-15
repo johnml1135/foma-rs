@@ -456,7 +456,7 @@ pub struct FsmSigmaHash {
 // (crate::io::IoBufHandle) lives in the io module.
 #[derive(Debug)]
 pub struct FsmReadBinaryHandle {
-    pub iobh: Box<crate::io::IoBufHandle>,
+    pub iobh: crate::io::IoBufHandle,
 }
 
 // [spec:foma:def:fomalibconf.fsm-construct-handle]

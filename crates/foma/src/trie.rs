@@ -22,8 +22,8 @@ pub const TRIE_STATESIZE: u32 = 32768;
 // [spec:foma:sem:trie.fsm-trie-init-fn]
 // [spec:foma:def:fomalib.fsm-trie-init-fn]
 // [spec:foma:sem:fomalib.fsm-trie-init-fn]
-pub fn fsm_trie_init() -> Box<FsmTrieHandle> {
-    Box::new(FsmTrieHandle {
+pub fn fsm_trie_init() -> FsmTrieHandle {
+    FsmTrieHandle {
         /* calloc(THASH_TABLESIZE, sizeof(struct trie_hash)) — zeroed heads */
         trie_hash: vec![
             TrieHash {
@@ -42,15 +42,14 @@ pub fn fsm_trie_init() -> Box<FsmTrieHandle> {
         /* calloc(1, ...) zeroes the rest of the handle */
         used_states: 0,
         sh_hash: sh_init(),
-    })
+    }
 }
 
 // [spec:foma:def:trie.fsm-trie-done-fn]
 // [spec:foma:sem:trie.fsm-trie-done-fn]
 // [spec:foma:def:fomalib.fsm-trie-done-fn]
 // [spec:foma:sem:fomalib.fsm-trie-done-fn]
-#[allow(clippy::boxed_local)]
-pub fn fsm_trie_done(th: Box<FsmTrieHandle>) -> Box<Fsm> {
+pub fn fsm_trie_done(th: FsmTrieHandle) -> Box<Fsm> {
     let mut newh = fsm_construct_init("name");
     for i in 0..THASH_TABLESIZE as usize {
         let mut thash: Option<&TrieHash> = Some(&th.trie_hash[i]);

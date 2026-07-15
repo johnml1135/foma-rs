@@ -562,17 +562,16 @@ pub fn fsm_read_prolog(filename: &str) -> Option<Box<Fsm>> {
 
 // [spec:foma:def:io.io-init-fn]
 // [spec:foma:sem:io.io-init-fn]
-pub fn io_init() -> Box<IoBufHandle> {
-    Box::new(IoBufHandle {
+pub fn io_init() -> IoBufHandle {
+    IoBufHandle {
         io_buf: None,
         io_buf_ptr: 0,
-    })
+    }
 }
 
 // [spec:foma:def:io.io-free-fn]
 // [spec:foma:sem:io.io-free-fn]
-#[allow(clippy::boxed_local)]
-pub fn io_free(mut iobh: Box<IoBufHandle>) {
+pub fn io_free(mut iobh: IoBufHandle) {
     if iobh.io_buf.is_some() {
         /* free(io_buf); io_buf = NULL */
         iobh.io_buf = None;
