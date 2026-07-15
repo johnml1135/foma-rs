@@ -60,9 +60,9 @@ pub struct P {
 }
 
 // [spec:foma:def:minimize.e]
-/* Per-state record; E array index == state number ("temp_E - E" in the C
+/* Per-state record; E array index == state number ("temp_e - E" in the C
 is the index itself). group is a PHEAD-pool index (calloc NULL ↔ 0 here;
-always assigned by init_PE before use); left/right are E indices. */
+always assigned by init_pe before use); left/right are E indices. */
 #[derive(Debug, Clone, Default)]
 pub struct E {
     pub group: usize,
@@ -184,7 +184,6 @@ pub(crate) fn fsm_minimize_brz(net: Box<Fsm>) -> Box<Fsm> {
 
 // [spec:foma:def:minimize.fsm-minimize-hop-fn]
 // [spec:foma:sem:minimize.fsm-minimize-hop-fn]
-#[allow(non_snake_case)]
 pub(crate) fn fsm_minimize_hop(net: Box<Fsm>) -> Box<Fsm> {
     let mut net = net;
 
@@ -210,7 +209,7 @@ pub(crate) fn fsm_minimize_hop(net: Box<Fsm>) -> Box<Fsm> {
 
     sigma_to_pairs(&mut m, &mut net);
 
-    init_PE(&mut m);
+    init_pe(&mut m);
 
     'bail: {
         if m.total_states == m.num_states {
@@ -247,9 +246,9 @@ pub(crate) fn fsm_minimize_hop(net: Box<Fsm>) -> Box<Fsm> {
 
             let mut thissize: i32 = 0;
             let mut minsym: i32 = i32::MAX; /* INT_MAX */
-            let mut temp_E = m.phead[current_w].first_e;
-            while let Some(te) = temp_E {
-                let stateno = te; /* temp_E - E */
+            let mut temp_e = m.phead[current_w].first_e;
+            while let Some(te) = temp_e {
+                let stateno = te; /* temp_e - E */
                 m.temp_group[thissize as usize] = stateno as i32;
                 thissize += 1;
                 /* Clear tails if symloop should start from 0 */
@@ -262,7 +261,7 @@ pub(crate) fn fsm_minimize_hop(net: Box<Fsm>) -> Box<Fsm> {
                 if tail < size && m.trans_list_minimize[transitions].inout < minsym {
                     minsym = m.trans_list_minimize[transitions].inout;
                 }
-                temp_E = m.e[te].right;
+                temp_e = m.e[te].right;
             }
 
             /* for (next_minsym = INT_MAX; minsym != INT_MAX;
@@ -418,7 +417,6 @@ pub(crate) fn rebuild_machine(m: &mut Minimizer, net: Box<Fsm>) -> Box<Fsm> {
 
 // [spec:foma:def:minimize.refine-states-fn]
 // [spec:foma:sem:minimize.refine-states-fn]
-#[allow(non_snake_case)]
 pub(crate) fn refine_states(m: &mut Minimizer, invstates: i32) -> bool {
     /*
        1. add inverse(P,a) to table of inverses, disallowing duplicates
@@ -441,39 +439,39 @@ pub(crate) fn refine_states(m: &mut Minimizer, invstates: i32) -> bool {
 
     for i in 0..invstates as usize {
         let thise = m.temp_move[i] as usize; /* thise = E+*(temp_move+i) */
-        let tP = m.e[thise].group;
+        let t_p = m.e[thise].group;
 
         /* Do we need to split?
         if we've touched as many states as there are in the partition
         we don't split */
 
-        if m.phead[tP].t_count == m.phead[tP].count {
-            m.phead[tP].t_count = 0;
-            m.phead[tP].inv_t_count = 0;
+        if m.phead[t_p].t_count == m.phead[t_p].count {
+            m.phead[t_p].t_count = 0;
+            m.phead[t_p].inv_t_count = 0;
             continue;
         }
 
-        if (m.phead[tP].t_count != m.phead[tP].count)
-            && (m.phead[tP].count > 1)
-            && (m.phead[tP].t_count > 0)
+        if (m.phead[t_p].t_count != m.phead[t_p].count)
+            && (m.phead[t_p].count > 1)
+            && (m.phead[t_p].t_count > 0)
         {
             /* Check if we already split this */
-            let mut newP = m.phead[tP].current_split;
-            if newP.is_none() {
-                /* Create new group newP */
+            let mut new_p = m.phead[t_p].current_split;
+            if new_p.is_none() {
+                /* Create new group new_p */
                 m.total_states += 1;
                 if m.total_states == m.num_states {
                     return true; /* Abort now, machine is already minimal */
                 }
-                /* tP->current_split = Pnext++; */
+                /* t_p->current_split = Pnext++; */
                 let np = m.pnext;
                 m.pnext = np + 1;
-                m.phead[tP].current_split = Some(np);
-                newP = m.phead[tP].current_split;
+                m.phead[t_p].current_split = Some(np);
+                new_p = m.phead[t_p].current_split;
                 m.phead[np].first_e = Some(thise);
                 m.phead[np].last_e = Some(thise);
                 m.phead[np].count = 0;
-                m.phead[np].inv_count = m.phead[tP].inv_t_count;
+                m.phead[np].inv_count = m.phead[t_p].inv_t_count;
                 m.phead[np].inv_t_count = 0;
                 m.phead[np].t_count = 0;
                 m.phead[np].current_split = None;
@@ -481,17 +479,17 @@ pub(crate) fn refine_states(m: &mut Minimizer, invstates: i32) -> bool {
 
                 /* Add to agenda */
 
-                /* If the current block (tP) is on the agenda, we add both back */
+                /* If the current block (t_p) is on the agenda, we add both back */
                 /* to the agenda */
-                /* In practice we need only add newP since tP stays where it is */
+                /* In practice we need only add new_p since t_p stays where it is */
                 /* However, we mark the larger one as not starting the symloop */
                 /* from zero */
-                if let Some(tp_agenda) = m.phead[tP].agenda {
-                    /* Is tP smaller */
-                    /* (latent quirk kept: inv_t_count sums a subset of tP's
+                if let Some(tp_agenda) = m.phead[t_p].agenda {
+                    /* Is t_p smaller */
+                    /* (latent quirk kept: inv_t_count sums a subset of t_p's
                     members' inv_counts, so inv_count < inv_t_count is always
                     false and the else branch always runs) */
-                    if m.phead[tP].inv_count < m.phead[tP].inv_t_count {
+                    if m.phead[t_p].inv_count < m.phead[t_p].inv_t_count {
                         agenda_add(m, np, 1);
                         let ag = tp_agenda;
                         m.agenda_top[ag].index = false;
@@ -504,14 +502,14 @@ pub(crate) fn refine_states(m: &mut Minimizer, invstates: i32) -> bool {
                     /* done with the current sym and move on with the agenda */
                     /* We process the larger one for all symbols */
                     /* and the smaller one for only the ones remaining in this symloop */
-                } else if tP == m.current_w {
-                    let smaller = if m.phead[tP].inv_count < m.phead[tP].inv_t_count {
-                        tP
+                } else if t_p == m.current_w {
+                    let smaller = if m.phead[t_p].inv_count < m.phead[t_p].inv_t_count {
+                        t_p
                     } else {
                         np
                     };
-                    let larger = if m.phead[tP].inv_count >= m.phead[tP].inv_t_count {
-                        tP
+                    let larger = if m.phead[t_p].inv_count >= m.phead[t_p].inv_t_count {
+                        t_p
                     } else {
                         np
                     };
@@ -520,32 +518,32 @@ pub(crate) fn refine_states(m: &mut Minimizer, invstates: i32) -> bool {
                     selfsplit = true;
                 } else {
                     /* If the block is not on the agenda, we add */
-                    /* the smaller of tP, newP and start the symloop from 0 */
-                    let smaller = if m.phead[tP].inv_count < m.phead[tP].inv_t_count {
-                        tP
+                    /* the smaller of t_p, new_p and start the symloop from 0 */
+                    let smaller = if m.phead[t_p].inv_count < m.phead[t_p].inv_t_count {
+                        t_p
                     } else {
                         np
                     };
                     agenda_add(m, smaller, 0);
                 }
                 /* Add to middle of P-chain */
-                /* newP->next = P->next; P->next = newP; — C derefs the chain
+                /* new_p->next = P->next; P->next = new_p; — C derefs the chain
                 head P unconditionally */
                 let p = m.p.expect("P-chain head set before splitting");
                 m.phead[np].next = m.phead[p].next;
                 m.phead[p].next = Some(np);
             }
 
-            let newP = newP.expect("newP set to current_split above");
-            m.e[thise].group = newP;
-            m.phead[newP].count += 1;
+            let new_p = new_p.expect("new_p set to current_split above");
+            m.e[thise].group = new_p;
+            m.phead[new_p].count += 1;
 
-            /* need to make tP->last_e point to the last untouched e */
-            if m.phead[tP].last_e == Some(thise) {
-                m.phead[tP].last_e = m.e[thise].left;
+            /* need to make t_p->last_e point to the last untouched e */
+            if m.phead[t_p].last_e == Some(thise) {
+                m.phead[t_p].last_e = m.e[thise].left;
             }
-            if m.phead[tP].first_e == Some(thise) {
-                m.phead[tP].first_e = m.e[thise].right;
+            if m.phead[t_p].first_e == Some(thise) {
+                m.phead[t_p].first_e = m.e[thise].right;
             }
 
             /* Adjust links */
@@ -556,27 +554,27 @@ pub(crate) fn refine_states(m: &mut Minimizer, invstates: i32) -> bool {
                 m.e[right].left = m.e[thise].left;
             }
 
-            if m.phead[newP].last_e != Some(thise) {
-                let last = m.phead[newP]
+            if m.phead[new_p].last_e != Some(thise) {
+                let last = m.phead[new_p]
                     .last_e
-                    .expect("newP always has a last_e once populated");
+                    .expect("new_p always has a last_e once populated");
                 m.e[last].right = Some(thise);
                 m.e[thise].left = Some(last);
-                m.phead[newP].last_e = Some(thise);
+                m.phead[new_p].last_e = Some(thise);
             }
 
             m.e[thise].right = None;
-            if m.phead[newP].first_e == Some(thise) {
+            if m.phead[new_p].first_e == Some(thise) {
                 m.e[thise].left = None;
             }
 
             /* Are we done for this block? Adjust counters */
-            if m.phead[newP].count == m.phead[tP].t_count {
-                m.phead[tP].count -= m.phead[newP].count;
-                m.phead[tP].inv_count -= m.phead[tP].inv_t_count;
-                m.phead[tP].current_split = None;
-                m.phead[tP].t_count = 0;
-                m.phead[tP].inv_t_count = 0;
+            if m.phead[new_p].count == m.phead[t_p].t_count {
+                m.phead[t_p].count -= m.phead[new_p].count;
+                m.phead[t_p].inv_count -= m.phead[t_p].inv_t_count;
+                m.phead[t_p].current_split = None;
+                m.phead[t_p].t_count = 0;
+                m.phead[t_p].inv_t_count = 0;
             }
         }
     }
@@ -606,8 +604,7 @@ pub(crate) fn agenda_add(m: &mut Minimizer, pptr: usize, start: i32) {
 
 // [spec:foma:def:minimize.init-pe-fn]
 // [spec:foma:sem:minimize.init-pe-fn]
-#[allow(non_snake_case)]
-pub(crate) fn init_PE(m: &mut Minimizer) {
+pub(crate) fn init_pe(m: &mut Minimizer) {
     /* Create two members of P
        (nonfinals,finals)
        and put both of them on the agenda
@@ -624,23 +621,23 @@ pub(crate) fn init_PE(m: &mut Minimizer) {
     m.phead = vec![P::default(); (num_states + 1) as usize];
     m.p = Some(0);
     m.pnext = 0;
-    /* nonFP = Pnext++; FP = Pnext++; */
-    let nonFP = m.pnext;
-    m.pnext = nonFP + 1;
-    let FP = m.pnext;
-    m.pnext = FP + 1;
-    m.phead[nonFP].next = Some(FP);
-    m.phead[nonFP].count = num_states - num_finals;
-    m.phead[FP].next = None;
-    m.phead[FP].count = num_finals;
-    m.phead[FP].t_count = 0;
-    m.phead[nonFP].t_count = 0;
-    m.phead[FP].current_split = None;
-    m.phead[nonFP].current_split = None;
-    m.phead[FP].inv_count = 0;
-    m.phead[nonFP].inv_count = 0;
-    m.phead[FP].inv_t_count = 0;
-    m.phead[nonFP].inv_t_count = 0;
+    /* non_fp = Pnext++; fp = Pnext++; */
+    let non_fp = m.pnext;
+    m.pnext = non_fp + 1;
+    let fp = m.pnext;
+    m.pnext = fp + 1;
+    m.phead[non_fp].next = Some(fp);
+    m.phead[non_fp].count = num_states - num_finals;
+    m.phead[fp].next = None;
+    m.phead[fp].count = num_finals;
+    m.phead[fp].t_count = 0;
+    m.phead[non_fp].t_count = 0;
+    m.phead[fp].current_split = None;
+    m.phead[non_fp].current_split = None;
+    m.phead[fp].inv_count = 0;
+    m.phead[non_fp].inv_count = 0;
+    m.phead[fp].inv_t_count = 0;
+    m.phead[non_fp].inv_t_count = 0;
 
     /* How many groups can we put on the agenda? */
     m.agenda_top = vec![Agenda::default(); (num_states * 2) as usize];
@@ -653,10 +650,10 @@ pub(crate) fn init_PE(m: &mut Minimizer) {
     if num_finals > 0 {
         let ag = m.agenda_next;
         m.agenda_next = ag + 1;
-        m.phead[FP].agenda = Some(ag);
-        m.p = Some(FP);
-        m.phead[FP].next = None; /* P->next = NULL */
-        m.agenda_top[ag].p = FP;
+        m.phead[fp].agenda = Some(ag);
+        m.p = Some(fp);
+        m.phead[fp].next = None; /* P->next = NULL */
+        m.agenda_top[ag].p = fp;
         m.agenda_head = Some(ag);
         m.agenda_top[ag].next = None;
         m.total_states += 1;
@@ -664,19 +661,19 @@ pub(crate) fn init_PE(m: &mut Minimizer) {
     if num_states - num_finals > 0 {
         let ag = m.agenda_next;
         m.agenda_next = ag + 1;
-        m.phead[nonFP].agenda = Some(ag);
-        m.agenda_top[ag].p = nonFP;
+        m.phead[non_fp].agenda = Some(ag);
+        m.agenda_top[ag].p = non_fp;
         m.agenda_top[ag].next = None;
         m.total_states += 1;
         if let Some(head) = m.agenda_head {
             m.agenda_top[head].next = Some(ag);
             let p = m.p.expect("m.p set once the agenda head exists");
-            m.phead[p].next = Some(nonFP);
+            m.phead[p].next = Some(non_fp);
             /* P->next->next = NULL; */
-            m.phead[nonFP].next = None;
+            m.phead[non_fp].next = None;
         } else {
-            m.p = Some(nonFP);
-            m.phead[nonFP].next = None;
+            m.p = Some(non_fp);
+            m.phead[non_fp].next = None;
             m.agenda_head = Some(ag);
         }
     }
@@ -689,25 +686,25 @@ pub(crate) fn init_PE(m: &mut Minimizer) {
 
     for i in 0..num_states as usize {
         if m.finals[i] {
-            m.e[i].group = FP;
+            m.e[i].group = fp;
             m.e[i].left = last_f;
             match last_f {
                 Some(prev) if i > 0 => m.e[prev].right = Some(i),
-                None => m.phead[FP].first_e = Some(i),
+                None => m.phead[fp].first_e = Some(i),
                 _ => {}
             }
             last_f = Some(i);
-            m.phead[FP].last_e = Some(i);
+            m.phead[fp].last_e = Some(i);
         } else {
-            m.e[i].group = nonFP;
+            m.e[i].group = non_fp;
             m.e[i].left = last_nonf;
             match last_nonf {
                 Some(prev) if i > 0 => m.e[prev].right = Some(i),
-                None => m.phead[nonFP].first_e = Some(i),
+                None => m.phead[non_fp].first_e = Some(i),
                 _ => {}
             }
             last_nonf = Some(i);
-            m.phead[nonFP].last_e = Some(i);
+            m.phead[non_fp].last_e = Some(i);
         }
         m.e[i].inv_count = 0;
     }
@@ -910,7 +907,7 @@ mod tests {
     }
 
     // End-to-end Hopcroft minimization: the whole hop pipeline (sigma_to_pairs,
-    // init_PE, generate_inverse, trans_sort_cmp, refine_states no-split touch
+    // init_pe, generate_inverse, trans_sort_cmp, refine_states no-split touch
     // pass, rebuild_machine's in-place compaction) collapses the equivalent
     // pair {1,2} to one state.
     // [spec:foma:sem:minimize.fsm-minimize-fn/test]
@@ -1053,7 +1050,7 @@ mod tests {
         );
     }
 
-    // init_PE builds the initial {nonfinals, finals} partition, weaves each
+    // init_pe builds the initial {nonfinals, finals} partition, weaves each
     // block's doubly linked member list in state order, seeds the agenda
     // (finals first) and the P chain.
     // [spec:foma:sem:minimize.init-pe-fn/test]
@@ -1065,16 +1062,16 @@ mod tests {
             finals: vec![false, false, true],
             ..Default::default()
         };
-        init_PE(&mut m);
+        init_pe(&mut m);
         assert_eq!(m.total_states, 2);
-        /* nonFP == block 0 (count 2), FP == block 1 (count 1) */
+        /* non_fp == block 0 (count 2), fp == block 1 (count 1) */
         assert_eq!(m.phead[0].count, 2);
         assert_eq!(m.phead[1].count, 1);
         assert_eq!(m.phead[0].first_e, Some(0));
         assert_eq!(m.phead[0].last_e, Some(1));
         assert_eq!(m.phead[1].first_e, Some(2));
         assert_eq!(m.phead[1].last_e, Some(2));
-        /* P chain head is FP -> nonFP */
+        /* P chain head is fp -> non_fp */
         assert_eq!(m.phead[1].next, Some(0));
         assert_eq!(m.phead[0].next, None);
         assert_eq!(m.phead[1].agenda, Some(0));
@@ -1087,7 +1084,7 @@ mod tests {
         assert_eq!(m.e[1].right, None);
         assert_eq!(m.e[2].left, None);
         assert_eq!(m.e[2].right, None);
-        /* agenda: finals (FP) first, then nonfinals (nonFP) */
+        /* agenda: finals (fp) first, then nonfinals (non_fp) */
         assert_eq!(m.agenda_head, Some(0));
         assert_eq!(m.agenda_top[0].p, 1);
         assert_eq!(m.agenda_top[0].next, Some(1));
@@ -1142,7 +1139,7 @@ mod tests {
             ..Default::default()
         };
         sigma_to_pairs(&mut m, &mut net);
-        init_PE(&mut m);
+        init_pe(&mut m);
         generate_inverse(&mut m, &net);
         assert_eq!(m.trans_array_minimize[0].size, 1);
         assert_eq!(m.trans_array_minimize[1].size, 1);
@@ -1165,8 +1162,8 @@ mod tests {
 
     // refine_states splits a block when only some members reach the splitter.
     // Hand-built partition: block 1 = {0,1,2}, S = {0,1} touched. The block
-    // splits into newP = {0,1} (touched) and {2} (remainder). Verifies the
-    // always-false inv_count < inv_t_count quirk: the touched half (newP) is the
+    // splits into new_p = {0,1} (touched) and {2} (remainder). Verifies the
+    // always-false inv_count < inv_t_count quirk: the touched half (new_p) is the
     // one enqueued, with index 0.
     // [spec:foma:sem:minimize.refine-states-fn/test]
     // [spec:foma:sem:minimize.agenda-add-fn/test]
@@ -1175,7 +1172,7 @@ mod tests {
         let mut m = Minimizer {
             num_states: 10, /* large: TOTAL never reaches it -> no abort */
             total_states: 3,
-            /* block pool: index 1 is the splittable block tP, index 3 is free */
+            /* block pool: index 1 is the splittable block t_p, index 3 is free */
             phead: vec![P::default(); 6],
             ..Default::default()
         };
@@ -1187,7 +1184,7 @@ mod tests {
         m.phead[1].next = None;
         m.p = Some(1); /* chain head */
         m.pnext = 3;
-        m.current_w = 5; /* tP (1) is NOT current_w */
+        m.current_w = 5; /* t_p (1) is NOT current_w */
         m.e = vec![E::default(); 3];
         for (i, ent) in m.e.iter_mut().enumerate() {
             ent.group = 1;
@@ -1202,17 +1199,24 @@ mod tests {
         m.mainloop = 1;
 
         let selfsplit = refine_states(&mut m, 2);
-        assert!(!selfsplit, "tP is not current_w");
+        assert!(!selfsplit, "t_p is not current_w");
         assert_eq!(m.total_states, 4, "one new block created");
-        /* touched states 0,1 moved to newP (block 3); state 2 stays in tP */
+        /* touched states 0,1 moved to new_p (block 3); state 2 stays in t_p */
         assert_eq!((m.e[0].group, m.e[1].group, m.e[2].group), (3, 3, 1));
-        assert_eq!(m.phead[3].count, 2, "newP holds the two touched states");
-        assert_eq!(m.phead[1].count, 1, "tP reduced to the untouched remainder");
-        assert_eq!(m.phead[1].next, Some(3), "newP linked after the chain head");
-        /* tP's remaining member list is just {2} */
+        assert_eq!(m.phead[3].count, 2, "new_p holds the two touched states");
+        assert_eq!(
+            m.phead[1].count, 1,
+            "t_p reduced to the untouched remainder"
+        );
+        assert_eq!(
+            m.phead[1].next,
+            Some(3),
+            "new_p linked after the chain head"
+        );
+        /* t_p's remaining member list is just {2} */
         assert_eq!(m.phead[1].first_e, Some(2));
         assert_eq!(m.phead[1].last_e, Some(2));
-        /* the touched half (newP == 3) is the one enqueued, index 0 (false) */
+        /* the touched half (new_p == 3) is the one enqueued, index 0 (false) */
         assert_eq!(m.agenda, Some(0));
         assert_eq!(m.agenda_top[0].p, 3);
         assert!(!m.agenda_top[0].index);

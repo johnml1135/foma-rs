@@ -194,11 +194,10 @@ pub fn fsm_determinize(net: Box<Fsm>) -> Box<Fsm> {
 
 // [spec:foma:def:determinize.fsm-subset-fn]
 // [spec:foma:sem:determinize.fsm-subset-fn]
-#[allow(non_snake_case)]
 pub(crate) fn fsm_subset(net: Box<Fsm>, operation: SubsetOp) -> Box<Fsm> {
     let mut net = net;
-    let mut T: i32;
-    let mut U: i32;
+    let mut t: i32;
+    let mut u: i32;
 
     if net.is_deterministic == Tern::Yes && operation != SubsetOp::TestStarFree {
         return net;
@@ -216,7 +215,7 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: SubsetOp) -> Box<Fsm> {
     let num_states = s.num_states;
     nhash_init(&mut s, if num_states < 12 { 6 } else { num_states / 2 });
 
-    T = initial_e_closure(&mut s, &net);
+    t = initial_e_closure(&mut s, &net);
 
     s.int_stack.clear();
 
@@ -260,17 +259,17 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: SubsetOp) -> Box<Fsm> {
             let mut symbol_in: i32 = 0;
             let mut symbol_out: i32 = 0;
 
-            let finalstart = s.t_ptr[T as usize].finalstart;
+            let finalstart = s.t_ptr[t as usize].finalstart;
             fsm_state_set_current_state(
                 &mut builder,
-                T,
+                t,
                 finalstart as i32,
-                if T == 0 { 1 } else { 0 },
+                if t == 0 { 1 } else { 0 },
             );
 
             /* Prepare set */
-            let setsize = s.t_ptr[T as usize].size as i32;
-            let mut theset = s.t_ptr[T as usize].set_offset as usize;
+            let setsize = s.t_ptr[t as usize].size as i32;
+            let mut theset = s.t_ptr[t as usize].set_offset as usize;
             let mut minsym: i32 = i32::MAX; /* INT_MAX */
             let mut has_trans = false;
             for i in 0..setsize {
@@ -299,7 +298,7 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: SubsetOp) -> Box<Fsm> {
             let mut next_minsym: i32 = i32::MAX;
             while minsym != i32::MAX {
                 /* re-read each round (matches the C's set_table re-fetch) */
-                theset = s.t_ptr[T as usize].set_offset as usize;
+                theset = s.t_ptr[t as usize].set_offset as usize;
 
                 let mut j: i32 = 0;
                 for i in 0..setsize {
@@ -323,23 +322,23 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: SubsetOp) -> Box<Fsm> {
 
                             if operation == SubsetOp::EpsilonRemove {
                                 s.mainloop += 1;
-                                U = e_closure(&mut s, j);
-                                if U != -1 {
+                                u = e_closure(&mut s, j);
+                                if u != -1 {
                                     single_symbol_to_symbol_pair(
                                         &s,
                                         minsym,
                                         &mut symbol_in,
                                         &mut symbol_out,
                                     );
-                                    let fs = s.t_ptr[T as usize].finalstart;
+                                    let fs = s.t_ptr[t as usize].finalstart;
                                     fsm_state_add_arc(
                                         &mut builder,
-                                        T,
+                                        t,
                                         symbol_in,
                                         symbol_out,
-                                        U,
+                                        u,
                                         fs as i32,
-                                        if T == 0 { 1 } else { 0 },
+                                        if t == 0 { 1 } else { 0 },
                                     );
                                     j = 0;
                                 }
@@ -361,38 +360,38 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: SubsetOp) -> Box<Fsm> {
                 }
                 if operation == SubsetOp::Determinize {
                     s.mainloop += 1;
-                    U = e_closure(&mut s, j);
-                    if U != -1 {
+                    u = e_closure(&mut s, j);
+                    if u != -1 {
                         single_symbol_to_symbol_pair(&s, minsym, &mut symbol_in, &mut symbol_out);
-                        let fs = s.t_ptr[T as usize].finalstart;
+                        let fs = s.t_ptr[t as usize].finalstart;
                         fsm_state_add_arc(
                             &mut builder,
-                            T,
+                            t,
                             symbol_in,
                             symbol_out,
-                            U,
+                            u,
                             fs as i32,
-                            if T == 0 { 1 } else { 0 },
+                            if t == 0 { 1 } else { 0 },
                         );
                     }
                 }
                 if operation == SubsetOp::TestStarFree {
                     s.mainloop += 1;
-                    U = e_closure(&mut s, j);
-                    if U != -1 {
+                    u = e_closure(&mut s, j);
+                    if u != -1 {
                         single_symbol_to_symbol_pair(&s, minsym, &mut symbol_in, &mut symbol_out);
-                        let fs = s.t_ptr[T as usize].finalstart;
+                        let fs = s.t_ptr[t as usize].finalstart;
                         fsm_state_add_arc(
                             &mut builder,
-                            T,
+                            t,
                             symbol_in,
                             symbol_out,
-                            U,
+                            u,
                             fs as i32,
-                            if T == 0 { 1 } else { 0 },
+                            if t == 0 { 1 } else { 0 },
                         );
                         if s.star_free_mark == 1 {
-                            //fsm_state_add_arc(T, maxsigma, maxsigma, U, (T_ptr+T)->finalstart, T == 0 ? 1 : 0);
+                            //fsm_state_add_arc(t, maxsigma, maxsigma, u, (T_ptr+t)->finalstart, t == 0 ? 1 : 0);
                             s.star_free_mark = 0;
                         }
                     }
@@ -403,8 +402,8 @@ pub(crate) fn fsm_subset(net: Box<Fsm>, operation: SubsetOp) -> Box<Fsm> {
             /* end state */
             fsm_state_end_state(&mut builder);
         }
-        T = next_unmarked(&mut s);
-        if T == -1 {
+        t = next_unmarked(&mut s);
+        if t == -1 {
             break;
         }
     }
@@ -629,8 +628,7 @@ pub(crate) fn set_lookup(s: &mut Subset, lookup_table: &[i32], size: i32) -> i32
 // [spec:foma:def:determinize.add-t-ptr-fn]
 // [spec:foma:sem:determinize.add-t-ptr-fn]
 /* External linkage in C (not static) even though internal to the module */
-#[allow(non_snake_case)]
-pub(crate) fn add_T_ptr(s: &mut Subset, setnum: i32, setsize: i32, theset: u32, fs: i32) {
+pub(crate) fn add_t_ptr(s: &mut Subset, setnum: i32, setsize: i32, theset: u32, fs: i32) {
     if setnum >= s.t_limit {
         s.t_limit *= 2;
         let t_limit = s.t_limit;
@@ -969,7 +967,7 @@ pub(crate) fn nhash_insert(s: &mut Subset, hashval: i32, set: &[i32], setsize: i
         tableptr.size = setsize as u32;
         tableptr.setnum = current_setnum;
 
-        add_T_ptr(s, current_setnum, setsize, set_offset, fs as i32);
+        add_t_ptr(s, current_setnum, setsize, set_offset, fs as i32);
         return current_setnum;
     }
 
@@ -986,7 +984,7 @@ pub(crate) fn nhash_insert(s: &mut Subset, hashval: i32, set: &[i32], setsize: i
     });
     head.next = Some(tableptr);
 
-    add_T_ptr(s, current_setnum, setsize, set_offset, fs as i32);
+    add_t_ptr(s, current_setnum, setsize, set_offset, fs as i32);
     current_setnum
 }
 
@@ -1334,10 +1332,10 @@ mod tests {
     }
 
     // Round-trip through the subset canonicaliser: set_lookup -> nhash_find_insert
-    // -> nhash_insert -> move_set + add_T_ptr. A first set is numbered 0 and its
+    // -> nhash_insert -> move_set + add_t_ptr. A first set is numbered 0 and its
     // members copied into set_table; a permutation of it canonicalises back to 0
     // (order-insensitive membership test via e_table); a distinct set gets 1.
-    // add_T_ptr pushed both onto the agenda (next_unmarked pops LIFO).
+    // add_t_ptr pushed both onto the agenda (next_unmarked pops LIFO).
     // [spec:foma:sem:determinize.set-lookup-fn/test]
     // [spec:foma:sem:determinize.nhash-find-insert-fn/test]
     // [spec:foma:sem:determinize.nhash-insert-fn/test]
@@ -1381,7 +1379,7 @@ mod tests {
         assert_eq!(set_lookup(&mut s, &[3, 4], 2), 1);
         assert_eq!(s.set_table_offset, 5);
 
-        /* both subsets were pushed on the agenda by add_T_ptr (LIFO) */
+        /* both subsets were pushed on the agenda by add_t_ptr (LIFO) */
         assert_eq!(next_unmarked(&mut s), 1);
         assert_eq!(next_unmarked(&mut s), 0);
         assert_eq!(next_unmarked(&mut s), -1);

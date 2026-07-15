@@ -1461,8 +1461,7 @@ pub fn io_gz_file_to_mem(iobh: &mut IoBufHandle, filename: &str) -> usize {
 
 // [spec:foma:def:io.check-bom-fn]
 // [spec:foma:sem:io.check-bom-fn+1]
-#[allow(non_snake_case)]
-pub(crate) fn check_BOM(buffer: &[u8]) -> Option<&'static Bom> {
+pub(crate) fn check_bom(buffer: &[u8]) -> Option<&'static Bom> {
     /* Wave 4 fix: the C compared each entry with strncmp(code, buffer, len),
     which stops at a mutual NUL, so any buffer whose first byte was 0x00
     false-matched the UTF-32BE entry (00 00 FE FF) and "FF FE 00 <any>"
@@ -1538,9 +1537,9 @@ pub fn file_to_mem(name: &str) -> Result<Vec<u8>, FomaError> {
         tracing::error!("Error reading file '{}'", name);
         return Err(FomaError::Io(format!("cannot read file '{name}'")));
     }
-    /* check_BOM runs on the buffer BEFORE the '\0' terminator is written, as in
+    /* check_bom runs on the buffer BEFORE the '\0' terminator is written, as in
     C (bytes past the file end are absent, so a short file cannot false-match). */
-    if let Some(bom) = check_BOM(&content) {
+    if let Some(bom) = check_bom(&content) {
         tracing::error!(
             "{} BOM mark is detected in file '{}'.",
             bom.name.expect("a matched BOM entry has a name"),
@@ -2347,7 +2346,7 @@ mod tests {
         }
         assert_eq!(file_to_mem(f.path()).unwrap(), b"abc\n\0");
 
-        /* short (<4 byte) non-BOM file reads fine (the exact-match check_BOM
+        /* short (<4 byte) non-BOM file reads fine (the exact-match check_bom
         cannot false-match a buffer shorter than a BOM) */
         let g = Scratch::new("f2m");
         {
@@ -2386,34 +2385,34 @@ mod tests {
     // [spec:foma:sem:io.check-bom-fn+1/test]
     #[test]
     fn check_bom_exact_match_no_nul_false_positives() {
-        assert_eq!(check_BOM(&[0xEF, 0xBB, 0xBF]).unwrap().name, Some("UTF-8"));
+        assert_eq!(check_bom(&[0xEF, 0xBB, 0xBF]).unwrap().name, Some("UTF-8"));
         /* full 4-byte marks match exactly */
         assert_eq!(
-            check_BOM(&[0xFF, 0xFE, 0x00, 0x00]).unwrap().name,
+            check_bom(&[0xFF, 0xFE, 0x00, 0x00]).unwrap().name,
             Some("UTF-32LE")
         );
         assert_eq!(
-            check_BOM(&[0x00, 0x00, 0xFE, 0xFF]).unwrap().name,
+            check_bom(&[0x00, 0x00, 0xFE, 0xFF]).unwrap().name,
             Some("UTF-32BE")
         );
         /* Wave 4 fix: a lone leading '\0' no longer false-matches UTF-32BE */
-        assert!(check_BOM(&[0x00, 0x41, 0x42, 0x43]).is_none());
-        assert!(check_BOM(&[0x00]).is_none());
+        assert!(check_bom(&[0x00, 0x41, 0x42, 0x43]).is_none());
+        assert!(check_bom(&[0x00]).is_none());
         /* Wave 4 fix: FF FE 00 <non-00> is UTF16-LE (not a UTF-32LE false match) */
         assert_eq!(
-            check_BOM(&[0xFF, 0xFE, 0x00, 0x99]).unwrap().name,
+            check_bom(&[0xFF, 0xFE, 0x00, 0x99]).unwrap().name,
             Some("UTF16-LE")
         );
         /* FF FE <non-NUL> → UTF16-LE */
         assert_eq!(
-            check_BOM(&[0xFF, 0xFE, 0x41, 0x42]).unwrap().name,
+            check_bom(&[0xFF, 0xFE, 0x41, 0x42]).unwrap().name,
             Some("UTF16-LE")
         );
         assert_eq!(
-            check_BOM(&[0xFE, 0xFF, 0x41, 0x42]).unwrap().name,
+            check_bom(&[0xFE, 0xFF, 0x41, 0x42]).unwrap().name,
             Some("UTF16-BE")
         );
-        assert!(check_BOM(b"hello").is_none());
+        assert!(check_bom(b"hello").is_none());
     }
 
     // [spec:foma:sem:io.io-get-regular-file-size-fn/test]
