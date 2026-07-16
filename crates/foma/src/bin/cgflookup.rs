@@ -201,7 +201,7 @@ fn app_print(result: Option<&str>) {
     }
 }
 
-// [spec:foma:def:cgflookup.main-fn]
+// [spec:foma:def:cgflookup.main-fn+1]
 // [spec:foma:sem:cgflookup.main-fn+1]
 fn main() {
     // Route library diagnostics (tracing events) to stderr in a compact,

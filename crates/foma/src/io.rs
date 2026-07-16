@@ -200,7 +200,7 @@ pub fn escape_print<W: std::io::Write + ?Sized>(
     Ok(())
 }
 
-// [spec:foma:def:io.foma-write-prolog-fn]
+// [spec:foma:def:io.foma-write-prolog-fn+1]
 // [spec:foma:sem:io.foma-write-prolog-fn+1]
 // [spec:foma:def:fomalib.foma-write-prolog-fn]
 // [spec:foma:sem:fomalib.foma-write-prolog-fn]
@@ -407,9 +407,9 @@ pub fn read_att(opts: &FomaOptions, filename: &str) -> Option<Box<Fsm>> {
     Some(net)
 }
 
-// [spec:foma:def:io.fsm-read-prolog-fn]
+// [spec:foma:def:io.fsm-read-prolog-fn+1]
 // [spec:foma:sem:io.fsm-read-prolog-fn+1]
-// [spec:foma:def:fomalib.fsm-read-prolog-fn]
+// [spec:foma:def:fomalib.fsm-read-prolog-fn+1]
 // [spec:foma:sem:fomalib.fsm-read-prolog-fn+1]
 pub fn fsm_read_prolog(filename: &str) -> Option<Box<Fsm>> {
     /* The C source's strstr/strchr lookups below were unchecked (NULL-deref
@@ -579,10 +579,10 @@ pub fn io_free(mut iobh: IoBufHandle) {
     /* free(iobh) — dropped */
 }
 
-// [spec:foma:def:io.fsm-read-spaced-text-file-fn]
-// [spec:foma:sem:io.fsm-read-spaced-text-file-fn]
-// [spec:foma:def:fomalib.fsm-read-spaced-text-file-fn]
-// [spec:foma:sem:fomalib.fsm-read-spaced-text-file-fn]
+// [spec:foma:def:io.fsm-read-spaced-text-file-fn+1]
+// [spec:foma:sem:io.fsm-read-spaced-text-file-fn+1]
+// [spec:foma:def:fomalib.fsm-read-spaced-text-file-fn+1]
+// [spec:foma:sem:fomalib.fsm-read-spaced-text-file-fn+1]
 pub fn fsm_read_spaced_text_file(filename: &str) -> Option<Box<Fsm>> {
     let text = match file_to_mem(filename) {
         Err(_) => return None,
@@ -638,10 +638,10 @@ pub fn fsm_read_spaced_text_file(filename: &str) -> Option<Box<Fsm>> {
     Some(fsm_trie_done(th))
 }
 
-// [spec:foma:def:io.fsm-read-text-file-fn]
-// [spec:foma:sem:io.fsm-read-text-file-fn]
-// [spec:foma:def:fomalib.fsm-read-text-file-fn]
-// [spec:foma:sem:fomalib.fsm-read-text-file-fn]
+// [spec:foma:def:io.fsm-read-text-file-fn+1]
+// [spec:foma:sem:io.fsm-read-text-file-fn+1]
+// [spec:foma:def:fomalib.fsm-read-text-file-fn+1]
+// [spec:foma:sem:fomalib.fsm-read-text-file-fn+1]
 pub fn fsm_read_text_file(filename: &str) -> Option<Box<Fsm>> {
     let text = match file_to_mem(filename) {
         Err(_) => return None,
@@ -727,7 +727,7 @@ pub fn fsm_read_binary_file_multiple_init(filename: &str) -> Option<Box<FsmReadB
     Some(Box::new(FsmReadBinaryHandle { iobh }))
 }
 
-// [spec:foma:def:io.fsm-read-binary-file-fn]
+// [spec:foma:def:io.fsm-read-binary-file-fn+1]
 // [spec:foma:sem:io.fsm-read-binary-file-fn+1]
 // [spec:foma:def:fomalib.fsm-read-binary-file-fn]
 // [spec:foma:sem:fomalib.fsm-read-binary-file-fn]
@@ -914,7 +914,7 @@ pub(crate) fn explode_line(buf: &str, values: &mut Vec<i32>) -> i32 {
 /* ##foma-net VERSION## / ##props## / PROPERTIES LINE / ##sigma## / ...SIGMA... */
 /* / ##states## / ...TRANSITIONS... / ##end## (see foma/io.c for the full note) */
 
-// [spec:foma:def:io.io-net-read-fn]
+// [spec:foma:def:io.io-net-read-fn+5]
 // [spec:foma:sem:io.io-net-read-fn+5]
 // C signature: struct fsm *io_net_read(io_buf_handle *iobh, char **net_name).
 // The name rides on net.name (C's *net_name out-param was always identical to
@@ -1192,9 +1192,9 @@ pub(crate) fn io_gets(iobh: &mut IoBufHandle, target: &mut String) -> i32 {
     i as i32
 }
 
-// [spec:foma:def:io.foma-net-print-fn]
+// [spec:foma:def:io.foma-net-print-fn+1]
 // [spec:foma:sem:io.foma-net-print-fn+1]
-// [spec:foma:def:fomalib.foma-net-print-fn]
+// [spec:foma:def:fomalib.foma-net-print-fn+1]
 // [spec:foma:sem:fomalib.foma-net-print-fn+1]
 // C signature: int foma_net_print(struct fsm *net, gzFile outfile) (the C `1`
 // return was a vestigial always-success status). Here the gzip layer is the
@@ -1318,9 +1318,9 @@ pub fn foma_net_print<W: std::io::Write + ?Sized>(
     Ok(())
 }
 
-// [spec:foma:def:io.net-print-att-fn]
+// [spec:foma:def:io.net-print-att-fn+1]
 // [spec:foma:sem:io.net-print-att-fn+1]
-// [spec:foma:def:fomalib.net-print-att-fn]
+// [spec:foma:def:fomalib.net-print-att-fn+1]
 // [spec:foma:sem:fomalib.net-print-att-fn+1]
 pub fn net_print_att<W: std::io::Write + ?Sized>(
     opts: &FomaOptions,
@@ -1458,7 +1458,7 @@ pub fn io_gz_file_to_mem(iobh: &mut IoBufHandle, filename: &str) -> usize {
     size
 }
 
-// [spec:foma:def:io.check-bom-fn]
+// [spec:foma:def:io.check-bom-fn+1]
 // [spec:foma:sem:io.check-bom-fn+1]
 pub(crate) fn check_bom(buffer: &[u8]) -> Option<&'static Bom> {
     /* Wave 4 fix: the C compared each entry with strncmp(code, buffer, len),
@@ -1512,7 +1512,7 @@ static BOM_CODES: [Bom; 6] = [
     },
 ];
 
-// [spec:foma:def:io.file-to-mem-fn]
+// [spec:foma:def:io.file-to-mem-fn+1]
 // [spec:foma:sem:io.file-to-mem-fn+1]
 // [spec:foma:def:fomalib.file-to-mem-fn]
 // [spec:foma:sem:fomalib.file-to-mem-fn]
@@ -1822,7 +1822,7 @@ mod tests {
     }
 
     // [spec:foma:sem:io.foma-net-print-fn+1/test]
-    // [spec:foma:sem:io.io-net-read-fn/test]
+    // [spec:foma:sem:io.io-net-read-fn+5/test]
     #[test]
     fn tern_props_survive_the_wire_in_all_three_states() {
         /* The tri-state property flags cross the wire as their raw discriminant:
@@ -1858,7 +1858,7 @@ mod tests {
     }
 
     // [spec:foma:sem:io.foma-net-print-fn+1/test]
-    // [spec:foma:sem:io.io-net-read-fn/test]
+    // [spec:foma:sem:io.io-net-read-fn+5/test]
     #[test]
     fn props_extras_byte_packs_and_unpacks_every_combination() {
         /* The extras byte is `is_completed | in<<2 | out<<4`. Every combination
@@ -1898,7 +1898,7 @@ mod tests {
         assert_eq!(body.lines().count(), 25);
     }
 
-    // [spec:foma:sem:io.io-net-read-fn/test]
+    // [spec:foma:sem:io.io-net-read-fn+5/test]
     #[test]
     fn io_net_read_parses_wire_image() {
         let mut buf = AB_FOMA_TEXT.as_bytes().to_vec();
@@ -1912,7 +1912,7 @@ mod tests {
         assert_net_eq(&net, &craft_ab_net("test"));
     }
 
-    // [spec:foma:sem:io.io-net-read-fn/test]
+    // [spec:foma:sem:io.io-net-read-fn+5/test]
     #[test]
     fn io_net_read_survives_understated_linecount() {
         /* props claims linecount 1 but the states section has 3 lines — the C
@@ -1939,7 +1939,7 @@ mod tests {
         );
     }
 
-    // [spec:foma:sem:io.io-net-read-fn/test]
+    // [spec:foma:sem:io.io-net-read-fn+5/test]
     #[test]
     fn io_net_read_header_error_returns_none() {
         let mut h = IoBufHandle {
@@ -2242,8 +2242,8 @@ mod tests {
         assert!(!s.contains("\"0\":\"?\")"));
     }
 
-    // [spec:foma:sem:io.fsm-read-text-file-fn/test]
-    // [spec:foma:sem:fomalib.fsm-read-text-file-fn/test]
+    // [spec:foma:sem:io.fsm-read-text-file-fn+1/test]
+    // [spec:foma:sem:fomalib.fsm-read-text-file-fn+1/test]
     // [spec:foma:sem:io.file-to-mem-fn+1/test]
     // [spec:foma:sem:fomalib.file-to-mem-fn/test]
     #[test]
@@ -2261,8 +2261,8 @@ mod tests {
         assert!(drain_down(&net, "ca").is_empty());
     }
 
-    // [spec:foma:sem:io.fsm-read-spaced-text-file-fn/test]
-    // [spec:foma:sem:fomalib.fsm-read-spaced-text-file-fn/test]
+    // [spec:foma:sem:io.fsm-read-spaced-text-file-fn+1/test]
+    // [spec:foma:sem:fomalib.fsm-read-spaced-text-file-fn+1/test]
     #[test]
     fn read_spaced_text_file_records() {
         let f = Scratch::new("spaced");
@@ -2322,8 +2322,8 @@ mod tests {
         assert!(drain_down(&net, "a\tb").is_empty());
     }
 
-    // [spec:foma:sem:io.fsm-read-spaced-text-file-fn/test]
-    // [spec:foma:sem:io.fsm-read-text-file-fn/test]
+    // [spec:foma:sem:io.fsm-read-spaced-text-file-fn+1/test]
+    // [spec:foma:sem:io.fsm-read-text-file-fn+1/test]
     #[test]
     fn spaced_and_text_readers_missing_file_none() {
         let mut p = std::env::temp_dir();

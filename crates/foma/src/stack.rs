@@ -241,9 +241,9 @@ impl Session {
         i
     }
 
-    // [spec:foma:def:stack.stack-init-fn]
+    // [spec:foma:def:stack.stack-init-fn+1]
     // [spec:foma:sem:stack.stack-init-fn+1]
-    // [spec:foma:def:foma.stack-init-fn]
+    // [spec:foma:def:foma.stack-init-fn+1]
     // [spec:foma:sem:foma.stack-init-fn+1]
     pub fn stack_init(&mut self) {
         // malloc a fresh sentinel {number = -1, fsm = NULL, next = NULL,
@@ -382,9 +382,9 @@ impl Session {
         self.e_next(self.main_stack()).is_none()
     }
 
-    // [spec:foma:def:stack.stack-turn-fn]
+    // [spec:foma:def:stack.stack-turn-fn+1]
     // [spec:foma:sem:stack.stack-turn-fn+1]
-    // [spec:foma:def:foma.stack-turn-fn]
+    // [spec:foma:def:foma.stack-turn-fn+1]
     // [spec:foma:sem:foma.stack-turn-fn+1]
     pub fn stack_turn(&mut self) -> StackReorder {
         // Wave 4 fix: the C reversal's final previous-link fix-up loop never
@@ -463,9 +463,9 @@ impl Session {
         self.e_previous(self.walk_to_top())
     }
 
-    // [spec:foma:def:stack.stack-clear-fn]
+    // [spec:foma:def:stack.stack-clear-fn+1]
     // [spec:foma:sem:stack.stack-clear-fn+1]
-    // [spec:foma:def:foma.stack-clear-fn]
+    // [spec:foma:def:foma.stack-clear-fn+1]
     // [spec:foma:sem:foma.stack-clear-fn+1]
     pub fn stack_clear(&mut self) {
         let mut stack_ptr = self.main_stack();
@@ -489,9 +489,9 @@ impl Session {
         self.stack_init()
     }
 
-    // [spec:foma:def:stack.stack-rotate-fn]
+    // [spec:foma:def:stack.stack-rotate-fn+1]
     // [spec:foma:sem:stack.stack-rotate-fn+1]
-    // [spec:foma:def:foma.stack-rotate-fn]
+    // [spec:foma:def:foma.stack-rotate-fn+1]
     // [spec:foma:sem:foma.stack-rotate-fn+1]
     pub fn stack_rotate(&mut self) -> StackReorder {
         /* Top element of stack to bottom */
@@ -522,9 +522,9 @@ impl Session {
         StackReorder::Reordered
     }
 
-    // [spec:foma:def:stack.stack-print-fn]
+    // [spec:foma:def:stack.stack-print-fn+1]
     // [spec:foma:sem:stack.stack-print-fn+1]
-    // [spec:foma:def:foma.stack-print-fn]
+    // [spec:foma:def:foma.stack-print-fn+1]
     // [spec:foma:sem:foma.stack-print-fn+1]
     pub fn stack_print(&self) {
         // No-op stub: reads/writes no state, prints nothing.

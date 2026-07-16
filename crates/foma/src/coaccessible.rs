@@ -32,9 +32,9 @@ pub struct Invtable {
     pub next: Option<Box<Invtable>>,
 }
 
-// [spec:foma:def:coaccessible.fsm-coaccessible-fn]
+// [spec:foma:def:coaccessible.fsm-coaccessible-fn+2]
 // [spec:foma:sem:coaccessible.fsm-coaccessible-fn+2]
-// [spec:foma:def:fomalib.fsm-coaccessible-fn]
+// [spec:foma:def:fomalib.fsm-coaccessible-fn+2]
 // [spec:foma:sem:fomalib.fsm-coaccessible-fn+2]
 pub fn fsm_coaccessible(net: Box<Fsm>) -> Box<Fsm> {
     let mut int_stack = IntStack::new();
@@ -259,8 +259,8 @@ mod tests {
             .collect()
     }
 
-    // [spec:foma:sem:coaccessible.fsm-coaccessible-fn/test]
-    // [spec:foma:sem:fomalib.fsm-coaccessible-fn/test]
+    // [spec:foma:sem:coaccessible.fsm-coaccessible-fn+2/test]
+    // [spec:foma:sem:fomalib.fsm-coaccessible-fn+2/test]
     #[test]
     fn coaccessible_prunes_dead_end_state_and_updates_counts() {
         /* 0 -a-> 1 (final), 0 -b-> 2 (dead end): state 2 is pruned */
@@ -277,8 +277,8 @@ mod tests {
         assert_eq!(net.is_pruned, Tern::Yes);
     }
 
-    // [spec:foma:sem:coaccessible.fsm-coaccessible-fn/test]
-    // [spec:foma:sem:fomalib.fsm-coaccessible-fn/test]
+    // [spec:foma:sem:coaccessible.fsm-coaccessible-fn+2/test]
+    // [spec:foma:sem:fomalib.fsm-coaccessible-fn+2/test]
     #[test]
     fn coaccessible_marks_predecessors_through_inverse_chain_nodes() {
         /* state 2 has two predecessors (0 and 1): the second one lives in a
@@ -336,8 +336,8 @@ mod tests {
         assert_eq!(net.is_pruned, Tern::Yes);
     }
 
-    // [spec:foma:sem:coaccessible.fsm-coaccessible-fn/test]
-    // [spec:foma:sem:fomalib.fsm-coaccessible-fn/test]
+    // [spec:foma:sem:coaccessible.fsm-coaccessible-fn+2/test]
+    // [spec:foma:sem:fomalib.fsm-coaccessible-fn+2/test]
     #[test]
     fn coaccessible_emits_synthetic_final_line_when_all_arcs_pruned() {
         /* 0 -a-> 1 (final), 1 -b-> 2 (dead end): state 1 keeps no line of
@@ -355,8 +355,8 @@ mod tests {
         assert_eq!(net.arccount, 1);
     }
 
-    // [spec:foma:sem:coaccessible.fsm-coaccessible-fn/test]
-    // [spec:foma:sem:fomalib.fsm-coaccessible-fn/test]
+    // [spec:foma:sem:coaccessible.fsm-coaccessible-fn+2/test]
+    // [spec:foma:sem:fomalib.fsm-coaccessible-fn+2/test]
     #[test]
     fn coaccessible_emits_trailing_synthetic_final_line_for_last_state() {
         /* 0 -a-> 2 (final), 2 -b-> 1 (dead end): the final state 2 owns the
@@ -374,8 +374,8 @@ mod tests {
         assert_eq!(net.arccount, 1);
     }
 
-    // [spec:foma:sem:coaccessible.fsm-coaccessible-fn/test]
-    // [spec:foma:sem:fomalib.fsm-coaccessible-fn/test]
+    // [spec:foma:sem:coaccessible.fsm-coaccessible-fn+2/test]
+    // [spec:foma:sem:fomalib.fsm-coaccessible-fn+2/test]
     #[test]
     fn coaccessible_all_coaccessible_terminates_early_with_counts_unchanged() {
         let opts = &FomaOptions::default();

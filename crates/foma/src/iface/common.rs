@@ -48,7 +48,7 @@ pub(crate) fn sigptr(sigma: &[Sigma], number: i32) -> String {
     format!("NONE({})", number)
 }
 
-// [spec:foma:def:iface.print-net-fn]
+// [spec:foma:def:iface.print-net-fn+1]
 // [spec:foma:sem:iface.print-net-fn+1]
 pub(crate) fn print_net(net: &mut Fsm, filename: Option<&str>) {
     let mut out: Output = match filename {
@@ -202,9 +202,9 @@ pub(crate) fn print_mem_size(net: &Fsm) {
     std::io::stdout().flush().expect("flush stdout");
 }
 
-// [spec:foma:def:iface.print-stats-fn]
+// [spec:foma:def:iface.print-stats-fn+1]
 // [spec:foma:sem:iface.print-stats-fn+1]
-// [spec:foma:def:foma.print-stats-fn]
+// [spec:foma:def:foma.print-stats-fn+1]
 // [spec:foma:sem:foma.print-stats-fn+1]
 pub fn print_stats(net: &Fsm) {
     print_mem_size(net);
@@ -233,7 +233,7 @@ pub fn print_stats(net: &Fsm) {
     println!(".");
 }
 
-// [spec:foma:def:iface.print-sigma-fn]
+// [spec:foma:def:iface.print-sigma-fn+1]
 // [spec:foma:sem:iface.print-sigma-fn+1]
 pub(crate) fn print_sigma<W: std::io::Write + ?Sized>(sigma: &[Sigma], out: &mut W) {
     let mut size = 0;
@@ -254,7 +254,7 @@ pub(crate) fn print_sigma<W: std::io::Write + ?Sized>(sigma: &[Sigma], out: &mut
     writeln!(out, "Size: {}.", size).expect("writing sigma");
 }
 
-// [spec:foma:def:iface.print-dot-fn]
+// [spec:foma:def:iface.print-dot-fn+2]
 // [spec:foma:sem:iface.print-dot-fn+2]
 pub(crate) fn print_dot(net: &mut Fsm, filename: Option<&str>) {
     fsm_count(net);
@@ -351,9 +351,9 @@ pub(crate) fn print_dot(net: &mut Fsm, filename: Option<&str>) {
     // fclose only when filename != NULL — dropped at scope end.
 }
 
-// [spec:foma:def:iface.view-net-fn]
+// [spec:foma:def:iface.view-net-fn+1]
 // [spec:foma:sem:iface.view-net-fn+1]
-// [spec:foma:def:foma.view-net-fn]
+// [spec:foma:def:foma.view-net-fn+1]
 // [spec:foma:sem:foma.view-net-fn+1]
 pub(crate) fn view_net(net: &mut Fsm) {
     // DEVIATION from C: no tempnam(); a unique temp path is built under the system

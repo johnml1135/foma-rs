@@ -53,9 +53,9 @@ pub fn dequote_string(s: &mut Vec<u8>) {
 /* Decode quoted strings. This includes: */
 /* Changing \uXXXX sequences to their unicode equivalents */
 
-// [spec:foma:def:utf8.decode-quoted-fn]
+// [spec:foma:def:utf8.decode-quoted-fn+1]
 // [spec:foma:sem:utf8.decode-quoted-fn+1]
-// [spec:foma:def:fomalibconf.decode-quoted-fn]
+// [spec:foma:def:fomalibconf.decode-quoted-fn+1]
 // [spec:foma:sem:fomalibconf.decode-quoted-fn+1]
 // Wave 4 fix: on a malformed lead byte utf8skip returns -1, so the C copied
 // zero bytes and neither cursor advanced (infinite loop). Here the copy is
@@ -100,9 +100,9 @@ pub fn decode_quoted(s: &mut Vec<u8>) {
 }
 
 /* Replace equal length substrings in s */
-// [spec:foma:def:utf8.streqrep-fn]
+// [spec:foma:def:utf8.streqrep-fn+1]
 // [spec:foma:sem:utf8.streqrep-fn+1]
-// [spec:foma:def:fomalibconf.streqrep-fn]
+// [spec:foma:def:fomalibconf.streqrep-fn+1]
 // [spec:foma:sem:fomalibconf.streqrep-fn+1]
 // C returns `s`; here the buffer is mutated in place.
 // [spec:foma:sem:utf8.streqrep-fn+1] the scan advances past each replacement, so

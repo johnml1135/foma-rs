@@ -58,18 +58,18 @@ impl IntStack {
         self.data.contains(&entry)
     }
 
-    // [spec:foma:def:int-stack.int-stack-isfull-fn]
+    // [spec:foma:def:int-stack.int-stack-isfull-fn+1]
     // [spec:foma:sem:int-stack.int-stack-isfull-fn+1]
-    // [spec:foma:def:fomalibconf.int-stack-isfull-fn]
+    // [spec:foma:def:fomalibconf.int-stack-isfull-fn+1]
     // [spec:foma:sem:fomalibconf.int-stack-isfull-fn+1]
     // Unbounded growth: the int stack is never full (was: top == MAX_STACK-1).
     pub fn is_full(&self) -> bool {
         false
     }
 
-    // [spec:foma:def:int-stack.int-stack-push-fn]
+    // [spec:foma:def:int-stack.int-stack-push-fn+1]
     // [spec:foma:sem:int-stack.int-stack-push-fn+1]
-    // [spec:foma:def:fomalibconf.int-stack-push-fn]
+    // [spec:foma:def:fomalibconf.int-stack-push-fn+1]
     // [spec:foma:sem:fomalibconf.int-stack-push-fn+1]
     // Infallible, unbounded push (was: exit(1) on a full 2^21-slot array).
     pub fn push(&mut self, c: i32) {
@@ -116,18 +116,18 @@ impl PtrStack {
         self.data.clear();
     }
 
-    // [spec:foma:def:int-stack.ptr-stack-isfull-fn]
+    // [spec:foma:def:int-stack.ptr-stack-isfull-fn+1]
     // [spec:foma:sem:int-stack.ptr-stack-isfull-fn+1]
-    // [spec:foma:def:fomalibconf.ptr-stack-isfull-fn]
+    // [spec:foma:def:fomalibconf.ptr-stack-isfull-fn+1]
     // [spec:foma:sem:fomalibconf.ptr-stack-isfull-fn+1]
     // Unbounded growth: the pointer stack is never full (was: top == MAX_PTR_STACK-1).
     pub fn is_full(&self) -> bool {
         false
     }
 
-    // [spec:foma:def:int-stack.ptr-stack-push-fn]
+    // [spec:foma:def:int-stack.ptr-stack-push-fn+1]
     // [spec:foma:sem:int-stack.ptr-stack-push-fn+1]
-    // [spec:foma:def:fomalibconf.ptr-stack-push-fn]
+    // [spec:foma:def:fomalibconf.ptr-stack-push-fn+1]
     // [spec:foma:sem:fomalibconf.ptr-stack-push-fn+1]
     // Infallible, unbounded push (was: exit(1) on a full 2^21-slot array).
     pub fn push(&mut self, ptr: usize) {
@@ -149,7 +149,7 @@ impl PtrStack {
 // fomalibconf.int-stack-status-fn) but no definition exists anywhere in the
 // C sources — it is a dead prototype (a link error if called in C).
 
-// [spec:foma:def:fomalibconf.int-stack-status-fn]
+// [spec:foma:def:fomalibconf.int-stack-status-fn+1]
 // [spec:foma:sem:fomalibconf.int-stack-status-fn+1]
 // Dead prototype: no C definition. The port surfaces the honest
 // FomaError::Unimplemented (was: panic) instead of a link error.

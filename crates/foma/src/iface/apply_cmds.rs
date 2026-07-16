@@ -530,9 +530,9 @@ fn shortest_acyclic_length(net: &crate::types::Fsm) -> i32 {
     0
 }
 
-// [spec:foma:def:iface.iface-print-shortest-string-size-fn]
+// [spec:foma:def:iface.iface-print-shortest-string-size-fn+1]
 // [spec:foma:sem:iface.iface-print-shortest-string-size-fn+1]
-// [spec:foma:def:foma.iface-print-shortest-string-size-fn]
+// [spec:foma:def:foma.iface-print-shortest-string-size-fn+1]
 // [spec:foma:sem:foma.iface-print-shortest-string-size-fn+1]
 pub fn iface_print_shortest_string_size(session: &mut Session) {
     if iface_stack_check(session, 1) {
@@ -634,9 +634,9 @@ pub enum WordSide {
     Lower,
 }
 
-// [spec:foma:def:iface.iface-words-file-fn]
+// [spec:foma:def:iface.iface-words-file-fn+1]
 // [spec:foma:sem:iface.iface-words-file-fn+1]
-// [spec:foma:def:foma.iface-words-file-fn]
+// [spec:foma:def:foma.iface-words-file-fn+1]
 // [spec:foma:sem:foma.iface-words-file-fn+1]
 pub fn iface_words_file(session: &mut Session, filename: &str, side: WordSide) {
     // The applyer must be selected fresh from `side` on every call: C held it
@@ -709,8 +709,8 @@ pub fn iface_words(session: &mut Session, limit: i32) {
     }
 }
 
-// [spec:foma:def:iface.iface-pairs-call-fn]
-// [spec:foma:sem:iface.iface-pairs-call-fn]
+// [spec:foma:def:iface.iface-pairs-call-fn+1]
+// [spec:foma:sem:iface.iface-pairs-call-fn+1]
 pub fn iface_pairs_call(session: &mut Session, limit: i32, random: i32) {
     let limit = if limit == -1 {
         session.opts.list_limit
@@ -750,9 +750,9 @@ pub fn iface_pairs_call(session: &mut Session, limit: i32, random: i32) {
     }
 }
 
-// [spec:foma:def:iface.iface-random-pairs-fn]
+// [spec:foma:def:iface.iface-random-pairs-fn+1]
 // [spec:foma:sem:iface.iface-random-pairs-fn+1]
-// [spec:foma:def:foma.iface-random-pairs-fn]
+// [spec:foma:def:foma.iface-random-pairs-fn+1]
 // [spec:foma:sem:foma.iface-random-pairs-fn+1]
 pub fn iface_random_pairs(session: &mut Session, limit: i32) {
     // Wave 4 fix: the C passed limit straight through, so limit == -1 resolved to
@@ -768,16 +768,16 @@ pub fn iface_random_pairs(session: &mut Session, limit: i32) {
 
 // [spec:foma:def:iface.iface-pairs-fn]
 // [spec:foma:sem:iface.iface-pairs-fn]
-// [spec:foma:def:foma.iface-pairs-fn]
-// [spec:foma:sem:foma.iface-pairs-fn]
+// [spec:foma:def:foma.iface-pairs-fn+1]
+// [spec:foma:sem:foma.iface-pairs-fn+1]
 pub fn iface_pairs(session: &mut Session, limit: i32) {
     iface_pairs_call(session, limit, 0);
 }
 
-// [spec:foma:def:iface.iface-pairs-file-fn]
-// [spec:foma:sem:iface.iface-pairs-file-fn]
-// [spec:foma:def:foma.iface-pairs-file-fn]
-// [spec:foma:sem:foma.iface-pairs-file-fn]
+// [spec:foma:def:iface.iface-pairs-file-fn+1]
+// [spec:foma:sem:iface.iface-pairs-file-fn+1]
+// [spec:foma:def:foma.iface-pairs-file-fn+1]
+// [spec:foma:sem:foma.iface-pairs-file-fn+1]
 pub fn iface_pairs_file(session: &mut Session, filename: &str) {
     if iface_stack_check(session, 1) {
         let Some(top) = session.stack_find_top() else {

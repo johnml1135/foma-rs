@@ -157,7 +157,7 @@ pub fn apply_med_clear(medh: Option<Box<ApplyMedHandle>>) {
     drop(medh);
 }
 
-// [spec:foma:def:spelling.print-match-fn]
+// [spec:foma:def:spelling.print-match-fn+1]
 // [spec:foma:sem:spelling.print-match-fn+1]
 fn print_match(medh: &mut ApplyMedHandle, node: usize, sigma: &[Sigma], word: &str) {
     let mut int_stack = IntStack::new();
@@ -1002,9 +1002,9 @@ pub fn cmatrix_print_att<W: std::io::Write + ?Sized>(net: &Fsm, outfile: &mut W)
     writeln!(outfile, "0").expect("writing the confusion matrix");
 }
 
-// [spec:foma:def:spelling.cmatrix-print-fn]
+// [spec:foma:def:spelling.cmatrix-print-fn+1]
 // [spec:foma:sem:spelling.cmatrix-print-fn+1]
-// [spec:foma:def:fomalib.cmatrix-print-fn]
+// [spec:foma:def:fomalib.cmatrix-print-fn+1]
 // [spec:foma:sem:fomalib.cmatrix-print-fn+1]
 pub fn cmatrix_print(net: &Fsm) {
     cmatrix_print_to(net, &mut std::io::stdout());
@@ -1349,7 +1349,7 @@ mod tests {
 
     // [spec:foma:sem:spelling.apply-med-fn/test]
     // [spec:foma:sem:fomalib.apply-med-fn/test]
-    // [spec:foma:sem:spelling.print-match-fn/test]
+    // [spec:foma:sem:spelling.print-match-fn+1/test]
     // [spec:foma:sem:spelling.apply-med-get-cost-fn/test]
     // [spec:foma:sem:fomalib.apply-med-get-cost-fn/test]
     // [spec:foma:sem:spelling.apply-med-get-instring-fn/test]
@@ -1576,8 +1576,8 @@ mod tests {
         assert_eq!(got, expected);
     }
 
-    // [spec:foma:sem:spelling.cmatrix-print-fn/test]
-    // [spec:foma:sem:fomalib.cmatrix-print-fn/test]
+    // [spec:foma:sem:spelling.cmatrix-print-fn+1/test]
+    // [spec:foma:sem:fomalib.cmatrix-print-fn+1/test]
     #[test]
     fn cmatrix_print_runs() {
         // Writes to stdout; assert only that it renders without panicking.
@@ -1586,7 +1586,7 @@ mod tests {
         cmatrix_print(&net);
     }
 
-    // [spec:foma:sem:spelling.print-match-fn/test]
+    // [spec:foma:sem:spelling.print-match-fn+1/test]
     #[test]
     fn print_match_via_med_alignment() {
         // Exercises print_match's two-pass parent-chain walk end to end.

@@ -1041,9 +1041,9 @@ pub fn iface_print_net(session: &mut Session, netname: Option<&str>, filename: O
     }
 }
 
-// [spec:foma:def:iface.iface-print-cmatrix-att-fn]
+// [spec:foma:def:iface.iface-print-cmatrix-att-fn+1]
 // [spec:foma:sem:iface.iface-print-cmatrix-att-fn+1]
-// [spec:foma:def:foma.iface-print-cmatrix-att-fn]
+// [spec:foma:def:foma.iface-print-cmatrix-att-fn+1]
 // [spec:foma:sem:foma.iface-print-cmatrix-att-fn+1]
 pub fn iface_print_cmatrix_att(session: &mut Session, filename: Option<&str>) {
     if iface_stack_check(session, 1) {
@@ -1108,9 +1108,9 @@ pub fn iface_print_cmatrix(session: &mut Session) {
     }
 }
 
-// [spec:foma:def:iface.iface-print-defined-fn]
+// [spec:foma:def:iface.iface-print-defined-fn+1]
 // [spec:foma:sem:iface.iface-print-defined-fn+1]
-// [spec:foma:def:foma.iface-print-defined-fn]
+// [spec:foma:def:foma.iface-print-defined-fn+1]
 // [spec:foma:sem:foma.iface-print-defined-fn+1]
 pub fn iface_print_defined(session: &mut Session) {
     // C printed "No defined symbols.\n" only for a NULL g_defines (possible

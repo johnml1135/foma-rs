@@ -114,9 +114,9 @@ pub fn iface_extract_unambiguous(session: &mut Session) {
     }
 }
 
-// [spec:foma:def:iface.iface-extract-number-fn]
+// [spec:foma:def:iface.iface-extract-number-fn+1]
 // [spec:foma:sem:iface.iface-extract-number-fn+1]
-// [spec:foma:def:foma.iface-extract-number-fn]
+// [spec:foma:def:foma.iface-extract-number-fn+1]
 // [spec:foma:sem:foma.iface-extract-number-fn+1]
 pub fn iface_extract_number(s: &str) -> i32 {
     // Scan to the first ASCII digit (compared as unsigned char), then atoi.

@@ -54,9 +54,9 @@ pub struct Flags {
 ///
 ///Eliminate a flag from a network. If called with name = NULL, eliminate all flags.
 ///
-// [spec:foma:def:flags.flag-eliminate-fn]
+// [spec:foma:def:flags.flag-eliminate-fn+1]
 // [spec:foma:sem:flags.flag-eliminate-fn+1]
-// [spec:foma:def:fomalib.flag-eliminate-fn]
+// [spec:foma:def:fomalib.flag-eliminate-fn+1]
 // [spec:foma:sem:fomalib.flag-eliminate-fn+1]
 pub fn flag_eliminate(opts: &FomaOptions, net: Box<Fsm>, name: Option<&str>) -> Box<Fsm> {
     let mut filter: Option<Box<Fsm>> = None;

@@ -863,8 +863,8 @@ fn print_sigma_and_stats_keep_net() {
 // is integration-tested.
 // [spec:foma:sem:iface.iface-print-shortest-string-fn/test]
 // [spec:foma:sem:foma.iface-print-shortest-string-fn/test]
-// [spec:foma:sem:iface.iface-print-shortest-string-size-fn/test]
-// [spec:foma:sem:foma.iface-print-shortest-string-size-fn/test]
+// [spec:foma:sem:iface.iface-print-shortest-string-size-fn+1/test]
+// [spec:foma:sem:foma.iface-print-shortest-string-size-fn+1/test]
 #[test]
 fn print_shortest_string_both_arities_keep_net() {
     let mut session = Session::new();
@@ -1428,8 +1428,8 @@ fn twosided_flags_preserves_flagless_language() {
 // test also stands in for view_net's facet — no external process is spawned.
 // [spec:foma:sem:iface.iface-view-fn/test]
 // [spec:foma:sem:foma.iface-view-fn/test]
-// [spec:foma:sem:iface.view-net-fn/test]
-// [spec:foma:sem:foma.view-net-fn/test]
+// [spec:foma:sem:iface.view-net-fn+1/test]
+// [spec:foma:sem:foma.view-net-fn+1/test]
 #[test]
 fn view_refuses_empty_stack_without_spawning() {
     let mut session = Session::new();
@@ -1487,8 +1487,8 @@ fn words_file_writes_per_type_and_refuses_cyclic() {
 // random_pairs routes through pairs_call(limit, 1). Wave 4 fix: random_pairs now
 // resolves -1 to g_list_random_limit (not g_list_limit) before delegating.
 // [spec:foma:sem:iface.iface-pairs-fn/test]
-// [spec:foma:sem:foma.iface-pairs-fn/test]
-// [spec:foma:sem:iface.iface-pairs-call-fn/test]
+// [spec:foma:sem:foma.iface-pairs-fn+1/test]
+// [spec:foma:sem:iface.iface-pairs-call-fn+1/test]
 // [spec:foma:sem:iface.iface-random-pairs-fn+1/test]
 // [spec:foma:sem:foma.iface-random-pairs-fn+1/test]
 #[test]
@@ -1509,8 +1509,8 @@ fn pairs_family_prints_without_consuming() {
 
 // pairs to file: cyclic refuses (message, no file); acyclic writes
 // upper\tlower per pair. Net preserved.
-// [spec:foma:sem:iface.iface-pairs-file-fn/test]
-// [spec:foma:sem:foma.iface-pairs-file-fn/test]
+// [spec:foma:sem:iface.iface-pairs-file-fn+1/test]
+// [spec:foma:sem:foma.iface-pairs-file-fn+1/test]
 #[test]
 fn pairs_file_writes_pairs_and_refuses_cyclic() {
     let dir = std::env::temp_dir();

@@ -151,9 +151,9 @@ pub fn iface_show_variables(session: &mut Session) {
     }
 }
 
-// [spec:foma:def:iface.iface-show-variable-fn]
+// [spec:foma:def:iface.iface-show-variable-fn+2]
 // [spec:foma:sem:iface.iface-show-variable-fn+2]
-// [spec:foma:def:foma.iface-show-variable-fn]
+// [spec:foma:def:foma.iface-show-variable-fn+2]
 // [spec:foma:sem:foma.iface-show-variable-fn+2]
 pub fn iface_show_variable(session: &mut Session, name: &str) {
     for gv in global_vars() {
@@ -180,9 +180,9 @@ pub fn iface_show_variable(session: &mut Session, name: &str) {
     println!("*There is no global variable '{}'.", name);
 }
 
-// [spec:foma:def:iface.iface-set-variable-fn]
+// [spec:foma:def:iface.iface-set-variable-fn+1]
 // [spec:foma:sem:iface.iface-set-variable-fn+1]
-// [spec:foma:def:foma.iface-set-variable-fn]
+// [spec:foma:def:foma.iface-set-variable-fn+1]
 // [spec:foma:sem:foma.iface-set-variable-fn+1]
 pub fn iface_set_variable(session: &mut Session, name: &str, value: &str) {
     for gv in global_vars() {

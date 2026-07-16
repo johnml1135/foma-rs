@@ -2,9 +2,9 @@
 //! external names come via `use super::*` (re-exported by mod.rs).
 use super::*;
 
-// [spec:foma:def:constructions.sort-cmp-fn]
+// [spec:foma:def:constructions.sort-cmp-fn+1]
 // [spec:foma:sem:constructions.sort-cmp-fn+1]
-// [spec:foma:def:fomalibconf.sort-cmp-fn]
+// [spec:foma:def:fomalibconf.sort-cmp-fn+1]
 // [spec:foma:sem:fomalibconf.sort-cmp-fn+1]
 pub fn sort_cmp(a: &FsmState, b: &FsmState) -> core::cmp::Ordering {
     /* C: qsort comparator returning a->state_no - b->state_no (ascending) */

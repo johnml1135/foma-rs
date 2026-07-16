@@ -15,9 +15,9 @@ use crate::int_stack::IntStack;
 use crate::options::FomaOptions;
 use crate::types::{Fsm, FsmState, PATHCOUNT_CYCLIC, PATHCOUNT_OVERFLOW, Tern};
 
-// [spec:foma:def:topsort.fsm-topsort-fn]
+// [spec:foma:def:topsort.fsm-topsort-fn+1]
 // [spec:foma:sem:topsort.fsm-topsort-fn+1]
-// [spec:foma:def:fomalib.fsm-topsort-fn]
+// [spec:foma:def:fomalib.fsm-topsort-fn+1]
 // [spec:foma:sem:fomalib.fsm-topsort-fn+1]
 pub fn fsm_topsort(net: Box<Fsm>) -> Box<Fsm> {
     let mut int_stack = IntStack::new();

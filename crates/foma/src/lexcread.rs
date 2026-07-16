@@ -253,7 +253,7 @@ fn lexc_symbol_hash(s: &str) -> u32 {
     hash % SIGMA_HASH_TABLESIZE as u32
 }
 
-// [spec:foma:def:lexcread.lexc-find-sigma-hash-fn]
+// [spec:foma:def:lexcread.lexc-find-sigma-hash-fn+1]
 // [spec:foma:sem:lexcread.lexc-find-sigma-hash-fn+1]
 fn lexc_find_sigma_hash(lx: &LexcCompiler, symbol: &str) -> Option<i32> {
     let ptr = lexc_symbol_hash(symbol) as usize;
@@ -889,7 +889,7 @@ fn lexc_pad(lx: &mut LexcCompiler) {
     }
 }
 
-// [spec:foma:def:lexcread.lexc-string-to-tokens-fn]
+// [spec:foma:def:lexcread.lexc-string-to-tokens-fn+1]
 // [spec:foma:sem:lexcread.lexc-string-to-tokens-fn+1]
 fn lexc_string_to_tokens(lx: &mut LexcCompiler, string: &str, intarr: &mut Vec<i32>) {
     let mut pos = 0usize;
@@ -1031,9 +1031,9 @@ fn normalize_mc_symbol(raw: &str) -> String {
     out
 }
 
-// [spec:foma:def:lexcread.lexc-find-mc-fn]
+// [spec:foma:def:lexcread.lexc-find-mc-fn+1]
 // [spec:foma:sem:lexcread.lexc-find-mc-fn+1]
-// [spec:foma:def:lexc.lexc-find-mc-fn]
+// [spec:foma:def:lexc.lexc-find-mc-fn+1]
 // [spec:foma:sem:lexc.lexc-find-mc-fn+1]
 fn lexc_find_mc(lx: &LexcCompiler, symbol: &str) -> bool {
     /* Membership test over the multichar-symbol chain: true iff `symbol` is
@@ -1148,7 +1148,7 @@ fn lexc_add_word(lx: &mut LexcCompiler) {
     }
 }
 
-// [spec:foma:def:lexcread.lexc-number-states-fn]
+// [spec:foma:def:lexcread.lexc-number-states-fn+1]
 // [spec:foma:sem:lexcread.lexc-number-states-fn+1]
 fn lexc_number_states(lx: &mut LexcCompiler) {
     let mut smax = 0i32;

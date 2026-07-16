@@ -717,7 +717,7 @@ pub(crate) fn init_pe(m: &mut Minimizer) {
     }
 }
 
-// [spec:foma:def:minimize.trans-sort-cmp-fn]
+// [spec:foma:def:minimize.trans-sort-cmp-fn+1]
 // [spec:foma:sem:minimize.trans-sort-cmp-fn+1]
 /* C: qsort comparator over const void * — typed slice elements here.
 Ascending on the composite `inout` symbol. */

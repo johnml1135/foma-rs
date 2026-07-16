@@ -270,10 +270,10 @@ fn foma_source_command() {
 // Each stdin line is read by get_next_line; handle_line walks the one-node chain
 // applying `applyer` (apply_up by default); app_print echoes "line<TAB>result"
 // and "+?" for a miss; main prints the wordseparator ("\n") after each word.
-// [spec:foma:sem:flookup.main-fn/test]
+// [spec:foma:sem:flookup.main-fn+1/test]
 // [spec:foma:sem:flookup.get-next-line-fn/test]
 // [spec:foma:sem:flookup.handle-line-fn/test]
-// [spec:foma:sem:flookup.app-print-fn/test]
+// [spec:foma:sem:flookup.app-print-fn+1/test]
 // [spec:foma:sem:flookup.applyer-fn/test]
 // [spec:foma:def:flookup.lookup-chain/test]
 #[test]
@@ -289,7 +289,7 @@ fn flookup_single_net_up() {
 // applyer-fn: `-i` repoints the applyer to apply_down (direction DIR_DOWN), so
 // the same a:b net now maps "a" (upper) → "b" (lower).
 // [spec:foma:sem:flookup.applyer-fn/test]
-// [spec:foma:sem:flookup.main-fn/test]
+// [spec:foma:sem:flookup.main-fn+1/test]
 #[test]
 fn flookup_inverse_down() {
     let net = build_stack("fl_i", &["a:b"]);
@@ -307,7 +307,7 @@ fn flookup_inverse_down() {
 // chain construction (append vs prepend).
 // [spec:foma:sem:flookup.handle-line-fn/test]
 // [spec:foma:def:flookup.lookup-chain/test]
-// [spec:foma:sem:flookup.main-fn/test]
+// [spec:foma:sem:flookup.main-fn+1/test]
 #[test]
 fn flookup_cascade_vs_alternates() {
     let net = build_stack("fl_two", &["a:b", "c:d"]);
@@ -327,7 +327,7 @@ fn flookup_cascade_vs_alternates() {
 
 // main-fn: `-v` prints the version banner and exit 0; a missing file operand and
 // unknown options print the usage string to stderr and exit(EXIT_FAILURE).
-// [spec:foma:sem:flookup.main-fn/test]
+// [spec:foma:sem:flookup.main-fn+1/test]
 #[test]
 fn flookup_version_and_usage_errors() {
     let (out, _err, st) = run(flookup().arg("-v"), b"");
@@ -356,7 +356,7 @@ fn flookup_version_and_usage_errors() {
 // `"<word>"` immediately before the first reading; each reading is TAB-indented;
 // a word with no analyses prints only the bare header (main's fallback). The
 // word separator defaults to empty (unlike flookup).
-// [spec:foma:sem:cgflookup.main-fn/test]
+// [spec:foma:sem:cgflookup.main-fn+1/test]
 // [spec:foma:sem:cgflookup.get-next-line-fn/test]
 // [spec:foma:sem:cgflookup.handle-line-fn/test]
 // [spec:foma:sem:cgflookup.app-print-fn/test]
@@ -377,7 +377,7 @@ fn cgflookup_cohort_output() {
 // accepting net for the literal string "Abc" (an identity path) reproduces the
 // input on apply_up so the reading equals the (uppercase) input.
 // [spec:foma:sem:cgflookup.app-print-fn/test]
-// [spec:foma:sem:cgflookup.main-fn/test]
+// [spec:foma:sem:cgflookup.main-fn+1/test]
 #[test]
 fn cgflookup_uppercase_marking() {
     let up = build_stack("cg_up", &["{Abc}"]);
@@ -402,7 +402,7 @@ fn cgflookup_uppercase_marking() {
 
 // main-fn: `-v` prints the version and exits 0; missing file operand → usage to
 // stderr and exit(EXIT_FAILURE).
-// [spec:foma:sem:cgflookup.main-fn/test]
+// [spec:foma:sem:cgflookup.main-fn+1/test]
 #[test]
 fn cgflookup_version_and_usage_error() {
     let (out, _err, st) = run(cgflookup().arg("-v"), b"");

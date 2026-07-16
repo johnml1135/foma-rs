@@ -1355,7 +1355,7 @@ pub fn apply_net(h: &mut ApplyHandle) -> Option<String> {
     None
 }
 
-// [spec:foma:def:apply.apply-append-fn]
+// [spec:foma:def:apply.apply-append-fn+1]
 // [spec:foma:sem:apply.apply-append-fn+1]
 pub fn apply_append(h: &mut ApplyHandle, cptr: i32, sym: i32) -> i32 {
     use std::borrow::Cow;
@@ -2147,7 +2147,7 @@ mod tests {
     // [spec:foma:sem:apply.apply-updown-fn/test]
     // [spec:foma:sem:apply.apply-net-fn/test]
     // [spec:foma:sem:apply.apply-follow-next-arc-fn/test]
-    // [spec:foma:sem:apply.apply-append-fn/test]
+    // [spec:foma:sem:apply.apply-append-fn+1/test]
     // [spec:foma:sem:apply.apply-return-string-fn/test]
     // [spec:foma:sem:apply.apply-mark-state-fn/test]
     // [spec:foma:sem:apply.apply-at-last-arc-fn/test]
@@ -2221,7 +2221,7 @@ mod tests {
         assert_eq!(got, vec!["cot".to_string(), "dog".to_string()]);
     }
 
-    // [spec:foma:sem:apply.apply-append-fn/test]
+    // [spec:foma:sem:apply.apply-append-fn+1/test]
     #[test]
     fn epsilon_output_path() {
         // a:0 -> lower side is epsilon (empty output).

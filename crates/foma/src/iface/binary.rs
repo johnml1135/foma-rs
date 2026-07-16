@@ -24,9 +24,9 @@ pub fn iface_compose(session: &mut Session) {
     }
 }
 
-// [spec:foma:def:iface.iface-conc-fn]
+// [spec:foma:def:iface.iface-conc-fn+1]
 // [spec:foma:sem:iface.iface-conc-fn+1]
-// [spec:foma:def:foma.iface-conc-fn]
+// [spec:foma:def:foma.iface-conc-fn+1]
 // [spec:foma:sem:foma.iface-conc-fn+1]
 pub fn iface_conc(session: &mut Session) {
     if iface_stack_check(session, 2) {

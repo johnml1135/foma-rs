@@ -187,7 +187,7 @@ impl GetOpt {
 // (the file-static function pointer lives in the APPLYER thread_local above,
 // defaulting to apply_up; -i repoints it to apply_down)
 
-// [spec:foma:def:flookup.app-print-fn]
+// [spec:foma:def:flookup.app-print-fn+1]
 // [spec:foma:sem:flookup.app-print-fn+1]
 fn app_print(result: Option<&str>) {
     if MODE_SERVER.get() == 0 {
@@ -246,7 +246,7 @@ fn server_append(src: &str) {
     });
 }
 
-// [spec:foma:def:flookup.main-fn]
+// [spec:foma:def:flookup.main-fn+1]
 // [spec:foma:sem:flookup.main-fn+1]
 fn main() {
     // Route library diagnostics (tracing events) to stderr in a compact,

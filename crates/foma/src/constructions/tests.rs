@@ -285,7 +285,7 @@ fn triplethash_hashf_exact_constants_with_wrapping() {
 }
 
 // [spec:foma:sem:constructions.triplet-hash-insert-fn/test]
-// [spec:foma:sem:constructions.triplet-hash-find-fn/test]
+// [spec:foma:sem:constructions.triplet-hash-find-fn+1/test]
 #[test]
 fn triplet_hash_insert_find_roundtrip_and_duplicate_quirk() {
     let mut th = triplet_hash_init();
@@ -1257,8 +1257,8 @@ fn fsm_quotient_right_yields_extendable_prefixes() {
 
 /* ---- ignore ------------------------------------------------------- */
 
-// [spec:foma:sem:constructions.fsm-ignore-fn/test]
-// [spec:foma:sem:fomalib.fsm-ignore-fn/test]
+// [spec:foma:sem:constructions.fsm-ignore-fn+1/test]
+// [spec:foma:sem:fomalib.fsm-ignore-fn+1/test]
 #[test]
 fn fsm_ignore_all_intersperses_freely() {
     let opts = &FomaOptions::default();
@@ -1274,8 +1274,8 @@ fn fsm_ignore_all_intersperses_freely() {
     assert!(down(&g, "acb").is_empty());
 }
 
-// [spec:foma:sem:constructions.fsm-ignore-fn/test]
-// [spec:foma:sem:fomalib.fsm-ignore-fn/test]
+// [spec:foma:sem:constructions.fsm-ignore-fn+1/test]
+// [spec:foma:sem:fomalib.fsm-ignore-fn+1/test]
 #[test]
 fn fsm_ignore_internal_only_intersperses_inside() {
     let opts = &FomaOptions::default();
@@ -1287,8 +1287,8 @@ fn fsm_ignore_internal_only_intersperses_inside() {
     assert!(down(&g, "abx").is_empty(), "no insertion at the end");
 }
 
-// [spec:foma:sem:constructions.fsm-ignore-fn/test]
-// [spec:foma:sem:fomalib.fsm-ignore-fn/test]
+// [spec:foma:sem:constructions.fsm-ignore-fn+1/test]
+// [spec:foma:sem:fomalib.fsm-ignore-fn+1/test]
 #[test]
 fn fsm_ignore_empty_second_returns_first_unchanged() {
     let opts = &FomaOptions::default();

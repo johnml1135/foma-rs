@@ -16,9 +16,9 @@ pub fn fsm_escape(symbol: &str) -> Box<Fsm> {
 /* to the equivalent "letter" machine where all arcs  */
 /* are single utf8 letters.                           */
 
-// [spec:foma:def:constructions.fsm-letter-machine-fn]
+// [spec:foma:def:constructions.fsm-letter-machine-fn+1]
 // [spec:foma:sem:constructions.fsm-letter-machine-fn+1]
-// [spec:foma:def:fomalib.fsm-letter-machine-fn]
+// [spec:foma:def:fomalib.fsm-letter-machine-fn+1]
 // [spec:foma:sem:fomalib.fsm-letter-machine-fn+1]
 pub fn fsm_letter_machine(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
     // DEVIATION from C (discarded minimize return; C reads net->statecount
@@ -111,10 +111,10 @@ pub fn fsm_letter_machine(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
     fsm_construct_done(outh)
 }
 
-// [spec:foma:def:constructions.fsm-explode-fn]
-// [spec:foma:sem:constructions.fsm-explode-fn]
-// [spec:foma:def:fomalib.fsm-explode-fn]
-// [spec:foma:sem:fomalib.fsm-explode-fn]
+// [spec:foma:def:constructions.fsm-explode-fn+1]
+// [spec:foma:sem:constructions.fsm-explode-fn+1]
+// [spec:foma:def:fomalib.fsm-explode-fn+1]
+// [spec:foma:sem:fomalib.fsm-explode-fn+1]
 pub fn fsm_explode(symbol: &str) -> Box<Fsm> {
     let mut h = fsm_construct_init("");
     fsm_construct_set_initial(&mut h, 0);
@@ -1108,9 +1108,9 @@ pub fn fsm_quotient_right(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) ->
     ))
 }
 
-// [spec:foma:def:constructions.fsm-ignore-fn]
+// [spec:foma:def:constructions.fsm-ignore-fn+1]
 // [spec:foma:sem:constructions.fsm-ignore-fn+1]
-// [spec:foma:def:fomalib.fsm-ignore-fn]
+// [spec:foma:def:fomalib.fsm-ignore-fn+1]
 // [spec:foma:sem:fomalib.fsm-ignore-fn+1]
 pub fn fsm_ignore(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>, operation: i32) -> Box<Fsm> {
     let mut net1 = fsm_minimize(opts, net1);
@@ -2261,9 +2261,9 @@ pub fn fsm_context_restrict(
     result
 }
 
-// [spec:foma:def:constructions.fsm-flatten-fn]
+// [spec:foma:def:constructions.fsm-flatten-fn+1]
 // [spec:foma:sem:constructions.fsm-flatten-fn+1]
-// [spec:foma:def:fomalib.fsm-flatten-fn]
+// [spec:foma:def:fomalib.fsm-flatten-fn+1]
 // [spec:foma:sem:fomalib.fsm-flatten-fn+1]
 pub fn fsm_flatten(opts: &FomaOptions, net: Box<Fsm>, epsilon: Box<Fsm>) -> Option<Box<Fsm>> {
     let net = fsm_minimize(opts, net);

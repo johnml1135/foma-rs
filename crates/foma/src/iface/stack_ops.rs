@@ -30,9 +30,9 @@ pub fn iface_pop(session: &mut Session) {
     }
 }
 
-// [spec:foma:def:iface.iface-name-net-fn]
+// [spec:foma:def:iface.iface-name-net-fn+1]
 // [spec:foma:sem:iface.iface-name-net-fn+1]
-// [spec:foma:def:foma.iface-name-net-fn]
+// [spec:foma:def:foma.iface-name-net-fn+1]
 // [spec:foma:sem:foma.iface-name-net-fn+1]
 pub fn iface_name_net(session: &mut Session, name: &str) {
     if iface_stack_check(session, 1) {
@@ -126,9 +126,9 @@ pub fn iface_save_stack(session: &mut Session, filename: &str) {
     }
 }
 
-// [spec:foma:def:iface.iface-turn-fn]
+// [spec:foma:def:iface.iface-turn-fn+1]
 // [spec:foma:sem:iface.iface-turn-fn+1]
-// [spec:foma:def:foma.iface-turn-fn]
+// [spec:foma:def:foma.iface-turn-fn+1]
 // [spec:foma:sem:foma.iface-turn-fn+1]
 pub fn iface_turn(session: &mut Session) {
     // [spec:foma:sem:iface.iface-turn-fn+1] "turn stack" reverses the whole stack

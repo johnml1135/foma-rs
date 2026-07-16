@@ -87,7 +87,7 @@ pub fn fsm_get_option(opts: &FomaOptions, option: u64) -> Option<bool> {
     None
 }
 
-// [spec:foma:def:structures.linesortcompin-fn]
+// [spec:foma:def:structures.linesortcompin-fn+1]
 // [spec:foma:sem:structures.linesortcompin-fn+1]
 pub fn linesortcompin(a: &FsmState, b: &FsmState) -> core::cmp::Ordering {
     /* C: qsort comparator over struct fsm_state; int subtraction of the
@@ -95,7 +95,7 @@ pub fn linesortcompin(a: &FsmState, b: &FsmState) -> core::cmp::Ordering {
     a.r#in.cmp(&b.r#in)
 }
 
-// [spec:foma:def:structures.linesortcompout-fn]
+// [spec:foma:def:structures.linesortcompout-fn+1]
 // [spec:foma:sem:structures.linesortcompout-fn+1]
 pub fn linesortcompout(a: &FsmState, b: &FsmState) -> core::cmp::Ordering {
     a.out.cmp(&b.out)
@@ -273,9 +273,9 @@ pub fn fsm_sigma_pairs_net(net: Box<Fsm>) -> Box<Fsm> {
     net
 }
 
-// [spec:foma:def:structures.fsm-sigma-destroy-fn]
+// [spec:foma:def:structures.fsm-sigma-destroy-fn+1]
 // [spec:foma:sem:structures.fsm-sigma-destroy-fn+1]
-// [spec:foma:def:fomalib.fsm-sigma-destroy-fn]
+// [spec:foma:def:fomalib.fsm-sigma-destroy-fn+1]
 // [spec:foma:sem:fomalib.fsm-sigma-destroy-fn+1]
 pub fn fsm_sigma_destroy(sigma: Vec<Sigma>) {
     /* per node: free(symbol), free(node) — the Vec (and its owned symbols)
@@ -283,9 +283,9 @@ pub fn fsm_sigma_destroy(sigma: Vec<Sigma>) {
     drop(sigma);
 }
 
-// [spec:foma:def:structures.fsm-destroy-fn]
+// [spec:foma:def:structures.fsm-destroy-fn+1]
 // [spec:foma:sem:structures.fsm-destroy-fn+1]
-// [spec:foma:def:fomalib.fsm-destroy-fn]
+// [spec:foma:def:fomalib.fsm-destroy-fn+1]
 // [spec:foma:sem:fomalib.fsm-destroy-fn+1]
 pub fn fsm_destroy(net: Box<Fsm>) {
     /* C: returns 0 without doing anything when net == NULL; a Box argument
@@ -303,9 +303,9 @@ pub fn fsm_destroy(net: Box<Fsm>) {
     /* free(net) — drop */
 }
 
-// [spec:foma:def:structures.fsm-create-fn]
+// [spec:foma:def:structures.fsm-create-fn+1]
 // [spec:foma:sem:structures.fsm-create-fn+1]
-// [spec:foma:def:fomalib.fsm-create-fn]
+// [spec:foma:def:fomalib.fsm-create-fn+1]
 // [spec:foma:sem:fomalib.fsm-create-fn+1]
 pub fn fsm_create(name: &str) -> Box<Fsm> {
     // [spec:foma:sem:structures.fsm-create-fn+1] the in-memory net name is stored
@@ -439,9 +439,9 @@ pub fn fsm_empty() -> Vec<FsmState> {
     new_fsm
 }
 
-// [spec:foma:def:structures.fsm-isuniversal-fn]
+// [spec:foma:def:structures.fsm-isuniversal-fn+1]
 // [spec:foma:sem:structures.fsm-isuniversal-fn+1]
-// [spec:foma:def:fomalib.fsm-isuniversal-fn]
+// [spec:foma:def:fomalib.fsm-isuniversal-fn+1]
 // [spec:foma:sem:fomalib.fsm-isuniversal-fn+1]
 pub fn fsm_isuniversal(opts: &FomaOptions, net: Box<Fsm>) -> bool {
     /* destructive: consumes/replaces the argument; the minimized+compacted
@@ -1173,9 +1173,9 @@ pub fn fsm_extract_nonidentity(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
     net2
 }
 
-// [spec:foma:def:structures.fsm-copy-fn]
+// [spec:foma:def:structures.fsm-copy-fn+1]
 // [spec:foma:sem:structures.fsm-copy-fn+1]
-// [spec:foma:def:fomalib.fsm-copy-fn]
+// [spec:foma:def:fomalib.fsm-copy-fn+1]
 // [spec:foma:sem:fomalib.fsm-copy-fn+1]
 pub fn fsm_copy(net: &mut Fsm) -> Box<Fsm> {
     /* Borrows (does not consume) but mutates the SOURCE: fsm_count refreshes
@@ -1280,9 +1280,9 @@ pub fn add_quantifier(quantifiers: &mut Quantifiers, string: &str) {
     }));
 }
 
-// [spec:foma:def:structures.union-quantifiers-fn]
+// [spec:foma:def:structures.union-quantifiers-fn+1]
 // [spec:foma:sem:structures.union-quantifiers-fn+1]
-// [spec:foma:def:foma.union-quantifiers-fn]
+// [spec:foma:def:foma.union-quantifiers-fn+1]
 // [spec:foma:sem:foma.union-quantifiers-fn+1]
 pub fn union_quantifiers(quantifiers: &Quantifiers) -> Box<Fsm> {
     /*     We create a FSM that simply accepts the union of all */
@@ -1352,9 +1352,9 @@ pub fn find_quantifier(quantifiers: &Quantifiers, string: &str) -> Option<SmolSt
     None
 }
 
-// [spec:foma:def:structures.purge-quantifier-fn]
+// [spec:foma:def:structures.purge-quantifier-fn+1]
 // [spec:foma:sem:structures.purge-quantifier-fn+1]
-// [spec:foma:def:foma.purge-quantifier-fn]
+// [spec:foma:def:foma.purge-quantifier-fn+1]
 // [spec:foma:sem:foma.purge-quantifier-fn+1]
 pub fn purge_quantifier(quantifiers: &mut Quantifiers, string: &str) {
     /* Wave 4 fix: the C walked with a trailing q_prev pointer that advanced

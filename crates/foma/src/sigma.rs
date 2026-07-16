@@ -8,9 +8,9 @@
 use crate::types::{EPSILON, Fsm, FsmSigmaList, IDENTITY, Sigma, UNKNOWN};
 use smol_str::SmolStr;
 
-// [spec:foma:def:sigma.sigma-remove-fn]
+// [spec:foma:def:sigma.sigma-remove-fn+1]
 // [spec:foma:sem:sigma.sigma-remove-fn+1]
-// [spec:foma:def:fomalibconf.sigma-remove-fn]
+// [spec:foma:def:fomalibconf.sigma-remove-fn+1]
 // [spec:foma:sem:fomalibconf.sigma-remove-fn+1]
 pub fn sigma_remove(symbol: &str, sigma: &mut Vec<Sigma>) {
     /* remove the first entry whose symbol matches; empty alphabet is a no-op */
@@ -19,9 +19,9 @@ pub fn sigma_remove(symbol: &str, sigma: &mut Vec<Sigma>) {
     }
 }
 
-// [spec:foma:def:sigma.sigma-remove-num-fn]
+// [spec:foma:def:sigma.sigma-remove-num-fn+1]
 // [spec:foma:sem:sigma.sigma-remove-num-fn+1]
-// [spec:foma:def:fomalibconf.sigma-remove-num-fn]
+// [spec:foma:def:fomalibconf.sigma-remove-num-fn+1]
 // [spec:foma:sem:fomalibconf.sigma-remove-num-fn+1]
 pub fn sigma_remove_num(num: i32, sigma: &mut Vec<Sigma>) {
     /* remove the first entry whose number matches; empty alphabet is a no-op */
@@ -40,9 +40,9 @@ fn sigma_sorted_insert_pos(sigma: &[Sigma], number: i32) -> usize {
         .unwrap_or(sigma.len())
 }
 
-// [spec:foma:def:sigma.sigma-add-special-fn]
+// [spec:foma:def:sigma.sigma-add-special-fn+2]
 // [spec:foma:sem:sigma.sigma-add-special-fn+2]
-// [spec:foma:def:fomalibconf.sigma-add-special-fn]
+// [spec:foma:def:fomalibconf.sigma-add-special-fn+2]
 // [spec:foma:sem:fomalibconf.sigma-add-special-fn+2]
 pub fn sigma_add_special(symbol: i32, sigma: &mut Vec<Sigma>) -> i32 {
     // [spec:foma:sem:sigma.sigma-add-special-fn+2] map the reserved code to its
@@ -73,9 +73,9 @@ pub fn sigma_add_special(symbol: i32, sigma: &mut Vec<Sigma>) -> i32 {
 /* but it's up to the user to sort the sigma (affecting arc numbers in the network) */
 /* before merge_sigma() is ever called */
 
-// [spec:foma:def:sigma.sigma-add-fn]
+// [spec:foma:def:sigma.sigma-add-fn+1]
 // [spec:foma:sem:sigma.sigma-add-fn+1]
-// [spec:foma:def:fomalibconf.sigma-add-fn]
+// [spec:foma:def:fomalibconf.sigma-add-fn+1]
 // [spec:foma:sem:fomalibconf.sigma-add-fn+1]
 pub fn sigma_add(symbol: &str, sigma: &mut Vec<Sigma>) -> i32 {
     let mut assert = -1;
@@ -126,9 +126,9 @@ pub fn sigma_add(symbol: &str, sigma: &mut Vec<Sigma>) -> i32 {
 /* @ or ? is present                                            */
 /* If force == 1, unused symbols are always removed regardless  */
 
-// [spec:foma:def:sigma.sigma-cleanup-fn]
+// [spec:foma:def:sigma.sigma-cleanup-fn+1]
 // [spec:foma:sem:sigma.sigma-cleanup-fn+1]
-// [spec:foma:def:fomalibconf.sigma-cleanup-fn]
+// [spec:foma:def:fomalibconf.sigma-cleanup-fn+1]
 // [spec:foma:sem:fomalibconf.sigma-cleanup-fn+1]
 pub fn sigma_cleanup(net: &mut Fsm, force: i32) {
     if force == 0 {
@@ -190,18 +190,18 @@ pub fn sigma_cleanup(net: &mut Fsm, force: i32) {
     });
 }
 
-// [spec:foma:def:sigma.sigma-max-fn]
+// [spec:foma:def:sigma.sigma-max-fn+1]
 // [spec:foma:sem:sigma.sigma-max-fn+1]
-// [spec:foma:def:fomalibconf.sigma-max-fn]
+// [spec:foma:def:fomalibconf.sigma-max-fn+1]
 // [spec:foma:sem:fomalibconf.sigma-max-fn+1]
 pub fn sigma_max(sigma: &[Sigma]) -> i32 {
     /* accumulator starts at -1, so an empty alphabet yields -1 */
     sigma.iter().map(|s| s.number).fold(-1, i32::max)
 }
 
-// [spec:foma:def:sigma.sigma-size-fn]
+// [spec:foma:def:sigma.sigma-size-fn+1]
 // [spec:foma:sem:sigma.sigma-size-fn+1]
-// [spec:foma:def:fomalibconf.sigma-size-fn]
+// [spec:foma:def:fomalibconf.sigma-size-fn+1]
 // [spec:foma:sem:fomalibconf.sigma-size-fn+1]
 pub fn sigma_size(sigma: &[Sigma]) -> i32 {
     /* number of alphabet entries; an empty alphabet is 0 */
@@ -223,9 +223,9 @@ pub fn sigma_to_list(sigma: &[Sigma]) -> Vec<FsmSigmaList> {
     sl
 }
 
-// [spec:foma:def:sigma.sigma-add-number-fn]
+// [spec:foma:def:sigma.sigma-add-number-fn+1]
 // [spec:foma:sem:sigma.sigma-add-number-fn+1]
-// [spec:foma:def:fomalibconf.sigma-add-number-fn]
+// [spec:foma:def:fomalibconf.sigma-add-number-fn+1]
 // [spec:foma:sem:fomalibconf.sigma-add-number-fn+1]
 pub fn sigma_add_number(sigma: &mut Vec<Sigma>, symbol: &str, number: i32) {
     /* append with the caller's explicit (possibly out-of-order) number */
@@ -235,9 +235,9 @@ pub fn sigma_add_number(sigma: &mut Vec<Sigma>, symbol: &str, number: i32) {
     });
 }
 
-// [spec:foma:def:sigma.sigma-find-number-fn]
+// [spec:foma:def:sigma.sigma-find-number-fn+1]
 // [spec:foma:sem:sigma.sigma-find-number-fn+1]
-// [spec:foma:def:fomalibconf.sigma-find-number-fn]
+// [spec:foma:def:fomalibconf.sigma-find-number-fn+1]
 // [spec:foma:sem:fomalibconf.sigma-find-number-fn+1]
 pub fn sigma_find_number(number: i32, sigma: &[Sigma]) -> Option<i32> {
     /* Presence query: Some(number) if `number` labels a sigma entry, else None
@@ -259,9 +259,9 @@ pub fn sigma_string(number: i32, sigma: &[Sigma]) -> Option<&str> {
 
 /* Substitutes string symbol for sub in sigma */
 /* no check for duplicates                    */
-// [spec:foma:def:sigma.sigma-substitute-fn]
+// [spec:foma:def:sigma.sigma-substitute-fn+1]
 // [spec:foma:sem:sigma.sigma-substitute-fn+1]
-// [spec:foma:def:fomalibconf.sigma-substitute-fn]
+// [spec:foma:def:fomalibconf.sigma-substitute-fn+1]
 // [spec:foma:sem:fomalibconf.sigma-substitute-fn+1]
 pub fn sigma_substitute(symbol: &str, sub: &str, sigma: &mut [Sigma]) -> Option<i32> {
     for s in sigma.iter_mut() {
@@ -274,9 +274,9 @@ pub fn sigma_substitute(symbol: &str, sub: &str, sigma: &mut [Sigma]) -> Option<
     None
 }
 
-// [spec:foma:def:sigma.sigma-find-fn]
+// [spec:foma:def:sigma.sigma-find-fn+1]
 // [spec:foma:sem:sigma.sigma-find-fn+1]
-// [spec:foma:def:fomalibconf.sigma-find-fn]
+// [spec:foma:def:fomalibconf.sigma-find-fn+1]
 // [spec:foma:sem:fomalibconf.sigma-find-fn+1]
 pub fn sigma_find(symbol: &str, sigma: &[Sigma]) -> Option<i32> {
     /* Some(number) for the first entry whose symbol matches, else None (C -1). */
@@ -304,16 +304,16 @@ pub struct Ssort {
     pub number: i32,
 }
 
-// [spec:foma:def:sigma.ssortcmp-fn]
+// [spec:foma:def:sigma.ssortcmp-fn+1]
 // [spec:foma:sem:sigma.ssortcmp-fn+1]
 pub fn ssortcmp(a: &Ssort, b: &Ssort) -> core::cmp::Ordering {
     /* return(strcmp(a->symbol, b->symbol)) — bytewise order */
     a.symbol.as_bytes().cmp(b.symbol.as_bytes())
 }
 
-// [spec:foma:def:sigma.sigma-copy-fn]
+// [spec:foma:def:sigma.sigma-copy-fn+1]
 // [spec:foma:sem:sigma.sigma-copy-fn+1]
-// [spec:foma:def:fomalib.sigma-copy-fn]
+// [spec:foma:def:fomalib.sigma-copy-fn+1]
 // [spec:foma:sem:fomalib.sigma-copy-fn+1]
 pub fn sigma_copy(sigma: &[Sigma]) -> Vec<Sigma> {
     /* deep copy in order; the source is untouched */
@@ -323,9 +323,9 @@ pub fn sigma_copy(sigma: &[Sigma]) -> Vec<Sigma> {
 /* Assigns a consecutive numbering to symbols in sigma > IDENTITY */
 /* and sorts the sigma based on the symbol string contents        */
 
-// [spec:foma:def:sigma.sigma-sort-fn]
+// [spec:foma:def:sigma.sigma-sort-fn+2]
 // [spec:foma:sem:sigma.sigma-sort-fn+2]
-// [spec:foma:def:fomalibconf.sigma-sort-fn]
+// [spec:foma:def:fomalibconf.sigma-sort-fn+2]
 // [spec:foma:sem:fomalibconf.sigma-sort-fn+2]
 pub fn sigma_sort(net: &mut Fsm) {
     let size = sigma_max(&net.sigma);
@@ -383,9 +383,9 @@ pub fn sigma_sort(net: &mut Fsm) {
     }
 }
 
-// [spec:foma:def:sigma.sigma-create-fn]
+// [spec:foma:def:sigma.sigma-create-fn+1]
 // [spec:foma:sem:sigma.sigma-create-fn+1]
-// [spec:foma:def:fomalibconf.sigma-create-fn]
+// [spec:foma:def:fomalibconf.sigma-create-fn+1]
 // [spec:foma:sem:fomalibconf.sigma-create-fn+1]
 pub fn sigma_create() -> Vec<Sigma> {
     /* an empty alphabet is an empty Vec — there is no sentinel node */

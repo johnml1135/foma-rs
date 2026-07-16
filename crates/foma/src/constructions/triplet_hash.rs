@@ -132,7 +132,7 @@ pub fn triplet_hash_rehash(th: &mut Triplethash) {
     }
 }
 
-// [spec:foma:def:constructions.triplet-hash-find-fn]
+// [spec:foma:def:constructions.triplet-hash-find-fn+1]
 // [spec:foma:sem:constructions.triplet-hash-find-fn+1]
 pub fn triplet_hash_find(th: &Triplethash, a: i32, b: i32, c: i32) -> Option<i32> {
     let mut hash = triplethash_hashf(a, b, c) % th.tablesize;

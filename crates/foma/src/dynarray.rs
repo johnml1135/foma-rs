@@ -556,9 +556,9 @@ pub fn fsm_construct_add_arc_nums(
 
 /* Copies entire alphabet from existing network */
 
-// [spec:foma:def:dynarray.fsm-construct-copy-sigma-fn]
+// [spec:foma:def:dynarray.fsm-construct-copy-sigma-fn+1]
 // [spec:foma:sem:dynarray.fsm-construct-copy-sigma-fn+1]
-// [spec:foma:def:fomalib.fsm-construct-copy-sigma-fn]
+// [spec:foma:def:fomalib.fsm-construct-copy-sigma-fn+1]
 // [spec:foma:sem:fomalib.fsm-construct-copy-sigma-fn+1]
 pub fn fsm_construct_copy_sigma(handle: &mut FsmConstructHandle, sigma: &[Sigma]) {
     for s in sigma {
@@ -712,9 +712,9 @@ pub fn fsm_construct_convert_sigma(handle: &FsmConstructHandle) -> Vec<Sigma> {
     sigma
 }
 
-// [spec:foma:def:dynarray.fsm-construct-done-fn]
+// [spec:foma:def:dynarray.fsm-construct-done-fn+1]
 // [spec:foma:sem:dynarray.fsm-construct-done-fn+1]
-// [spec:foma:def:fomalib.fsm-construct-done-fn]
+// [spec:foma:def:fomalib.fsm-construct-done-fn+1]
 // [spec:foma:sem:fomalib.fsm-construct-done-fn+1]
 pub fn fsm_construct_done(handle: Box<FsmConstructHandle>) -> Box<Fsm> {
     let mut handle = handle;
@@ -1574,8 +1574,8 @@ mod tests {
         assert_eq!((head.r#in, head.out, head.target), (7, 8, 1));
     }
 
-    // [spec:foma:sem:dynarray.fsm-construct-copy-sigma-fn/test]
-    // [spec:foma:sem:fomalib.fsm-construct-copy-sigma-fn/test]
+    // [spec:foma:sem:dynarray.fsm-construct-copy-sigma-fn+1/test]
+    // [spec:foma:sem:fomalib.fsm-construct-copy-sigma-fn+1/test]
     #[test]
     fn fsm_construct_copy_sigma_bulk_loads() {
         let sigma = vec![
@@ -1620,8 +1620,8 @@ mod tests {
         );
     }
 
-    // [spec:foma:sem:dynarray.fsm-construct-done-fn/test]
-    // [spec:foma:sem:fomalib.fsm-construct-done-fn/test]
+    // [spec:foma:sem:dynarray.fsm-construct-done-fn+1/test]
+    // [spec:foma:sem:fomalib.fsm-construct-done-fn+1/test]
     #[test]
     fn fsm_construct_done_builds_net() {
         let mut h = fsm_construct_init("mynet");
@@ -1649,8 +1649,8 @@ mod tests {
         assert_eq!(net.sigma[0].symbol, "a");
     }
 
-    // [spec:foma:sem:dynarray.fsm-construct-done-fn/test]
-    // [spec:foma:sem:fomalib.fsm-construct-done-fn/test]
+    // [spec:foma:sem:dynarray.fsm-construct-done-fn+1/test]
+    // [spec:foma:sem:fomalib.fsm-construct-done-fn+1/test]
     #[test]
     fn fsm_construct_done_early_empty_set_when_no_final() {
         let mut h = fsm_construct_init("x");
@@ -1664,8 +1664,8 @@ mod tests {
         assert_eq!(net.pathcount, 0);
     }
 
-    // [spec:foma:sem:dynarray.fsm-construct-done-fn/test]
-    // [spec:foma:sem:fomalib.fsm-construct-done-fn/test]
+    // [spec:foma:sem:dynarray.fsm-construct-done-fn+1/test]
+    // [spec:foma:sem:fomalib.fsm-construct-done-fn+1/test]
     #[test]
     fn fsm_construct_done_emptyfsm_detection_returns_empty_set() {
         /* valid handle (initial+final present) but no initial state has an

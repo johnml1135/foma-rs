@@ -461,7 +461,7 @@ pub(crate) fn init(s: &mut Subset, net: &mut Fsm) {
     init_trans_array(s, net);
 }
 
-// [spec:foma:def:determinize.trans-sort-cmp-fn]
+// [spec:foma:def:determinize.trans-sort-cmp-fn+1]
 // [spec:foma:sem:determinize.trans-sort-cmp-fn+1]
 /* C: qsort comparator over const void * — typed references here.
 Ascending on the composite `inout` symbol. */
