@@ -1048,24 +1048,6 @@ fn lexc_find_mc(lx: &LexcCompiler, symbol: &str) -> bool {
     false
 }
 
-// [spec:foma:def:lexcread.lexc-find-lex-state-fn]
-// [spec:foma:sem:lexcread.lexc-find-lex-state-fn]
-// [spec:foma:def:lexc.lexc-find-lex-state-fn]
-// [spec:foma:sem:lexc.lexc-find-lex-state-fn]
-// Returns the lexicon's state (a private `struct states` — exposed here as its
-// arena index, since this is dead API with no callers in the C tree).
-#[allow(dead_code)] // dead API (no C callers); kept + test-pinned per the port
-fn lexc_find_lex_state(lx: &LexcCompiler, name: &str) -> Option<usize> {
-    let mut l = lx.lexstates;
-    while let Some(lidx) = l {
-        if lx.lexstates_arena[lidx].name.as_deref() == Some(name) {
-            return Some(lx.lexstates_arena[lidx].state);
-        }
-        l = lx.lexstates_arena[lidx].next;
-    }
-    None
-}
-
 // [spec:foma:def:lexcread.lexc-add-word-fn]
 // [spec:foma:sem:lexcread.lexc-add-word-fn]
 // [spec:foma:def:lexc.lexc-add-word-fn]
@@ -1353,10 +1335,6 @@ fn lexc_merge_states(lx: &mut LexcCompiler) {
         while let Some(sidx) = s {
             let state = lx.statelist_arena[sidx].state;
             if lx.state_arena[state].mergeable != 0 {
-                #[allow(unused_assignments)]
-                {
-                    numstates += 1; /* dead second count, as in C */
-                }
                 let distance = lx.state_arena[state].distance as usize;
                 if lenlist[distance].state.is_none() {
                     lenlist[distance].state = Some(state);
@@ -2202,15 +2180,12 @@ mod tests {
 
     /* ---- direct API: lexicons & states ---------------------------------- */
 
-    // init resets the tables; create/reuse a lexicon; source vs target; a dead
-    // lexicon lookup.
+    // init resets the tables; create/reuse a lexicon; source vs target.
     // [spec:foma:sem:lexcread.lexc-init-fn/test]
     // [spec:foma:sem:lexc.lexc-init-fn/test]
     // [spec:foma:sem:lexcread.lexc-set-current-lexicon-fn/test]
     // [spec:foma:sem:lexc.lexc-set-current-lexicon-fn/test]
     // [spec:foma:sem:lexcread.lexc-add-state-fn/test]
-    // [spec:foma:sem:lexcread.lexc-find-lex-state-fn/test]
-    // [spec:foma:sem:lexc.lexc-find-lex-state-fn/test]
     #[test]
     fn init_and_set_current_lexicon() {
         let mut lx = LexcCompiler::new_empty();
@@ -2220,7 +2195,6 @@ mod tests {
         assert!(lx.lexsigma.is_empty());
         assert_eq!(lx.lexc_statecount, 0);
         assert_eq!(lx.hashtable[0].sigma_number, -1);
-        assert!(lexc_find_lex_state(&lx, "Root").is_none());
         lexc_set_current_lexicon(&mut lx, "Root", SOURCE_LEXICON);
         // one lexstate + one state registered; clexicon set, has_outgoing=1
         assert_eq!(lx.lexstates_arena.len(), 1);
@@ -2228,7 +2202,6 @@ mod tests {
         let l = lx.clexicon.unwrap();
         assert_eq!(lx.lexstates_arena[l].has_outgoing, 1);
         assert_eq!(lx.lexstates_arena[l].name.as_deref(), Some("Root"));
-        assert!(lexc_find_lex_state(&lx, "Root").is_some());
         // target reuse of a fresh name creates a second lexicon
         lexc_set_current_lexicon(&mut lx, "N", TARGET_LEXICON);
         assert_eq!(lx.lexstates_arena.len(), 2);

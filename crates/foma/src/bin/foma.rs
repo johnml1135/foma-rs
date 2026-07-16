@@ -1,7 +1,6 @@
 //! foma/foma.c — the interactive CLI front-end, ported per
 //! docs/port/rust-conventions.md. Sem rules: docs/spec/port/foma/foma.md
-//! (the `foma.*` ids: main-fn, rl-gets-fn, print-help-fn, my-completion-fn,
-//! my-generator-fn, xprintf-fn, add-history-fn).
+//! (the `foma.*` ids: main-fn, rl-gets-fn, print-help-fn, add-history-fn).
 //!
 //! The annotated items below are literal ports of foma.c. The command-dispatch
 //! machinery (`my_interfaceparse` and its helpers) is UNANNOTATED plumbing that
@@ -11,10 +10,10 @@
 //! quit commands. It covers every command whose `iface_*` implementation exists
 //! in `foma::iface`.
 //!
-//! DEVIATION from C: GNU readline is not linked. `rl_gets`, `my_completion`,
-//! `my_generator` and `add_history` retain their structure for fidelity but read
-//! from std stdin and are otherwise wired to nothing (no interactive history or
-//! tab-completion at runtime).
+//! DEVIATION from C: GNU readline is not linked. `rl_gets` and `add_history`
+//! retain their structure for fidelity but read from std stdin and are otherwise
+//! wired to nothing (no interactive history at runtime). The readline
+//! tab-completion hooks (`my_completion`/`my_generator`) are not ported.
 
 use std::cell::{Cell, RefCell};
 use std::io::{self, Write};
@@ -43,157 +42,6 @@ const USAGESTRING: &str =
 /* C: `char disclaimer[] = ...` (foma.c) — the startup banner. */
 const DISCLAIMER: &str = "Foma, version 0.10.0\nCopyright © 2008-2021 Mans Hulden\nThis is free software; see the source code for copying conditions.\nThere is ABSOLUTELY NO WARRANTY; for details, type \"help license\"\n\nType \"help\" to list all commands available.\nType \"help <topic>\" or help \"<operator>\" for further help.\n\n";
 
-/* C: `char *cmd[]` (foma.c) — the readline completion command table. */
-static CMD: &[&str] = &[
-    "ambiguous upper",
-    "apply down",
-    "apply med",
-    "apply up",
-    "apropos",
-    "assert-stack",
-    "clear stack",
-    "close sigma",
-    "compact sigma",
-    "complete net",
-    "compose net",
-    "concatenate net",
-    "crossproduct net",
-    "define",
-    "determinize net",
-    "echo",
-    "eliminate flags",
-    "eliminate flag",
-    "export cmatrix",
-    "extract ambiguous",
-    "extract unambiguous",
-    "factorize",
-    "help license",
-    "help warranty",
-    "ignore net",
-    "intersect net",
-    "invert net",
-    "label net",
-    "letter machine",
-    "load defined",
-    "lower-side net",
-    "minimize net",
-    "name net",
-    "negate net",
-    "one-plus net",
-    "pop stack",
-    "print defined",
-    "print dot",
-    "print lower-words",
-    "print cmatrix",
-    "print name",
-    "print net",
-    "print random-lower",
-    "print random-upper",
-    "print random-words",
-    "print sigma",
-    "print size",
-    "print shortest-string",
-    "print shortest-string-length",
-    "print words",
-    "print pairs",
-    "print random-pairs",
-    "print upper-words",
-    "prune net",
-    "push defined",
-    "quit",
-    "read att",
-    "read cmatrix",
-    "read prolog",
-    "read lexc",
-    "read regex",
-    "read spaced-text",
-    "read text",
-    "reverse net",
-    "rotate stack",
-    "save defined",
-    "save stack",
-    "sequentialize",
-    "set",
-    "show variables",
-    "show variable",
-    "shuffle net",
-    "sigma",
-    "sigma net",
-    "source",
-    "sort in",
-    "sort net",
-    "sort out",
-    "substitute defined",
-    "substitute symbol",
-    "system",
-    "test unambiguous",
-    "test equivalent",
-    "test functional",
-    "test identity",
-    "test lower-universal",
-    "test upper-universal",
-    "test non-null",
-    "test null",
-    "test sequential",
-    "turn stack",
-    "twosided flag-diacritics",
-    "undefine",
-    "union net",
-    "upper-side net",
-    "view net",
-    "write att",
-    "write prolog",
-    "zero-plus net",
-];
-
-/* C: `char *abbrvcmd[]` (foma.c) — the completion abbreviation table. */
-static ABBRVCMD: &[&str] = &[
-    "ambiguous",
-    "close",
-    "down",
-    "up",
-    "med",
-    "size",
-    "loadd",
-    "lower-words",
-    "upper-words",
-    "net",
-    "random-lower",
-    "random-upper",
-    "words",
-    "random-words",
-    "regex",
-    "rpl",
-    "au revoir",
-    "bye",
-    "exit",
-    "saved",
-    "seq",
-    "ss",
-    "stack",
-    "tunam",
-    "tid",
-    "tfu",
-    "tlu",
-    "tuu",
-    "tnu",
-    "tnn",
-    "tseq",
-    "tsf",
-    "equ",
-    "pss",
-    "psz",
-    "ratt",
-    "tfd",
-    "hyvästi",
-    "watt",
-    "wpl",
-    "examb",
-    "exunamb",
-    "pairs",
-    "random-pairs",
-];
-
 /* Front-end behavior variables. C: `int pipe_mode`, `static int use_readline`,
 `int promptmode`, `int apply_direction`, plus interface.l's `int input_is_file`.
 File-static/global → thread_local per the conventions (they persist across
@@ -208,35 +56,12 @@ thread_local! {
     /// Persistent "in REGEX/DEFINE start-condition" state (survives across
     /// my_interfaceparse calls, like flex's global yy_start).
     static PENDING_REGEX: RefCell<Option<PendingRegex>> = const { RefCell::new(None) };
-    /* readline completion statics (my_completion/my_generator). */
-    static SMATCH: Cell<usize> = const { Cell::new(0) };
-    static RL_LINE_BUFFER: RefCell<String> = const { RefCell::new(String::new()) };
-    static RL_POINT: Cell<usize> = const { Cell::new(0) };
-    static GEN_LIST_INDEX: Cell<usize> = const { Cell::new(0) };
-    static GEN_LIST_INDEX2: Cell<usize> = const { Cell::new(0) };
-    static GEN_LEN: Cell<usize> = const { Cell::new(0) };
-    static GEN_NUMMATCHES: Cell<i32> = const { Cell::new(0) };
 }
 
 struct PendingRegex {
     pmode: i32,
     defname: String,
     accum: String,
-}
-
-// [spec:foma:def:foma.xprintf-fn]
-// [spec:foma:def:fomalibconf.xprintf-fn]
-// [spec:foma:sem:foma.xprintf-fn]
-// [spec:foma:sem:fomalibconf.xprintf-fn]
-// C: `void xprintf(char *string) { return ; printf("%s",string); }` — the
-// `return;` makes the printf unreachable dead code (a disabled output hook).
-#[allow(dead_code, unused_variables)]
-fn xprintf(string: &str) {
-    return;
-    #[allow(unreachable_code)]
-    {
-        print!("{}", string);
-    }
 }
 
 // [spec:foma:def:foma.add-history-fn]
@@ -307,75 +132,6 @@ fn print_help() {
     println!("-r\t\tdon't use readline library for input");
     println!("-s\t\tstop execution and exit");
     println!("-v\t\tprint version number");
-}
-
-// [spec:foma:def:foma.my-completion-fn]
-// [spec:foma:sem:foma.my-completion-fn]
-// C readline attempted-completion hook: stores `start` (word column) into the
-// file-static `smatch`, then returns rl_completion_matches(text, my_generator).
-// DEVIATION from C (readline not linked; retained for fidelity, wired to
-// nothing): we stash the line/point into the my_generator statics and emulate
-// rl_completion_matches by driving my_generator ourselves.
-#[allow(dead_code)]
-fn my_completion(text: &str, start: usize, end: usize) -> Vec<String> {
-    SMATCH.with(|s| s.set(start));
-    RL_LINE_BUFFER.with(|b| *b.borrow_mut() = text.to_string());
-    RL_POINT.with(|p| p.set(end));
-    let mut matches: Vec<String> = Vec::new();
-    let mut state = 0;
-    while let Some(m) = my_generator(text, state) {
-        matches.push(m);
-        state = 1;
-    }
-    matches
-}
-
-// [spec:foma:def:foma.my-generator-fn]
-// [spec:foma:sem:foma.my-generator-fn]
-// C readline match generator: ignores `text`, matches the WHOLE line
-// (rl_line_buffer) against cmd[] (then abbrvcmd[] when rl_point > 0), returning
-// strdup(name + smatch) for each prefix hit; resets its static cursors on
-// state == 0. DEVIATION from C (readline not linked): rl_line_buffer/rl_point
-// are the stand-in thread_locals set by my_completion.
-fn my_generator(_text: &str, state: i32) -> Option<String> {
-    let text = RL_LINE_BUFFER.with(|b| b.borrow().clone());
-    if state == 0 {
-        GEN_LIST_INDEX.with(|c| c.set(0));
-        GEN_LIST_INDEX2.with(|c| c.set(0));
-        GEN_NUMMATCHES.with(|c| c.set(0));
-        GEN_LEN.with(|c| c.set(text.len()));
-    }
-    let smatch = SMATCH.with(|s| s.get());
-
-    // Scan cmd[] (strncmp(name, text, len) == 0 ↔ text is a prefix of name).
-    loop {
-        let li = GEN_LIST_INDEX.with(|c| c.get());
-        if li >= CMD.len() {
-            break;
-        }
-        GEN_LIST_INDEX.with(|c| c.set(li + 1));
-        let name = CMD[li];
-        if name.as_bytes().starts_with(text.as_bytes()) {
-            GEN_NUMMATCHES.with(|c| c.set(c.get() + 1));
-            return Some(name.get(smatch..).unwrap_or("").to_string());
-        }
-    }
-
-    // C: `if (rl_point > 0)` before scanning the abbreviations.
-    if RL_POINT.with(|p| p.get()) > 0 {
-        loop {
-            let li = GEN_LIST_INDEX2.with(|c| c.get());
-            if li >= ABBRVCMD.len() {
-                break;
-            }
-            GEN_LIST_INDEX2.with(|c| c.set(li + 1));
-            let name = ABBRVCMD[li];
-            if name.as_bytes().starts_with(text.as_bytes()) {
-                return Some(name.get(smatch..).unwrap_or("").to_string());
-            }
-        }
-    }
-    None
 }
 
 // [spec:foma:def:foma.main-fn]
@@ -473,9 +229,6 @@ fn main() {
     if PIPE_MODE.with(|p| p.get()) == 0 && session.opts.verbose {
         print!("{}", DISCLAIMER);
     }
-    // C: rl_basic_word_break_characters = " >";
-    //    rl_attempted_completion_function = my_completion;  (no-op without readline)
-
     loop {
         let promptmode = PROMPTMODE.with(|p| p.get());
         let mut prompt = if promptmode == PROMPT_MAIN {
@@ -1684,79 +1437,13 @@ fn pfx_hyphen(tok: &str, full: &str, min: usize) -> bool {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Wave-3 unit tests. The readline-completion stand-ins (my_completion /
-// my_generator) and the no-op hooks (xprintf / add_history) are inert at
-// runtime (readline is not linked), so they have no observable effect via the
-// spawned CLI. Their sem-rule behavior is pinned here directly. thread_local
-// completion cursors are isolated per test thread by the harness.
+// Wave-3 unit tests. The no-op readline stand-in `add_history` is inert at
+// runtime (readline is not linked), so it has no observable effect via the
+// spawned CLI. Its sem-rule behavior is pinned here directly.
 // ────────────────────────────────────────────────────────────────────────────
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // my_generator ignores its `text` argument and matches the WHOLE line
-    // (rl_line_buffer, primed by my_completion) as a prefix against cmd[], then —
-    // when rl_point > 0 — against abbrvcmd[], returning strdup(name + smatch) for
-    // each hit and NULL once both tables are exhausted. my_completion stores
-    // start→smatch / end→rl_point and drives the generator (state 0 then 1).
-    // [spec:foma:sem:foma.my-generator-fn/test]
-    // [spec:foma:sem:foma.my-completion-fn/test]
-    #[test]
-    fn my_generator_prefix_matching() {
-        // "apply " is a prefix of the three "apply …" commands; smatch = 6 drops
-        // the shared "apply " so only the completion tail is returned (readline
-        // substitutes only the word starting at column smatch).
-        assert_eq!(
-            my_completion("apply ", 6, 6),
-            vec!["down".to_string(), "med".to_string(), "up".to_string()]
-        );
-
-        // smatch = 0 returns the full command names (whole-line prefix match).
-        assert_eq!(
-            my_completion("apply", 0, 5),
-            vec![
-                "apply down".to_string(),
-                "apply med".to_string(),
-                "apply up".to_string()
-            ]
-        );
-
-        // rl_point > 0 makes it also scan the abbreviation table: "do" is not a
-        // prefix of any cmd[] entry but matches abbrvcmd[]'s "down".
-        assert_eq!(my_completion("do", 0, 2), vec!["down".to_string()]);
-
-        // No prefix hit in either table → empty (my_generator returns None at once).
-        assert!(my_completion("zzzz", 0, 4).is_empty());
-    }
-
-    // On state == 0 my_generator resets its static cursors and caches len; it then
-    // yields each cmd[] prefix hit and finally None. With rl_point == 0 the
-    // abbrvcmd[] scan is skipped, so "quit" yields exactly one candidate.
-    // [spec:foma:sem:foma.my-generator-fn/test]
-    #[test]
-    fn my_generator_state_reset_and_exhaustion() {
-        SMATCH.with(|s| s.set(0));
-        RL_LINE_BUFFER.with(|b| *b.borrow_mut() = "quit".to_string());
-        RL_POINT.with(|p| p.set(0));
-        // First call (state 0) resets the cursors and returns the first hit.
-        assert_eq!(my_generator("quit", 0), Some("quit".to_string()));
-        // Continuations (state 1) run to exhaustion and then return None.
-        let mut last = my_generator("quit", 1);
-        while last.is_some() {
-            last = my_generator("quit", 1);
-        }
-        assert_eq!(last, None);
-    }
-
-    // xprintf: C body is `{ return; printf("%s", string); }` — the printf is
-    // unreachable, so the function is a no-op that discards its argument.
-    // [spec:foma:sem:foma.xprintf-fn/test]
-    // [spec:foma:sem:fomalibconf.xprintf-fn/test]
-    #[test]
-    fn xprintf_is_a_noop() {
-        // Returns unit with no observable effect; simply calling it must succeed.
-        xprintf("this text is discarded");
-    }
 
     // add_history: readline is not linked, so this stand-in is a no-op returning 0
     // (the C extern's int result is ignored by foma in any case).

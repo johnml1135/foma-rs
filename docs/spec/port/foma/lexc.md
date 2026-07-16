@@ -22,6 +22,7 @@
 > struct states *lexc_find_lex_state(char *name)
 
 > [spec:foma:sem:lexc.lexc-find-lex-state-fn]
+> Not ported to Rust: dead API — declared in lexc.h but never called anywhere in the C tree. The C behaviour was:
 > Looks up a lexicon by name in the internal lexicon list and returns its state, or NULL. Declared in lexc.h but never called anywhere in the C tree (dead API). Implemented in foma/lexcread.c; full behavior: `[spec:foma:sem:lexcread.lexc-find-lex-state-fn]`.
 
 > [spec:foma:def:lexc.lexc-find-mc-fn]

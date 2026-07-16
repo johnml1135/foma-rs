@@ -1182,6 +1182,7 @@
 > static char **my_completion(const char *text, int start, int end)
 
 > [spec:foma:sem:foma.my-completion-fn]
+> Not ported to Rust: GNU readline is not linked in the port, so the attempted-completion hook is never registered or invoked (no interactive tab-completion at runtime). The C behaviour was:
 > Implemented in foma/foma.c (file-static). readline attempted-completion hook: stores `start`
 > (the index in rl_line_buffer where the word being completed begins) into the file-static
 > global smatch — consumed by my_generator — then returns rl_completion_matches(text,
@@ -1192,6 +1193,7 @@
 > char *my_generator(const char *text, int state)
 
 > [spec:foma:sem:foma.my-generator-fn]
+> Not ported to Rust: GNU readline is not linked in the port, so the match generator (and the cmd[]/abbrvcmd[] completion tables it scanned) is unreachable and is omitted. The C behaviour was:
 > Implemented in foma/foma.c. readline match generator, called repeatedly with state == 0 on
 > the first call. Ignores the passed text and matches against the ENTIRE line (text is
 > reassigned to rl_line_buffer) so multi-word commands complete correctly. On state == 0 it
@@ -1475,6 +1477,7 @@
 > void xprintf(char *string)
 
 > [spec:foma:sem:foma.xprintf-fn]
+> Not ported to Rust: a disabled no-op output hook with no callers — the C body returns before its printf, so it discards its argument and does nothing. The C behaviour was:
 > Implemented in foma/foma.c as `{ return ; printf("%s",string); }`: the function returns
 > immediately and the printf is unreachable dead code — effectively a no-op that discards its
 > argument (a disabled debug/output hook).

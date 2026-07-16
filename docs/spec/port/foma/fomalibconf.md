@@ -597,6 +597,7 @@
 > void xprintf(char *string)
 
 > [spec:foma:sem:fomalibconf.xprintf-fn]
+> Not ported to Rust: a disabled no-op output hook with no callers. The C behaviour was:
 > No-op. The only definition is in foma/foma.c (the interactive CLI's main file, not the library sources): the body is `return ; printf("%s",string);` — the unconditional `return` comes first, so the printf is unreachable dead code and calling `xprintf` does nothing and returns immediately. Presumably a debugging switch left disabled. Because it is defined in the CLI, not in libfoma proper, a library-only consumer that calls it gets a link error. A port should treat it as a no-op hook. Implementation: foma/foma.c.
 
 

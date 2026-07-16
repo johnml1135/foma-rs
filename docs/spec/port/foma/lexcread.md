@@ -82,6 +82,7 @@
 > struct states *lexc_find_lex_state(char *name)
 
 > [spec:foma:sem:lexcread.lexc-find-lex-state-fn]
+> Not ported to Rust: dead API — exported via lexc.h but has no callers in the C tree. The C behaviour was:
 > Linear search of the file-static `lexstates` list for a lexicon whose name strcmp-equals `name`; returns that lexicon's state pointer, or NULL if no such lexicon has been created. Exported via lexc.h but has no callers in the C tree (dead API).
 
 > [spec:foma:def:lexcread.lexc-find-mc-fn]
