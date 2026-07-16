@@ -1,0 +1,6 @@
+# The library must run on clockless targets (wasm32-unknown-unknown), where
+# std's clock reads abort at runtime and nothing fails at compile time.
+disallowed-methods = [
+    { path = "std::time::SystemTime::now", reason = "aborts at runtime on wasm32-unknown-unknown; keep the library clock-free (seed RNGs from std::hash::RandomState entropy)" },
+    { path = "std::time::Instant::now", reason = "aborts at runtime on wasm32-unknown-unknown; keep the library clock-free" },
+]

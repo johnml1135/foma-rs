@@ -7,6 +7,11 @@
 //! a range of shapes, plus a few isolated ops (determinize/minimize/compose)
 //! rebuilt fresh each iteration. Lookup/apply is deliberately out of scope.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "native-only benchmark; wall-clock timing is the point"
+)]
+
 use std::time::{Duration, Instant};
 
 use foma::constructions::{fsm_compose, fsm_union};

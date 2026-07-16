@@ -16,6 +16,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
 
       - name: Cache cargo build
         uses: Swatinem/rust-cache@v2
@@ -25,6 +26,9 @@ jobs:
 
       - name: Build
         run: cargo build --workspace --all-targets
+
+      - name: Build library for wasm32-unknown-unknown
+        run: cargo build -p foma --lib --target wasm32-unknown-unknown
 
       - name: Test
         run: cargo test --workspace

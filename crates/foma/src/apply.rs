@@ -43,6 +43,7 @@ use crate::types::{
 };
 use crate::utf8::{is_combining, utf8skip};
 use smol_str::SmolStr;
+use std::hash::{BuildHasher, RandomState};
 
 /* ------------------------------------------------------------------ */
 /* Small helpers reproducing the C pointer/bit macros                 */
@@ -467,13 +468,13 @@ pub fn apply_up(h: &mut ApplyHandle, word: Option<&str>) -> Option<String> {
 // [spec:foma:sem:fomalib.apply-init-fn]
 pub fn apply_init(net: &Fsm) -> Box<ApplyHandle> {
     // C: srand((unsigned int) time(NULL)); seeds the handle's LCG.
-    // DEVIATION from C (SystemTime seconds stand in for time(NULL)).
-    let seed = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0) as u32;
+    // DEVIATION from C: seeded from std's hash entropy, not the wall clock —
+    // SystemTime::now() aborts at runtime on clockless targets
+    // (wasm32-unknown-unknown), and the seed only varies apply_random_*
+    // enumeration order. RandomState works wherever HashMap does; unlike C,
+    // handles created within the same second don't replay identical sequences.
     let mut lcg = Lcg::new();
-    lcg.srand(seed);
+    lcg.srand(RandomState::new().hash_one(0u64) as u32);
 
     // calloc(1, sizeof(struct apply_handle)) — zeroed handle.
     let mut h = Box::new(ApplyHandle {

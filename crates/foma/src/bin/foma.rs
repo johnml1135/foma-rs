@@ -154,9 +154,9 @@ fn main() {
     let mut session = Session::new();
     // DEVIATION from C: `srand((unsigned int)time(NULL))` seeds dynarray's
     // crate-private LCG, which this (separate) binary crate cannot reach.
-    // apply_init reseeds that LCG with time(NULL) before any random enumeration,
-    // so runtime randomness is preserved; only startup net auto-naming (before
-    // the first apply) uses the default seed.
+    // apply_init seeds each handle's LCG from hash entropy before any random
+    // enumeration, so runtime randomness is preserved; only startup net
+    // auto-naming (before the first apply) uses the default seed.
     // getopt(argc, argv, "e:f:hl:pqrsv"), acted on in command-line order.
     let mut idx = 1;
     while idx < args.len() {
