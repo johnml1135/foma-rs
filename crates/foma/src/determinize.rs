@@ -11,9 +11,9 @@
 //!   nodes appended after); `target`/`next` pointers → Option<usize> pool
 //!   indices; the DFS pushes pool indices on the ptr stack where the C
 //!   pushes node pointers.
-//! - nhash table: calloc'd bucket-head array → Vec<NhashList>, malloc'd
-//!   collision nodes → owned Option<Box<NhashList>> chains with the same
-//!   splice-after-head order.
+//! - nhash table: an open-addressed Vec<NhashList> (linear probing), replacing
+//!   the C's chained bucket-head array + malloc'd collision nodes. Set numbers
+//!   are discovery-order, so the table layout does not affect the output.
 //! - trans_array/trans_list: per-state interior pointers into the shared
 //!   entry pool → base offsets (usize).
 //!
@@ -69,16 +69,20 @@ pub(crate) static PRIMES: [u32; 26] = [
 ];
 
 // [spec:foma:def:determinize.nhash-list]
-/* size == 0 marks an empty bucket head (calloc). Collision nodes are appended
-past the prime-sized head region of the same `table` Vec and chained by index
-(spliced in directly after the head as in C); an index link keeps NhashList a
-plain Copy struct, so the whole table frees in one deallocation. */
+/* An open-addressed slot: size == 0 marks an empty slot; collisions are
+resolved by linear probing within the `table` Vec (no chains). A plain Copy
+struct, so the whole table frees in one deallocation.
+
+DEVIATION from C: C used separate chaining (a bucket-head array + malloc'd
+->next collision nodes) at load factor up to NHASH_LOAD_LIMIT. Open addressing
+here is byte-equivalent — set numbers are assigned in subset-discovery order
+(current_setnum++ on first insert), which the table's internal layout and
+probe order never influence; only lookup speed differs. */
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NhashList {
     pub setnum: i32,
     pub size: u32,
     pub set_offset: u32,
-    pub next: Option<u32>,
 }
 
 // [spec:foma:def:determinize.t-memo]
@@ -847,65 +851,55 @@ pub(crate) fn sigma_to_pairs(s: &mut Subset, net: &mut Fsm) {
 // [spec:foma:def:determinize.nhash-find-insert-fn]
 // [spec:foma:sem:determinize.nhash-find-insert-fn]
 pub(crate) fn nhash_find_insert(s: &mut Subset, set: &[i32], setsize: i32) -> i32 {
-    /* hashf's int return; values stay below nhash_tablesize */
-    let mut hashval = hashf(s, set, setsize);
-    let head_size = s.table[hashval as usize].size;
-    if head_size == 0 {
-        nhash_insert(s, hashval, set, setsize)
-    } else {
-        let mainloop = s.mainloop;
-        let op = s.op;
-        let mut found_setnum: Option<i32> = None;
-        let mut star_mark = false;
-        {
-            let mut cur: Option<u32> = Some(hashval as u32);
-            while let Some(ci) = cur {
-                let tp = s.table[ci as usize];
-                if tp.size as i32 != setsize {
-                    cur = tp.next;
-                    continue;
-                }
-                /* Compare the list at this bucket to the current set by
-                looking at e_table entries */
-                let mut found = true;
-                let currlist = tp.set_offset as usize;
-                for j in 0..setsize as usize {
-                    if s.e_table[s.set_table[currlist + j] as usize] != mainloop - 1 {
-                        found = false;
-                        break;
-                    }
-                }
-                if op == SubsetOp::TestStarFree && found {
-                    for (j, &set_j) in set.iter().enumerate().take(setsize as usize) {
-                        if set_j != s.set_table[currlist + j] {
-                            /* Set mark (applied after the walk to keep the
-                            table borrow immutable) */
-                            star_mark = true;
-                        }
-                    }
-                }
-                if found {
-                    found_setnum = Some(tp.setnum);
+    let mainloop = s.mainloop;
+    let op = s.op;
+
+    /* Linear-probe from the home slot until the set is found or an empty slot
+    proves it absent. */
+    let mut tablesize = s.nhash_tablesize as usize;
+    let mut idx = hashf(s, set, setsize) as usize;
+    loop {
+        let tp = s.table[idx];
+        if tp.size == 0 {
+            break; /* absent — idx is the slot to insert into */
+        }
+        if tp.size as i32 == setsize {
+            /* Compare the set stored here to the current set via the e_table
+            marks laid down by the caller. */
+            let mut found = true;
+            let currlist = tp.set_offset as usize;
+            for j in 0..setsize as usize {
+                if s.e_table[s.set_table[currlist + j] as usize] != mainloop - 1 {
+                    found = false;
                     break;
                 }
-                cur = tp.next;
+            }
+            if op == SubsetOp::TestStarFree && found {
+                for (j, &set_j) in set.iter().enumerate().take(setsize as usize) {
+                    if set_j != s.set_table[currlist + j] {
+                        s.star_free_mark = 1;
+                    }
+                }
+            }
+            if found {
+                return tp.setnum;
             }
         }
-        if star_mark {
-            s.star_free_mark = 1;
-        }
-        if let Some(setnum) = found_setnum {
-            return setnum;
-        }
-
-        /* Growth check only runs on this collision-miss path — inserting
-        into an empty bucket never triggers a rebuild */
-        if s.nhash_load / NHASH_LOAD_LIMIT > s.nhash_tablesize {
-            nhash_rebuild_table(s);
-            hashval = hashf(s, set, setsize);
-        }
-        nhash_insert(s, hashval, set, setsize)
+        idx = (idx + 1) % tablesize;
     }
+
+    /* Absent: grow first if this insert would push the load factor past ~2/3
+    (open addressing needs headroom to keep probe chains short). Rebuild timing
+    does not affect set numbering, so the threshold is free to differ from C. */
+    if (s.nhash_load + 1) * 3 > s.nhash_tablesize * 2 {
+        nhash_rebuild_table(s);
+        tablesize = s.nhash_tablesize as usize;
+        idx = hashf(s, set, setsize) as usize;
+        while s.table[idx].size != 0 {
+            idx = (idx + 1) % tablesize;
+        }
+    }
+    nhash_insert(s, idx, set, setsize)
 }
 
 // [spec:foma:def:determinize.hashf-fn]
@@ -950,7 +944,8 @@ pub(crate) fn move_set(s: &mut Subset, set: &[i32], setsize: i32) -> u32 {
 
 // [spec:foma:def:determinize.nhash-insert-fn]
 // [spec:foma:sem:determinize.nhash-insert-fn]
-pub(crate) fn nhash_insert(s: &mut Subset, hashval: i32, set: &[i32], setsize: i32) -> i32 {
+pub(crate) fn nhash_insert(s: &mut Subset, idx: usize, set: &[i32], setsize: i32) -> i32 {
+    /* `idx` is the empty slot the probe in nhash_find_insert stopped on. */
     let mut fs = false;
 
     s.current_setnum += 1;
@@ -962,32 +957,11 @@ pub(crate) fn nhash_insert(s: &mut Subset, hashval: i32, set: &[i32], setsize: i
             fs = true;
         }
     }
-    let head_empty = s.table[hashval as usize].size == 0;
-    if head_empty {
-        let set_offset = move_set(s, set, setsize);
-        let tableptr = &mut s.table[hashval as usize];
-        tableptr.set_offset = set_offset;
-        tableptr.size = setsize as u32;
-        tableptr.setnum = current_setnum;
-
-        add_t_ptr(s, current_setnum, setsize, set_offset, fs as i32);
-        return current_setnum;
-    }
-
-    /* spliced in as the second chain element: appended to the table's
-    collision region and index-linked. (C assigns set_offset = move_set(...)
-    after the splice; move_set only touches the set_table fields, so computing
-    it first is unobservable.) */
     let set_offset = move_set(s, set, setsize);
-    let old_next = s.table[hashval as usize].next;
-    let idx = s.table.len() as u32;
-    s.table.push(NhashList {
-        setnum: current_setnum,
-        size: setsize as u32,
-        set_offset,
-        next: old_next,
-    });
-    s.table[hashval as usize].next = Some(idx);
+    let slot = &mut s.table[idx];
+    slot.set_offset = set_offset;
+    slot.size = setsize as u32;
+    slot.setnum = current_setnum;
 
     add_t_ptr(s, current_setnum, setsize, set_offset, fs as i32);
     current_setnum
@@ -1011,37 +985,22 @@ pub(crate) fn nhash_rebuild_table(s: &mut Subset) {
     s.nhash_tablesize = PRIMES[i + 1] as i32;
 
     s.table = vec![NhashList::default(); s.nhash_tablesize as usize];
-    for head in 0..oldsize as usize {
-        if oldtable[head].size == 0 {
+    let tablesize = s.nhash_tablesize as usize;
+    for slot in oldtable.iter().take(oldsize as usize) {
+        if slot.size == 0 {
             continue;
         }
-        let mut cur: Option<u32> = Some(head as u32);
-        while let Some(ci) = cur {
-            let tp = oldtable[ci as usize];
-            /* rehash */
-            let hashval = hashf(s, &s.set_table[tp.set_offset as usize..], tp.size as i32);
-            if s.table[hashval as usize].size == 0 {
-                /* quirk kept: nhash_load only counts occupied buckets here,
-                understating the load factor for later checks */
-                s.nhash_load += 1;
-                let ntableptr = &mut s.table[hashval as usize];
-                ntableptr.size = tp.size;
-                ntableptr.set_offset = tp.set_offset;
-                ntableptr.setnum = tp.setnum;
-                ntableptr.next = None;
-            } else {
-                let old_next = s.table[hashval as usize].next;
-                let idx = s.table.len() as u32;
-                s.table.push(NhashList {
-                    setnum: tp.setnum,
-                    size: tp.size,
-                    set_offset: tp.set_offset,
-                    next: old_next,
-                });
-                s.table[hashval as usize].next = Some(idx);
-            }
-            cur = tp.next;
+        /* rehash into the grown table by linear probing */
+        let mut idx = hashf(
+            s,
+            &s.set_table[slot.set_offset as usize..],
+            slot.size as i32,
+        ) as usize;
+        while s.table[idx].size != 0 {
+            idx = (idx + 1) % tablesize;
         }
+        s.table[idx] = *slot;
+        s.nhash_load += 1;
     }
     nhash_free(oldtable, oldsize);
 }
@@ -1533,17 +1492,20 @@ mod tests {
     // [spec:foma:sem:determinize.nhash-free-fn/test]
     #[test]
     fn nhash_free_walks_chains() {
-        let mut table = vec![NhashList::default(); 2];
-        table[0].size = 1;
-        table[0].next = Some(2);
-        table.push(NhashList {
-            setnum: 1,
+        // Open-addressed table: two occupied slots plus empties; nhash_free
+        // just drops the Vec.
+        let mut table = vec![NhashList::default(); 4];
+        table[0] = NhashList {
+            setnum: 0,
             size: 1,
             set_offset: 0,
-            next: Some(3),
-        });
-        table.push(NhashList::default());
-        nhash_free(table, 2);
+        };
+        table[1] = NhashList {
+            setnum: 1,
+            size: 1,
+            set_offset: 1,
+        };
+        nhash_free(table, 4);
     }
 
     // trans_sort_cmp: ascending by composite symbol (a->inout vs b->inout).
