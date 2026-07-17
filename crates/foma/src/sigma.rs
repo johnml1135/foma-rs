@@ -146,35 +146,37 @@ pub fn sigma_cleanup(net: &mut Fsm, force: i32) {
     }
     /* C: malloc(sizeof(int)*(maxsigma+1)) followed by an explicit zeroing loop */
     let mut attested: Vec<i32> = vec![0; maxsigma as usize + 1];
-    let fsm = &mut net.states;
-    let mut i = 0usize;
-    while fsm[i].state_no != -1 {
-        if fsm[i].r#in >= 0 {
-            attested[fsm[i].r#in as usize] = 1;
+    {
+        let mut fsm = net.states.rows_mut();
+        let mut i = 0usize;
+        while fsm[i].state_no != -1 {
+            if fsm[i].r#in >= 0 {
+                attested[fsm[i].r#in as usize] = 1;
+            }
+            if fsm[i].out >= 0 {
+                attested[fsm[i].out as usize] = 1;
+            }
+            i += 1;
         }
-        if fsm[i].out >= 0 {
-            attested[fsm[i].out as usize] = 1;
+        let mut j: i32 = 3;
+        let mut i: i32 = 3;
+        while i <= maxsigma {
+            if attested[i as usize] != 0 {
+                attested[i as usize] = j;
+                j += 1;
+            }
+            i += 1;
         }
-        i += 1;
-    }
-    let mut j: i32 = 3;
-    let mut i: i32 = 3;
-    while i <= maxsigma {
-        if attested[i as usize] != 0 {
-            attested[i as usize] = j;
-            j += 1;
+        let mut i = 0usize;
+        while fsm[i].state_no != -1 {
+            if fsm[i].r#in > 2 {
+                fsm[i].r#in = attested[fsm[i].r#in as usize] as i16;
+            }
+            if fsm[i].out > 2 {
+                fsm[i].out = attested[fsm[i].out as usize] as i16;
+            }
+            i += 1;
         }
-        i += 1;
-    }
-    let mut i = 0usize;
-    while fsm[i].state_no != -1 {
-        if fsm[i].r#in > 2 {
-            fsm[i].r#in = attested[fsm[i].r#in as usize] as i16;
-        }
-        if fsm[i].out > 2 {
-            fsm[i].out = attested[fsm[i].out as usize] as i16;
-        }
-        i += 1;
     }
     /* Drop unattested entries in place, renumbering the survivors (numbers
     0–2 keep their code). retain() preserves the original order. */
@@ -360,16 +362,18 @@ pub fn sigma_sort(net: &mut Fsm) {
     }
 
     /* Replace arcs */
-    let fsm_state = &mut net.states;
-    let mut i = 0usize;
-    while fsm_state[i].state_no != -1 {
-        if (fsm_state[i].r#in as i32) > IDENTITY {
-            fsm_state[i].r#in = replacearray[fsm_state[i].r#in as usize] as i16;
+    {
+        let mut fsm_state = net.states.rows_mut();
+        let mut i = 0usize;
+        while fsm_state[i].state_no != -1 {
+            if (fsm_state[i].r#in as i32) > IDENTITY {
+                fsm_state[i].r#in = replacearray[fsm_state[i].r#in as usize] as i16;
+            }
+            if (fsm_state[i].out as i32) > IDENTITY {
+                fsm_state[i].out = replacearray[fsm_state[i].out as usize] as i16;
+            }
+            i += 1;
         }
-        if (fsm_state[i].out as i32) > IDENTITY {
-            fsm_state[i].out = replacearray[fsm_state[i].out as usize] as i16;
-        }
-        i += 1;
     }
     /* Replace sigma: walk again in order, giving the k-th non-special entry
     the k-th sorted symbol and number k+3 */
@@ -992,8 +996,9 @@ mod tests {
             ]
         );
         /* replacearray: c:3→5, a:4→3, b:5→4; labels <= IDENTITY untouched */
-        assert_eq!((net.states[0].r#in, net.states[0].out), (5, 3));
-        assert_eq!((net.states[1].r#in, net.states[1].out), (4, 0));
+        let fsm = net.states.rows();
+        assert_eq!((fsm[0].r#in, fsm[0].out), (5, 3));
+        assert_eq!((fsm[1].r#in, fsm[1].out), (4, 0));
     }
 
     // [spec:foma:sem:sigma.sigma-sort-fn+2/test]
@@ -1010,7 +1015,8 @@ mod tests {
         assert_eq!(syms(&net.sigma), vec![pair(3, "a"), pair(4, "b")]);
         /* in=4 is absent from sigma → replacearray[4] == 4 (identity, kept);
         out: b 3→4 */
-        assert_eq!((net.states[0].r#in, net.states[0].out), (4, 4));
+        let fsm = net.states.rows();
+        assert_eq!((fsm[0].r#in, fsm[0].out), (4, 4));
     }
 
     /* ---- sigma_cleanup ---- */
@@ -1069,7 +1075,8 @@ mod tests {
         /* unattested reserved 0–2 entries are removed too */
         assert_eq!(syms(&net.sigma), vec![pair(3, "a"), pair(4, "c")]);
         /* arcs rewritten through the renumbering table */
-        assert_eq!((net.states[0].r#in, net.states[0].out), (3, 4));
+        let fsm = net.states.rows();
+        assert_eq!((fsm[0].r#in, fsm[0].out), (3, 4));
     }
 
     // [spec:foma:sem:sigma.sigma-cleanup-fn+1/test]
@@ -1085,7 +1092,8 @@ mod tests {
             syms(&net.sigma),
             vec![pair(0, "@_EPSILON_SYMBOL_@"), pair(3, "a")]
         );
-        assert_eq!((net.states[0].r#in, net.states[0].out), (0, 3));
+        let fsm = net.states.rows();
+        assert_eq!((fsm[0].r#in, fsm[0].out), (0, 3));
     }
 
     // [spec:foma:sem:sigma.sigma-cleanup-fn+1/test]

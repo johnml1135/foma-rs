@@ -60,38 +60,42 @@ pub fn fsm_coaccessible(net: Box<Fsm>) -> Box<Fsm> {
         added[i as usize] = 0;
     }
 
-    let mut i: i32 = 0;
-    while net.states[i as usize].state_no != -1 {
-        let s = net.states[i as usize].state_no;
-        let t = net.states[i as usize].target;
-        if t != -1 && s != t {
-            if inverses[t as usize].state == -1 {
-                inverses[t as usize].state = s;
-            } else {
-                /* malloc'd chain node spliced directly after the head */
-                let temp_i = Box::new(Invtable {
-                    state: s,
-                    next: inverses[t as usize].next.take(),
-                });
-                inverses[t as usize].next = Some(temp_i);
+    {
+        let fsm = net.states.rows();
+        let mut i: i32 = 0;
+        while fsm[i as usize].state_no != -1 {
+            let s = fsm[i as usize].state_no;
+            let t = fsm[i as usize].target;
+            if t != -1 && s != t {
+                if inverses[t as usize].state == -1 {
+                    inverses[t as usize].state = s;
+                } else {
+                    /* malloc'd chain node spliced directly after the head */
+                    let temp_i = Box::new(Invtable {
+                        state: s,
+                        next: inverses[t as usize].next.take(),
+                    });
+                    inverses[t as usize].next = Some(temp_i);
+                }
             }
+            i += 1;
         }
-        i += 1;
     }
 
     /* Push & mark finals */
 
     let mut markcount = 0;
-    let mut i: i32 = 0;
-    while net.states[i as usize].state_no != -1 {
-        if net.states[i as usize].final_state != 0
-            && coacc[net.states[i as usize].state_no as usize] == 0
-        {
-            int_stack.push(net.states[i as usize].state_no);
-            coacc[net.states[i as usize].state_no as usize] = 1;
-            markcount += 1;
+    {
+        let fsm = net.states.rows();
+        let mut i: i32 = 0;
+        while fsm[i as usize].state_no != -1 {
+            if fsm[i as usize].final_state != 0 && coacc[fsm[i as usize].state_no as usize] == 0 {
+                int_stack.push(fsm[i as usize].state_no);
+                coacc[fsm[i as usize].state_no as usize] = 1;
+                markcount += 1;
+            }
+            i += 1;
         }
-        i += 1;
     }
 
     let mut terminate = 0;
@@ -157,66 +161,68 @@ pub fn fsm_coaccessible(net: Box<Fsm>) -> Box<Fsm> {
             }
         }
 
-        let mut i: i32 = 0;
-        let mut j: i32 = 0;
-        while net.states[i as usize].state_no != -1 {
-            if i > 0
-                && net.states[i as usize].state_no != net.states[(i - 1) as usize].state_no
-                && net.states[(i - 1) as usize].final_state != 0
-                && added[net.states[(i - 1) as usize].state_no as usize] == 0
-            {
-                /* synthetic final line for a state all of whose arcs were
-                pruned */
-                let state_no = mapping[net.states[(i - 1) as usize].state_no as usize];
-                let start_state = net.states[(i - 1) as usize].start_state as i32;
-                add_fsm_arc(&mut net.states, j, state_no, -1, -1, -1, 1, start_state);
-                j += 1;
-                new_linecount += 1;
-                added[net.states[(i - 1) as usize].state_no as usize] = 1;
-                /* printf("addf ad %i\n",i); */
-            }
-            if coacc[net.states[i as usize].state_no as usize] != 0
-                && (net.states[i as usize].target == -1
-                    || coacc[net.states[i as usize].target as usize] != 0)
-            {
-                net.states[j as usize].state_no = mapping[net.states[i as usize].state_no as usize];
-                if net.states[i as usize].target == -1 {
-                    net.states[j as usize].target = -1;
-                } else {
-                    net.states[j as usize].target = mapping[net.states[i as usize].target as usize];
-                }
-                net.states[j as usize].final_state = net.states[i as usize].final_state;
-                net.states[j as usize].start_state = net.states[i as usize].start_state;
-                net.states[j as usize].r#in = net.states[i as usize].r#in;
-                net.states[j as usize].out = net.states[i as usize].out;
-                j += 1;
-                new_linecount += 1;
-                added[net.states[i as usize].state_no as usize] = 1;
-                if net.states[i as usize].target != -1 {
-                    new_arccount += 1;
-                }
-            }
-            i += 1;
-        }
-
-        if i > 1
-            && net.states[(i - 1) as usize].final_state != 0
-            && added[net.states[(i - 1) as usize].state_no as usize] == 0
         {
-            /* printf("addf\n"); */
-            let state_no = mapping[net.states[(i - 1) as usize].state_no as usize];
-            let start_state = net.states[(i - 1) as usize].start_state as i32;
-            add_fsm_arc(&mut net.states, j, state_no, -1, -1, -1, 1, start_state);
-            j += 1;
-            new_linecount += 1;
-        }
+            let mut fsm = net.states.rows_mut();
+            let mut i: i32 = 0;
+            let mut j: i32 = 0;
+            while fsm[i as usize].state_no != -1 {
+                if i > 0
+                    && fsm[i as usize].state_no != fsm[(i - 1) as usize].state_no
+                    && fsm[(i - 1) as usize].final_state != 0
+                    && added[fsm[(i - 1) as usize].state_no as usize] == 0
+                {
+                    /* synthetic final line for a state all of whose arcs were
+                    pruned */
+                    let state_no = mapping[fsm[(i - 1) as usize].state_no as usize];
+                    let start_state = fsm[(i - 1) as usize].start_state as i32;
+                    add_fsm_arc(&mut fsm, j, state_no, -1, -1, -1, 1, start_state);
+                    j += 1;
+                    new_linecount += 1;
+                    added[fsm[(i - 1) as usize].state_no as usize] = 1;
+                    /* printf("addf ad %i\n",i); */
+                }
+                if coacc[fsm[i as usize].state_no as usize] != 0
+                    && (fsm[i as usize].target == -1 || coacc[fsm[i as usize].target as usize] != 0)
+                {
+                    fsm[j as usize].state_no = mapping[fsm[i as usize].state_no as usize];
+                    if fsm[i as usize].target == -1 {
+                        fsm[j as usize].target = -1;
+                    } else {
+                        fsm[j as usize].target = mapping[fsm[i as usize].target as usize];
+                    }
+                    fsm[j as usize].final_state = fsm[i as usize].final_state;
+                    fsm[j as usize].start_state = fsm[i as usize].start_state;
+                    fsm[j as usize].r#in = fsm[i as usize].r#in;
+                    fsm[j as usize].out = fsm[i as usize].out;
+                    j += 1;
+                    new_linecount += 1;
+                    added[fsm[i as usize].state_no as usize] = 1;
+                    if fsm[i as usize].target != -1 {
+                        new_arccount += 1;
+                    }
+                }
+                i += 1;
+            }
 
-        if new_linecount == 0 {
-            add_fsm_arc(&mut net.states, j, 0, -1, -1, -1, -1, -1);
-            j += 1;
-        }
+            if i > 1
+                && fsm[(i - 1) as usize].final_state != 0
+                && added[fsm[(i - 1) as usize].state_no as usize] == 0
+            {
+                /* printf("addf\n"); */
+                let state_no = mapping[fsm[(i - 1) as usize].state_no as usize];
+                let start_state = fsm[(i - 1) as usize].start_state as i32;
+                add_fsm_arc(&mut fsm, j, state_no, -1, -1, -1, 1, start_state);
+                j += 1;
+                new_linecount += 1;
+            }
 
-        add_fsm_arc(&mut net.states, j, -1, -1, -1, -1, -1, -1);
+            if new_linecount == 0 {
+                add_fsm_arc(&mut fsm, j, 0, -1, -1, -1, -1, -1);
+                j += 1;
+            }
+
+            add_fsm_arc(&mut fsm, j, -1, -1, -1, -1, -1, -1);
+        }
         // (markcount == 0 — the empty language — is now handled up front by the
         // coacc[0] == 0 early return, so state 0 is always coaccessible here.)
         net.linecount = new_linecount;
@@ -244,6 +250,7 @@ mod tests {
     /// Line table up to (excluding) the state_no == -1 sentinel.
     fn lines(net: &Fsm) -> Vec<(i32, i16, i16, i32, i8, i8)> {
         net.states
+            .rows()
             .iter()
             .take_while(|l| l.state_no != -1)
             .map(|l| {
@@ -398,7 +405,7 @@ mod tests {
         in the well-formed fsm_empty_set shape (statecount 1, linecount 2,
         fresh sigma) */
         let mut net = fsm_create("");
-        net.states = vec![
+        let mut v = vec![
             FsmState {
                 state_no: 0,
                 r#in: 0,
@@ -408,18 +415,18 @@ mod tests {
                 start_state: 0,
             };
             3
-        ]
-        .into();
-        add_fsm_arc(&mut net.states, 0, 0, 3, 3, 1, 0, 1);
-        add_fsm_arc(&mut net.states, 1, 1, -1, -1, -1, 0, 0);
-        add_fsm_arc(&mut net.states, 2, -1, -1, -1, -1, -1, -1);
+        ];
+        add_fsm_arc(&mut v, 0, 0, 3, 3, 1, 0, 1);
+        add_fsm_arc(&mut v, 1, 1, -1, -1, -1, 0, 0);
+        add_fsm_arc(&mut v, 2, -1, -1, -1, -1, -1, -1);
+        net.states = v.into();
         net.statecount = 2;
         net.linecount = 2;
         net.arccount = 1;
         let net = fsm_coaccessible(net);
         /* fsm_empty(): one non-final start state, no arcs */
         assert_eq!(lines(&net), vec![(0, -1, -1, -1, 0, 1)]);
-        assert_eq!(net.states[1].state_no, -1);
+        assert_eq!(net.states.rows()[1].state_no, -1);
         assert_eq!(net.statecount, 1);
         assert_eq!(net.linecount, 2);
         assert_eq!(net.arccount, 0);

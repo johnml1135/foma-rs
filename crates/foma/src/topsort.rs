@@ -41,7 +41,10 @@ pub fn fsm_topsort(net: Box<Fsm>) -> Box<Fsm> {
 
     fsm_count(&mut net);
 
-    /* C: fsm = net->states — reads below index net.states directly */
+    /* C: fsm = net->states — one materialized read snapshot of the line table
+    backs every index below; net.states is not mutated until the rebuilt table
+    is assigned at the end, so this snapshot stays valid throughout. */
+    let fsm = net.states.rows();
 
     let mut statemap: Vec<i32> = vec![-1; net.statecount as usize];
     let mut order: Vec<i32> = vec![0; net.statecount as usize];
@@ -62,20 +65,20 @@ pub fn fsm_topsort(net: Box<Fsm>) -> Box<Fsm> {
     /* goto cyclic → break 'cyclic (cleanup after the block, as in C) */
     'cyclic: {
         let mut i: i32 = 0;
-        while net.states[i as usize].state_no != -1 {
+        while fsm[i as usize].state_no != -1 {
             lc += 1;
-            if net.states[i as usize].target != -1 {
-                let target = net.states[i as usize].target;
+            if fsm[i as usize].target != -1 {
+                let target = fsm[i as usize].target;
                 invcount[target as usize] += 1;
                 /* Do a fast check here to see if we have a selfloop */
-                if net.states[i as usize].state_no == target {
+                if fsm[i as usize].state_no == target {
                     net.pathcount = PATHCOUNT_CYCLIC;
                     net.is_loop_free = Tern::No;
                     break 'cyclic;
                 }
             }
-            if statemap[net.states[i as usize].state_no as usize] == -1 {
-                statemap[net.states[i as usize].state_no as usize] = i;
+            if statemap[fsm[i as usize].state_no as usize] == -1 {
+                statemap[fsm[i as usize].state_no as usize] = i;
             }
             i += 1;
         }
@@ -98,9 +101,9 @@ pub fn fsm_topsort(net: Box<Fsm>) -> Box<Fsm> {
 
             treatcount -= 1;
             let mut curr_fsm = statemap[curr_state as usize] as usize;
-            while net.states[curr_fsm].state_no == curr_state {
-                if net.states[curr_fsm].target != -1 {
-                    let target = net.states[curr_fsm].target;
+            while fsm[curr_fsm].state_no == curr_state {
+                if fsm[curr_fsm].target != -1 {
+                    let target = fsm[curr_fsm].target;
                     invcount[target as usize] -= 1;
 
                     /* Check if we overflow the path counter */
@@ -155,31 +158,28 @@ pub fn fsm_topsort(net: Box<Fsm>) -> Box<Fsm> {
             let curr_state = order[i as usize];
             let mut curr_fsm = statemap[curr_state as usize] as usize;
 
-            if net.states[curr_fsm].final_state == 1 && overflow == 0 {
+            if fsm[curr_fsm].final_state == 1 && overflow == 0 {
                 grand_pathcount = grand_pathcount.wrapping_add(pathcount[curr_state as usize]);
                 if grand_pathcount < 0 {
                     overflow = 1;
                 }
             }
 
-            while net.states[curr_fsm].state_no == curr_state {
-                let newstate = if net.states[curr_fsm].state_no == -1 {
+            while fsm[curr_fsm].state_no == curr_state {
+                let newstate = if fsm[curr_fsm].state_no == -1 {
                     -1
                 } else {
-                    newnum[net.states[curr_fsm].state_no as usize]
+                    newnum[fsm[curr_fsm].state_no as usize]
                 };
-                let newtarget = if net.states[curr_fsm].target == -1 {
+                let newtarget = if fsm[curr_fsm].target == -1 {
                     -1
                 } else {
-                    newnum[net.states[curr_fsm].target as usize]
+                    newnum[fsm[curr_fsm].target as usize]
                 };
-                let (r#in, out) = (
-                    net.states[curr_fsm].r#in as i32,
-                    net.states[curr_fsm].out as i32,
-                );
+                let (r#in, out) = (fsm[curr_fsm].r#in as i32, fsm[curr_fsm].out as i32);
                 let (final_state, start_state) = (
-                    net.states[curr_fsm].final_state as i32,
-                    net.states[curr_fsm].start_state as i32,
+                    fsm[curr_fsm].final_state as i32,
+                    fsm[curr_fsm].start_state as i32,
                 );
                 add_fsm_arc(
                     &mut new_fsm,
@@ -199,7 +199,8 @@ pub fn fsm_topsort(net: Box<Fsm>) -> Box<Fsm> {
 
         add_fsm_arc(&mut new_fsm, j, -1, -1, -1, -1, -1, -1);
         /* net->states = new_fsm; ... free(fsm) — the old array is dropped
-        by the assignment */
+        by the assignment. Release the read snapshot first. */
+        drop(fsm);
         net.states = new_fsm.into();
         net.pathcount = grand_pathcount;
         net.is_loop_free = Tern::Yes;
@@ -226,6 +227,7 @@ mod tests {
     /// Line table up to (excluding) the state_no == -1 sentinel.
     fn lines(net: &Fsm) -> Vec<(i32, i16, i16, i32, i8, i8)> {
         net.states
+            .rows()
             .iter()
             .take_while(|l| l.state_no != -1)
             .map(|l| {
@@ -262,7 +264,7 @@ mod tests {
             ]
         );
         /* terminator line appended after the rebuilt lines */
-        assert_eq!(net.states[3].state_no, -1);
+        assert_eq!(net.states.rows()[3].state_no, -1);
         assert_eq!(net.pathcount, 1);
         assert_eq!(net.is_loop_free, Tern::Yes);
     }
@@ -279,7 +281,8 @@ mod tests {
             /* state numbers equal topological rank: lines stay grouped in
             ascending new order and every arc goes low -> high */
             let mut prev = 0i32;
-            for l in net.states.iter() {
+            let fsm = net.states.rows();
+            for l in fsm.iter() {
                 if l.state_no == -1 {
                     break;
                 }
@@ -290,8 +293,8 @@ mod tests {
                 }
             }
             /* initial state keeps number 0 */
-            assert_eq!(net.states[0].state_no, 0);
-            assert_eq!(net.states[0].start_state, 1);
+            assert_eq!(fsm[0].state_no, 0);
+            assert_eq!(fsm[0].start_state, 1);
         }
     }
 

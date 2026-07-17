@@ -202,10 +202,11 @@ mod tests {
     /* Collect (source, in, out, target) for every real-arc line (in != -1),
     walking the sentinel-terminated line table. */
     fn arcs(net: &Fsm) -> Vec<(i32, i16, i16, i32)> {
+        let fsm = net.states.rows();
         let mut v = Vec::new();
         let mut i = 0usize;
-        while net.states[i].state_no != -1 {
-            let s = &net.states[i];
+        while fsm[i].state_no != -1 {
+            let s = &fsm[i];
             if s.r#in != -1 {
                 v.push((s.state_no, s.r#in, s.out, s.target));
             }
@@ -218,11 +219,12 @@ mod tests {
     /* Distinct final state numbers (final flag rides on every line of a state,
     incl. no-arc and arc lines). */
     fn finals(net: &Fsm) -> Vec<i32> {
+        let fsm = net.states.rows();
         let mut v = Vec::new();
         let mut i = 0usize;
-        while net.states[i].state_no != -1 {
-            if net.states[i].final_state == 1 && !v.contains(&net.states[i].state_no) {
-                v.push(net.states[i].state_no);
+        while fsm[i].state_no != -1 {
+            if fsm[i].final_state == 1 && !v.contains(&fsm[i].state_no) {
+                v.push(fsm[i].state_no);
             }
             i += 1;
         }

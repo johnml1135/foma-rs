@@ -53,95 +53,98 @@ pub fn fsm_intersect(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<
 
     let mut builder = fsm_state_init(sigma_max(&net1.sigma));
 
-    let point_a = init_state_pointers(&net1.states);
-    let point_b = init_state_pointers(&net2.states);
+    let point_a = init_state_pointers(&net1.states.rows());
+    let point_b = init_state_pointers(&net2.states.rows());
 
-    while !int_stack.is_empty() {
-        /* Get a pair of states to examine */
+    {
+        let fsm1 = net1.states.rows();
+        let fsm2 = net2.states.rows();
+        while !int_stack.is_empty() {
+            /* Get a pair of states to examine */
 
-        let a = int_stack.pop();
-        let b = int_stack.pop();
+            let a = int_stack.pop();
+            let b = int_stack.pop();
 
-        let current_state = triplet_hash_find(&th, a, b, 0)
-            .expect("state pair popped off the work stack was inserted into the triplet hash");
-        let current_start = if point_a[a as usize].start == 1 && point_b[b as usize].start == 1 {
-            1
-        } else {
-            0
-        };
-        let current_final = if point_a[a as usize].r#final == 1 && point_b[b as usize].r#final == 1
-        {
-            1
-        } else {
-            0
-        };
-
-        fsm_state_set_current_state(&mut builder, current_state, current_final, current_start);
-
-        /* Create a lookup index for machine b */
-        /* array[in][out] holds the target for this state and the symbol pair in:out */
-        /* Also, we keep track of whether an entry is fresh by the mainloop counter */
-        /* so we don't mistakenly use an old entry and don't have to clear the table */
-        /* between each state pair we encounter */
-
-        mainloop += 1;
-        let mut bi = point_b[b as usize].transitions;
-        while net2.states[bi].state_no == b {
-            if net2.states[bi].r#in < 0 {
-                bi += 1;
-                continue;
-            }
-            let bptr =
-                ((net2.states[bi].r#in as i32) * sigma2size + net2.states[bi].out as i32) as usize;
-            array[bptr].mainloop = mainloop;
-            array[bptr].target = net2.states[bi].target;
-            bi += 1;
-        }
-
-        /* The main loop where we run the machines in parallel */
-        /* We look at each transition of a in this state, and consult the index of b */
-        /* we just created */
-
-        let mut ai = point_a[a as usize].transitions;
-        while net1.states[ai].state_no == a {
-            if net1.states[ai].r#in < 0 || net1.states[ai].out < 0 {
-                ai += 1;
-                continue;
-            }
-            let bptr =
-                ((net1.states[ai].r#in as i32) * sigma2size + net1.states[ai].out as i32) as usize;
-
-            if array[bptr].mainloop != mainloop {
-                ai += 1;
-                continue;
-            }
-
-            let atarget = net1.states[ai].target;
-            let btarget = array[bptr].target;
-            let target_number = match triplet_hash_find(&th, atarget, btarget, 0) {
-                Some(n) => n,
-                None => {
-                    /* STACK_2_PUSH(bptr->target, machine_a->target) */
-                    int_stack.push(btarget);
-                    int_stack.push(atarget);
-                    triplet_hash_insert(&mut th, atarget, btarget, 0)
-                }
+            let current_state = triplet_hash_find(&th, a, b, 0)
+                .expect("state pair popped off the work stack was inserted into the triplet hash");
+            let current_start = if point_a[a as usize].start == 1 && point_b[b as usize].start == 1
+            {
+                1
+            } else {
+                0
             };
+            let current_final =
+                if point_a[a as usize].r#final == 1 && point_b[b as usize].r#final == 1 {
+                    1
+                } else {
+                    0
+                };
 
-            let (ain, aout) = (net1.states[ai].r#in as i32, net1.states[ai].out as i32);
-            fsm_state_add_arc(
-                &mut builder,
-                current_state,
-                ain,
-                aout,
-                target_number,
-                current_final,
-                current_start,
-            );
+            fsm_state_set_current_state(&mut builder, current_state, current_final, current_start);
 
-            ai += 1;
+            /* Create a lookup index for machine b */
+            /* array[in][out] holds the target for this state and the symbol pair in:out */
+            /* Also, we keep track of whether an entry is fresh by the mainloop counter */
+            /* so we don't mistakenly use an old entry and don't have to clear the table */
+            /* between each state pair we encounter */
+
+            mainloop += 1;
+            let mut bi = point_b[b as usize].transitions;
+            while fsm2[bi].state_no == b {
+                if fsm2[bi].r#in < 0 {
+                    bi += 1;
+                    continue;
+                }
+                let bptr = ((fsm2[bi].r#in as i32) * sigma2size + fsm2[bi].out as i32) as usize;
+                array[bptr].mainloop = mainloop;
+                array[bptr].target = fsm2[bi].target;
+                bi += 1;
+            }
+
+            /* The main loop where we run the machines in parallel */
+            /* We look at each transition of a in this state, and consult the index of b */
+            /* we just created */
+
+            let mut ai = point_a[a as usize].transitions;
+            while fsm1[ai].state_no == a {
+                if fsm1[ai].r#in < 0 || fsm1[ai].out < 0 {
+                    ai += 1;
+                    continue;
+                }
+                let bptr = ((fsm1[ai].r#in as i32) * sigma2size + fsm1[ai].out as i32) as usize;
+
+                if array[bptr].mainloop != mainloop {
+                    ai += 1;
+                    continue;
+                }
+
+                let atarget = fsm1[ai].target;
+                let btarget = array[bptr].target;
+                let target_number = match triplet_hash_find(&th, atarget, btarget, 0) {
+                    Some(n) => n,
+                    None => {
+                        /* STACK_2_PUSH(bptr->target, machine_a->target) */
+                        int_stack.push(btarget);
+                        int_stack.push(atarget);
+                        triplet_hash_insert(&mut th, atarget, btarget, 0)
+                    }
+                };
+
+                let (ain, aout) = (fsm1[ai].r#in as i32, fsm1[ai].out as i32);
+                fsm_state_add_arc(
+                    &mut builder,
+                    current_state,
+                    ain,
+                    aout,
+                    target_number,
+                    current_final,
+                    current_start,
+                );
+
+                ai += 1;
+            }
+            fsm_state_end_state(&mut builder);
         }
-        fsm_state_end_state(&mut builder);
     }
     let mut new_net = fsm_create("");
     fsm_sigma_destroy(core::mem::take(&mut new_net.sigma));
@@ -311,11 +314,13 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
 
     let mut builder = fsm_state_init(sigma_max(&net1.sigma));
 
-    let point_a = init_state_pointers(&net1.states);
-    let point_b = init_state_pointers(&net2.states);
+    let point_a = init_state_pointers(&net1.states.rows());
+    let point_b = init_state_pointers(&net2.states.rows());
 
     let mut mainloop = 0;
 
+    let fsm1 = net1.states.rows();
+    let fsm2 = net2.states.rows();
     while !int_stack.is_empty() {
         /* Get a pair of states to examine */
 
@@ -343,14 +348,14 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
         /* Create the index for machine b in this state */
         mainloop += 1;
         let mut bi = point_b[b as usize].transitions;
-        while net2.states[bi].state_no == b {
+        while fsm2[bi].state_no == b {
             /* Index b */
-            let bindex = if net2.states[bi].r#in as i32 == IDENTITY {
+            let bindex = if fsm2[bi].r#in as i32 == IDENTITY {
                 UNKNOWN
             } else {
-                net2.states[bi].r#in as i32
+                fsm2[bi].r#in as i32
             };
-            if bindex < 0 || net2.states[bi].target < 0 {
+            if bindex < 0 || fsm2[bi].target < 0 {
                 bi += 1;
                 continue;
             }
@@ -362,19 +367,19 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
             } else {
                 iptr += 1;
             }
-            outarray[iptr].symin = net2.states[bi].r#in;
-            outarray[iptr].symout = net2.states[bi].out;
+            outarray[iptr].symin = fsm2[bi].r#in;
+            outarray[iptr].symout = fsm2[bi].out;
             outarray[iptr].mainloop = mainloop;
-            outarray[iptr].target = net2.states[bi].target;
+            outarray[iptr].target = fsm2[bi].target;
             index[bindex as usize].tail = iptr;
             bi += 1;
         }
 
         let mut ai = point_a[a as usize].transitions;
-        while net1.states[ai].state_no == a {
+        while fsm1[ai].state_no == a {
             /* If we have the same transition from (a,b)-> some state */
             /* If we have x:y y:z trans to some state */
-            let aout = net1.states[ai].out as i32;
+            let aout = fsm1[ai].out as i32;
             /* IDENTITY is indexed under UNKNOWN (see above) */
             let asearch = if aout == IDENTITY { UNKNOWN } else { aout };
             if aout < 0 {
@@ -384,8 +389,8 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
             let mut iptr = (asearch * (max2sigma + 2)) as usize;
             let currtail = index[asearch as usize].tail + 1;
             while iptr != currtail && outarray[iptr].mainloop == mainloop {
-                let mut ain = net1.states[ai].r#in as i32;
-                let mut aout = net1.states[ai].out as i32;
+                let mut ain = fsm1[ai].r#in as i32;
+                let mut aout = fsm1[ai].out as i32;
                 let mut bin = outarray[iptr].symin as i32;
                 let mut bout = outarray[iptr].symout as i32;
 
@@ -402,7 +407,7 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
                 conditions, so the match-and-emit runs unconditionally. */
                 if bin == aout && bin != -1 && (bin != EPSILON || mode == 0) {
                     /* mode -> 0 */
-                    let atarget = net1.states[ai].target;
+                    let atarget = fsm1[ai].target;
                     let btarget = outarray[iptr].target;
                     let target_number = match triplet_hash_find(&th, atarget, btarget, 0) {
                         Some(n) => n,
@@ -433,16 +438,16 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
 
         /* Treat epsilon outputs on machine a (may include flags) */
         let mut ai = point_a[a as usize].transitions;
-        while net1.states[ai].state_no == a {
-            let aout = net1.states[ai].out as i32;
+        while fsm1[ai].state_no == a {
+            let aout = fsm1[ai].out as i32;
             if aout != EPSILON && !g_flag_is_epsilon {
                 ai += 1;
                 continue;
             }
-            let ain = net1.states[ai].r#in as i32;
+            let ain = fsm1[ai].r#in as i32;
 
             if g_flag_is_epsilon && aout != -1 && mode == 0 && is_flag[aout as usize] {
-                let atarget = net1.states[ai].target;
+                let atarget = fsm1[ai].target;
                 let target_number = match triplet_hash_find(&th, atarget, b, 0) {
                     Some(n) => n,
                     None => {
@@ -468,7 +473,7 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
                 /* Check A:0 arcs on upper side */
                 if aout == EPSILON && mode == 0 {
                     /* mode -> 0 */
-                    let atarget = net1.states[ai].target;
+                    let atarget = fsm1[ai].target;
                     let target_number = match triplet_hash_find(&th, atarget, b, 0) {
                         Some(n) => n,
                         None => {
@@ -492,7 +497,7 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
                 }
             } else if g_compose_tristate && aout == EPSILON && mode != 2 {
                 /* mode -> 1 */
-                let atarget = net1.states[ai].target;
+                let atarget = fsm1[ai].target;
                 let target_number = match triplet_hash_find(&th, atarget, b, 1) {
                     Some(n) => n,
                     None => {
@@ -519,17 +524,17 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
         }
         /* Treat epsilon inputs on machine b (may include flags) */
         let mut bi = point_b[b as usize].transitions;
-        while net2.states[bi].state_no == b {
-            let bin = net2.states[bi].r#in as i32;
+        while fsm2[bi].state_no == b {
+            let bin = fsm2[bi].r#in as i32;
             if bin != EPSILON && !g_flag_is_epsilon {
                 bi += 1;
                 continue;
             }
 
-            let bout = net2.states[bi].out as i32;
+            let bout = fsm2[bi].out as i32;
 
             if g_flag_is_epsilon && bin != -1 && is_flag[bin as usize] {
-                let btarget = net2.states[bi].target;
+                let btarget = fsm2[bi].target;
                 let target_number = match triplet_hash_find(&th, a, btarget, 1) {
                     Some(n) => n,
                     None => {
@@ -555,7 +560,7 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
                 /* Check 0:A arcs on lower side */
                 if bin == EPSILON {
                     /* mode -> 1 */
-                    let btarget = net2.states[bi].target;
+                    let btarget = fsm2[bi].target;
                     let target_number = match triplet_hash_find(&th, a, btarget, 1) {
                         Some(n) => n,
                         None => {
@@ -581,7 +586,7 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
                 /* Check 0:A arcs on lower side */
                 if bin == EPSILON && mode != 1 {
                     /* mode -> 1 */
-                    let btarget = net2.states[bi].target;
+                    let btarget = fsm2[bi].target;
                     let target_number = match triplet_hash_find(&th, a, btarget, 2) {
                         Some(n) => n,
                         None => {
@@ -608,6 +613,8 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
         }
         fsm_state_end_state(&mut builder);
     }
+    drop(fsm1);
+    drop(fsm2);
 
     /* free(net1->states) */
     net1.states = Vec::new().into();
@@ -672,9 +679,11 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
 
     let mut builder = fsm_state_init(sigma_max(&net1.sigma));
 
-    let point_a = init_state_pointers(&net1.states);
-    let point_b = init_state_pointers(&net2.states);
+    let point_a = init_state_pointers(&net1.states.rows());
+    let point_b = init_state_pointers(&net2.states.rows());
 
+    let fsm1 = net1.states.rows();
+    let fsm2 = net2.states.rows();
     while !int_stack.is_empty() {
         /* Get a pair of states to examine */
 
@@ -700,25 +709,25 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
         fsm_state_set_current_state(&mut builder, current_state, current_final, current_start);
 
         let mut ai = point_a[a as usize].transitions;
-        while net1.states[ai].state_no == a {
+        while fsm1[ai].state_no == a {
             let mut bi = point_b[b as usize].transitions;
-            while net2.states[bi].state_no == b {
-                if net1.states[ai].target == -1 && net2.states[bi].target == -1 {
+            while fsm2[bi].state_no == b {
+                if fsm1[ai].target == -1 && fsm2[bi].target == -1 {
                     bi += 1;
                     continue;
                 }
-                if net1.states[ai].target == -1 && net1.states[ai].final_state == 0 {
+                if fsm1[ai].target == -1 && fsm1[ai].final_state == 0 {
                     bi += 1;
                     continue;
                 }
-                if net2.states[bi].target == -1 && net2.states[bi].final_state == 0 {
+                if fsm2[bi].target == -1 && fsm2[bi].final_state == 0 {
                     bi += 1;
                     continue;
                 }
                 /* Main check */
-                if !(net1.states[ai].target == -1 || net2.states[bi].target == -1) {
-                    let atarget = net1.states[ai].target;
-                    let btarget = net2.states[bi].target;
+                if !(fsm1[ai].target == -1 || fsm2[bi].target == -1) {
+                    let atarget = fsm1[ai].target;
+                    let btarget = fsm2[bi].target;
                     let target_number = match triplet_hash_find(&th, atarget, btarget, 0) {
                         Some(n) => n,
                         None => {
@@ -728,8 +737,8 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
                             triplet_hash_insert(&mut th, atarget, btarget, 0)
                         }
                     };
-                    let mut symbol1 = net1.states[ai].r#in as i32;
-                    let mut symbol2 = net2.states[bi].r#in as i32;
+                    let mut symbol1 = fsm1[ai].r#in as i32;
+                    let mut symbol2 = fsm2[bi].r#in as i32;
                     if symbol1 == IDENTITY && symbol2 != IDENTITY {
                         symbol1 = UNKNOWN;
                     }
@@ -747,9 +756,7 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
                         current_start,
                     );
                     /* @:@ -> @:@ and also ?:? */
-                    if net1.states[ai].r#in as i32 == IDENTITY
-                        && net2.states[bi].r#in as i32 == IDENTITY
-                    {
+                    if fsm1[ai].r#in as i32 == IDENTITY && fsm2[bi].r#in as i32 == IDENTITY {
                         fsm_state_add_arc(
                             &mut builder,
                             current_state,
@@ -761,10 +768,10 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
                         );
                     }
                 }
-                if net1.states[ai].final_state == 1 && net2.states[bi].target != -1 {
+                if fsm1[ai].final_state == 1 && fsm2[bi].target != -1 {
                     /* Add 0:b i.e. stay in state A */
-                    let astate = net1.states[ai].state_no;
-                    let btarget = net2.states[bi].target;
+                    let astate = fsm1[ai].state_no;
+                    let btarget = fsm2[bi].target;
                     let target_number = match triplet_hash_find(&th, astate, btarget, 0) {
                         Some(n) => n,
                         None => {
@@ -775,10 +782,10 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
                         }
                     };
                     /* @:0 becomes ?:0 */
-                    let symbol2 = if net2.states[bi].r#in as i32 == IDENTITY {
+                    let symbol2 = if fsm2[bi].r#in as i32 == IDENTITY {
                         UNKNOWN
                     } else {
-                        net2.states[bi].r#in as i32
+                        fsm2[bi].r#in as i32
                     };
                     fsm_state_add_arc(
                         &mut builder,
@@ -791,10 +798,10 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
                     );
                 }
 
-                if net2.states[bi].final_state == 1 && net1.states[ai].target != -1 {
+                if fsm2[bi].final_state == 1 && fsm1[ai].target != -1 {
                     /* Add a:0 i.e. stay in state B */
-                    let atarget = net1.states[ai].target;
-                    let bstate = net2.states[bi].state_no;
+                    let atarget = fsm1[ai].target;
+                    let bstate = fsm2[bi].state_no;
                     let target_number = match triplet_hash_find(&th, atarget, bstate, 0) {
                         Some(n) => n,
                         None => {
@@ -805,10 +812,10 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
                         }
                     };
                     /* @:0 becomes ?:0 */
-                    let symbol1 = if net1.states[ai].r#in as i32 == IDENTITY {
+                    let symbol1 = if fsm1[ai].r#in as i32 == IDENTITY {
                         UNKNOWN
                     } else {
-                        net1.states[ai].r#in as i32
+                        fsm1[ai].r#in as i32
                     };
                     fsm_state_add_arc(
                         &mut builder,
@@ -827,6 +834,8 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
         /* Check arctrack */
         fsm_state_end_state(&mut builder);
     }
+    drop(fsm1);
+    drop(fsm2);
 
     /* free(net1->states) */
     net1.states = Vec::new().into();
@@ -834,15 +843,18 @@ pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
 
     let mut epsilon = 0;
     let mut unknown = 0;
-    let mut i = 0usize;
-    while net1.states[i].state_no != -1 {
-        if net1.states[i].r#in as i32 == EPSILON || net1.states[i].out as i32 == EPSILON {
-            epsilon = 1;
+    {
+        let fsm = net1.states.rows();
+        let mut i = 0usize;
+        while fsm[i].state_no != -1 {
+            if fsm[i].r#in as i32 == EPSILON || fsm[i].out as i32 == EPSILON {
+                epsilon = 1;
+            }
+            if fsm[i].r#in as i32 == UNKNOWN || fsm[i].out as i32 == UNKNOWN {
+                unknown = 1;
+            }
+            i += 1;
         }
-        if net1.states[i].r#in as i32 == UNKNOWN || net1.states[i].out as i32 == UNKNOWN {
-            unknown = 1;
-        }
-        i += 1;
     }
     if epsilon == 1 && sigma_find_number(EPSILON, &net1.sigma).is_none() {
         sigma_add_special(EPSILON, &mut net1.sigma);

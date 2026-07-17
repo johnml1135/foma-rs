@@ -59,19 +59,19 @@ fn last_net(h: &ApplyHandle) -> &Fsm {
         .expect("last_net bound for the current apply")
 }
 fn l_state_no(h: &ApplyHandle, off: i32) -> i32 {
-    last_net(h).states[h.gstates + off as usize].state_no
+    h.gstates_rows[h.gstates + off as usize].state_no
 }
 fn l_in(h: &ApplyHandle, off: i32) -> i32 {
-    last_net(h).states[h.gstates + off as usize].r#in as i32
+    h.gstates_rows[h.gstates + off as usize].r#in as i32
 }
 fn l_out(h: &ApplyHandle, off: i32) -> i32 {
-    last_net(h).states[h.gstates + off as usize].out as i32
+    h.gstates_rows[h.gstates + off as usize].out as i32
 }
 fn l_target(h: &ApplyHandle, off: i32) -> i32 {
-    last_net(h).states[h.gstates + off as usize].target
+    h.gstates_rows[h.gstates + off as usize].target
 }
 fn l_final(h: &ApplyHandle, off: i32) -> i32 {
-    last_net(h).states[h.gstates + off as usize].final_state as i32
+    h.gstates_rows[h.gstates + off as usize].final_state as i32
 }
 
 /* BITSLOT/BITMASK/BITTEST/BITSET/BITNSLOTS from apply.c */
@@ -518,6 +518,7 @@ pub fn apply_init(net: &Fsm) -> Box<ApplyHandle> {
         oldflagvalue: None,
         last_net: None,
         gstates: 0,
+        gstates_rows: Vec::new(),
         gsigma: Vec::new(),
         index_in: Vec::new(),
         index_out: Vec::new(),
@@ -546,6 +547,10 @@ pub fn apply_init(net: &Fsm) -> Box<ApplyHandle> {
     h.outstring = String::new();
     // *(h->outstring) = '\0' — already 0.
     h.gstates = 0; // net->states base
+    // One materialized snapshot of the flat line table backs the per-arc l_*
+    // accessors for the handle's lifetime — the net never changes under it, so
+    // this avoids re-materializing the compressed table on every arc lookup.
+    h.gstates_rows = net.states.rows().to_vec();
     h.gsigma = net.sigma.clone();
     h.printcount = 1;
     apply_create_statemap(&mut h, net);
@@ -718,7 +723,10 @@ pub fn apply_index(
     }
     let net = last_net(h);
     let statecount = net.statecount;
-    let states = net.states.clone();
+    /* One materialized read guard of the line table backs every states[i] walk
+    below (Derefs to [FsmState]); apply reads the table once here to build its
+    own indices and never mutates it. */
+    let states = net.states.rows();
 
     /* Pass 1: get maxtrans (largest per-state count of real arcs). Both passes
     only close a state when the next line's state_no differs, so the final
@@ -1590,9 +1598,10 @@ pub fn apply_create_statemap(h: &mut ApplyHandle, net: &Fsm) {
         h.statemap[i] = -1;
         h.marks[i] = 0;
     }
+    let fsm = net.states.rows();
     let mut i = 0usize;
-    while net.states[i].state_no != -1 {
-        let sn = net.states[i].state_no as usize;
+    while fsm[i].state_no != -1 {
+        let sn = fsm[i].state_no as usize;
         h.numlines[sn] += 1;
         if h.statemap[sn] == -1 {
             h.statemap[sn] = i as i32;
@@ -1642,10 +1651,10 @@ pub fn apply_mark_flagstates(h: &mut ApplyHandle) {
     h.flagstates = Vec::new();
     let statecount = last_net(h).statecount;
     let mut fs = vec![0u8; bitnslots(statecount)];
-    let net = last_net(h);
+    let fsm = last_net(h).states.rows();
     let mut i = 0usize;
-    while net.states[i].state_no != -1 {
-        let ln = &net.states[i];
+    while fsm[i].state_no != -1 {
+        let ln = &fsm[i];
         if ln.target != -1 {
             if !h.flag_lookup[ln.r#in as usize].r#type.is_empty() {
                 bitset(&mut fs, ln.state_no);

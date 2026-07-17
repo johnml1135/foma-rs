@@ -72,6 +72,7 @@ mod tests {
 
     fn real_lines(net: &Fsm) -> Vec<crate::types::FsmState> {
         net.states
+            .rows()
             .iter()
             .take_while(|l| l.state_no != -1)
             .cloned()

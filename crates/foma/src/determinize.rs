@@ -483,7 +483,7 @@ pub(crate) fn init_trans_array(s: &mut Subset, net: &Fsm) {
     s.trans_list_determinize = vec![TransList::default(); net.linecount as usize];
     s.trans_array_determinize = vec![TransArray::default(); net.statecount as usize];
 
-    let fsm = &net.states;
+    let fsm = net.states.rows();
 
     let mut laststate: i32 = -1;
     /* arrptr walks the shared entry pool — an index here */
@@ -661,7 +661,7 @@ pub(crate) fn initial_e_closure(s: &mut Subset, net: &Fsm) -> i32 {
     s.finals = vec![false; num_states as usize];
 
     s.num_start_states = 0;
-    let fsm = &net.states;
+    let fsm = net.states.rows();
 
     /* Create lookups for each state */
     let mut j: i32 = 0;
@@ -688,7 +688,7 @@ pub(crate) fn initial_e_closure(s: &mut Subset, net: &Fsm) -> i32 {
     s.mainloop += 1;
     /* Memoize e-closure(u) */
     if s.epsilon_symbol != -1 {
-        memoize_e_closure(s, fsm);
+        memoize_e_closure(s, &fsm);
     }
     e_closure(s, j)
 }
@@ -817,10 +817,11 @@ pub(crate) fn sigma_to_pairs(s: &mut Subset, net: &mut Fsm) {
 
     let mut x: i32 = 0;
     net.arity = 1;
+    let fsm = net.states.rows();
     let mut i = 0usize;
-    while net.states[i].state_no != -1 {
-        let y = net.states[i].r#in as i32;
-        let z = net.states[i].out as i32;
+    while fsm[i].state_no != -1 {
+        let y = fsm[i].r#in as i32;
+        let z = fsm[i].out as i32;
         if (y == -1) || (z == -1) {
             i += 1;
             continue;
@@ -1058,6 +1059,7 @@ mod tests {
 
     fn lines(net: &Fsm) -> Vec<(i32, i16, i16, i32, i8, i8)> {
         net.states
+            .rows()
             .iter()
             .map(|s| {
                 (
@@ -1113,6 +1115,7 @@ mod tests {
         /* start state renumbered to 0, densely numbered result */
         assert_eq!(
             d.states
+                .rows()
                 .iter()
                 .filter(|s| s.state_no != -1 && s.start_state != 0)
                 .count(),
@@ -1145,6 +1148,7 @@ mod tests {
         /* no (EPSILON:EPSILON) arc survives */
         assert!(
             !er.states
+                .rows()
                 .iter()
                 .any(|s| s.r#in == 0 && s.out == 0 && s.target != -1)
         );
@@ -1233,6 +1237,7 @@ mod tests {
         assert_eq!(d.is_minimized, Tern::Unk);
         let start_states: Vec<i32> = d
             .states
+            .rows()
             .iter()
             .filter(|s| s.state_no != -1 && s.start_state != 0)
             .map(|s| s.state_no)
@@ -1379,7 +1384,7 @@ mod tests {
             s.epsilon_symbol,
             symbol_pair_to_single_symbol(&s, EPSILON, EPSILON)
         );
-        for st in net.states.iter() {
+        for st in net.states.rows().iter() {
             let (i, o) = (st.r#in as i32, st.out as i32);
             if i < 0 || o < 0 {
                 continue;

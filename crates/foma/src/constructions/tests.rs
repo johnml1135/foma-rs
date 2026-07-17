@@ -32,6 +32,7 @@ fn sentinel() -> FsmState {
 /// Line table up to (excluding) the state_no == -1 sentinel.
 fn lines(net: &Fsm) -> Vec<(i32, i16, i16, i32, i8, i8)> {
     net.states
+        .rows()
         .iter()
         .take_while(|l| l.state_no != -1)
         .map(|l| {
@@ -150,7 +151,7 @@ fn fsm_sort_lines_groups_by_state_keeps_sentinel_last() {
     let states: Vec<i32> = lines(&net).iter().map(|l| l.0).collect();
     assert_eq!(states, vec![0, 1, 1], "grouped by ascending state_no");
     assert_eq!(
-        net.states.last().unwrap().state_no,
+        net.states.rows().last().unwrap().state_no,
         -1,
         "sentinel stays last"
     );

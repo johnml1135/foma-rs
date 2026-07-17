@@ -45,10 +45,12 @@ pub fn fsm_concat(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm
     let mut current_final = -1;
     /* Copy fsm1, fsm2 after each other, adding appropriate epsilon arcs */
     let mut j: i32 = 0;
+    let fsm1 = net1.states.rows();
+    let fsm2 = net2.states.rows();
     let mut i = 0usize;
-    while net1.states[i].state_no != -1 {
-        if net1.states[i].final_state == 1 && net1.states[i].state_no != current_final {
-            let (state_no, start_state) = (net1.states[i].state_no, net1.states[i].start_state);
+    while fsm1[i].state_no != -1 {
+        if fsm1[i].final_state == 1 && fsm1[i].state_no != current_final {
+            let (state_no, start_state) = (fsm1[i].state_no, fsm1[i].start_state);
             add_fsm_arc(
                 &mut new_fsm,
                 j,
@@ -59,16 +61,16 @@ pub fn fsm_concat(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm
                 0,
                 start_state as i32,
             );
-            current_final = net1.states[i].state_no;
+            current_final = fsm1[i].state_no;
             j += 1;
         }
-        if !(net1.states[i].target == -1 && net1.states[i].final_state == 1) {
+        if !(fsm1[i].target == -1 && fsm1[i].final_state == 1) {
             let (state_no, line_in, line_out, target, start_state) = (
-                net1.states[i].state_no,
-                net1.states[i].r#in as i32,
-                net1.states[i].out as i32,
-                net1.states[i].target,
-                net1.states[i].start_state as i32,
+                fsm1[i].state_no,
+                fsm1[i].r#in as i32,
+                fsm1[i].out as i32,
+                fsm1[i].target,
+                fsm1[i].start_state as i32,
             );
             add_fsm_arc(
                 &mut new_fsm,
@@ -86,13 +88,13 @@ pub fn fsm_concat(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm
     }
 
     let mut i = 0usize;
-    while net2.states[i].state_no != -1 {
+    while fsm2[i].state_no != -1 {
         let (state_no, line_in, line_out, target, final_state) = (
-            net2.states[i].state_no,
-            net2.states[i].r#in as i32,
-            net2.states[i].out as i32,
-            net2.states[i].target,
-            net2.states[i].final_state as i32,
+            fsm2[i].state_no,
+            fsm2[i].r#in as i32,
+            fsm2[i].out as i32,
+            fsm2[i].target,
+            fsm2[i].final_state as i32,
         );
         add_fsm_arc(
             &mut new_fsm,
@@ -146,63 +148,67 @@ pub fn fsm_union(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm>
     The output is byte-identical to the fresh-array build —
     [start1, start2, net1 lines +net1_offset, net2 lines +net2_offset, term]. */
     let mut arccount = 2;
-    net1.states.truncate(real1); /* drop net1's terminator line */
-    for line in net1.states.iter_mut() {
-        line.state_no += net1_offset;
-        if line.target != -1 {
-            line.target += net1_offset;
-            arccount += 1;
+    {
+        let mut fsm1 = net1.states.rows_mut();
+        let fsm2 = net2.states.rows();
+        fsm1.truncate(real1); /* drop net1's terminator line */
+        for line in fsm1.iter_mut() {
+            line.state_no += net1_offset;
+            if line.target != -1 {
+                line.target += net1_offset;
+                arccount += 1;
+            }
+            line.start_state = 0;
         }
-        line.start_state = 0;
-    }
-    net1.states.reserve(real2 + 3);
-    /* prepend the shared start state's two epsilon arcs */
-    net1.states.splice(
-        0..0,
-        [
-            FsmState {
-                state_no: 0,
-                r#in: EPSILON as i16,
-                out: EPSILON as i16,
-                target: net1_offset,
-                final_state: 0,
-                start_state: 1,
-            },
-            FsmState {
-                state_no: 0,
-                r#in: EPSILON as i16,
-                out: EPSILON as i16,
-                target: net2_offset,
-                final_state: 0,
-                start_state: 1,
-            },
-        ],
-    );
-    for i in 0..real2 {
-        let src = net2.states[i];
-        let new_target = if src.target == -1 {
-            -1
-        } else {
-            arccount += 1;
-            src.target + net2_offset
-        };
-        net1.states.push(FsmState {
-            state_no: src.state_no + net2_offset,
-            r#in: src.r#in,
-            out: src.out,
-            target: new_target,
-            final_state: src.final_state,
-            start_state: 0,
+        fsm1.reserve(real2 + 3);
+        /* prepend the shared start state's two epsilon arcs */
+        fsm1.splice(
+            0..0,
+            [
+                FsmState {
+                    state_no: 0,
+                    r#in: EPSILON as i16,
+                    out: EPSILON as i16,
+                    target: net1_offset,
+                    final_state: 0,
+                    start_state: 1,
+                },
+                FsmState {
+                    state_no: 0,
+                    r#in: EPSILON as i16,
+                    out: EPSILON as i16,
+                    target: net2_offset,
+                    final_state: 0,
+                    start_state: 1,
+                },
+            ],
+        );
+        for i in 0..real2 {
+            let src = fsm2[i];
+            let new_target = if src.target == -1 {
+                -1
+            } else {
+                arccount += 1;
+                src.target + net2_offset
+            };
+            fsm1.push(FsmState {
+                state_no: src.state_no + net2_offset,
+                r#in: src.r#in,
+                out: src.out,
+                target: new_target,
+                final_state: src.final_state,
+                start_state: 0,
+            });
+        }
+        fsm1.push(FsmState {
+            state_no: -1,
+            r#in: -1,
+            out: -1,
+            target: -1,
+            final_state: -1,
+            start_state: -1,
         });
     }
-    net1.states.push(FsmState {
-        state_no: -1,
-        r#in: -1,
-        out: -1,
-        target: -1,
-        final_state: -1,
-        start_state: -1,
-    });
 
     net1.statecount = net1.statecount + net2.statecount + 1;
     net1.linecount = (real1 + real2 + 3) as i32;
@@ -264,30 +270,33 @@ pub fn fsm_completes(opts: &FomaOptions, net: Box<Fsm>, operation: i32) -> Box<F
         starts[i as usize] = 0;
     }
     let mut arccount = 0;
-    let mut i = 0usize;
-    while net.states[i].state_no != -1 {
-        if operation == COMPLEMENT {
-            if net.states[i].final_state == 1 {
-                net.states[i].final_state = 0;
-            } else if net.states[i].final_state == 0 {
-                net.states[i].final_state = 1;
+    {
+        let mut fsm = net.states.rows_mut();
+        let mut i = 0usize;
+        while fsm[i].state_no != -1 {
+            if operation == COMPLEMENT {
+                if fsm[i].final_state == 1 {
+                    fsm[i].final_state = 0;
+                } else if fsm[i].final_state == 0 {
+                    fsm[i].final_state = 1;
+                }
             }
+            if fsm[i].target != -1 {
+                arccount += 1;
+            }
+            starts[fsm[i].state_no as usize] = fsm[i].start_state as i16;
+            finals[fsm[i].state_no as usize] = fsm[i].final_state as i16;
+            if fsm[i].final_state != 0 && operation != COMPLEMENT {
+                sinks[fsm[i].state_no as usize] = 0;
+            }
+            if fsm[i].final_state == 0 && operation == COMPLEMENT {
+                sinks[fsm[i].state_no as usize] = 0;
+            }
+            if fsm[i].target != -1 && fsm[i].state_no != fsm[i].target {
+                sinks[fsm[i].state_no as usize] = 0;
+            }
+            i += 1;
         }
-        if net.states[i].target != -1 {
-            arccount += 1;
-        }
-        starts[net.states[i].state_no as usize] = net.states[i].start_state as i16;
-        finals[net.states[i].state_no as usize] = net.states[i].final_state as i16;
-        if net.states[i].final_state != 0 && operation != COMPLEMENT {
-            sinks[net.states[i].state_no as usize] = 0;
-        }
-        if net.states[i].final_state == 0 && operation == COMPLEMENT {
-            sinks[net.states[i].state_no as usize] = 0;
-        }
-        if net.states[i].target != -1 && net.states[i].state_no != net.states[i].target {
-            sinks[net.states[i].state_no as usize] = 0;
-        }
-        i += 1;
     }
 
     net.is_loop_free = Tern::No;
@@ -352,13 +361,16 @@ pub fn fsm_completes(opts: &FomaOptions, net: Box<Fsm>, operation: i32) -> Box<F
         }
     }
 
-    let mut i = 0usize;
-    while net.states[i].state_no != -1 {
-        if net.states[i].target != -1 {
-            state_table[(net.states[i].state_no * sigsize + net.states[i].r#in as i32) as usize] =
-                net.states[i].target;
+    {
+        let fsm = net.states.rows();
+        let mut i = 0usize;
+        while fsm[i].state_no != -1 {
+            if fsm[i].target != -1 {
+                state_table[(fsm[i].state_no * sigsize + fsm[i].r#in as i32) as usize] =
+                    fsm[i].target;
+            }
+            i += 1;
         }
-        i += 1;
     }
     /* Add looping arcs from and to sink state */
     for j in 2..=last_sigma {
@@ -470,8 +482,10 @@ pub fn fsm_minus(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm>
     let mut th = triplet_hash_init();
     triplet_hash_insert(&mut th, 1, 1, 0);
 
-    let point_a = init_state_pointers(&net1.states);
-    let point_b = init_state_pointers(&net2.states);
+    let fsm1 = net1.states.rows();
+    let fsm2 = net2.states.rows();
+    let point_a = init_state_pointers(&fsm1);
+    let point_b = init_state_pointers(&fsm2);
 
     let mut builder = fsm_state_init(sigma_max(&net1.sigma));
 
@@ -504,14 +518,14 @@ pub fn fsm_minus(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm>
         fsm_state_set_current_state(&mut builder, current_state, current_final, current_start);
 
         let mut ai = point_a[a as usize].transitions;
-        while net1.states[ai].state_no == a {
-            if net1.states[ai].target == -1 {
+        while fsm1[ai].state_no == a {
+            if fsm1[ai].target == -1 {
                 break;
             }
             let target_number;
             if b == -1 {
                 /* b is dead */
-                let atarget = net1.states[ai].target;
+                let atarget = fsm1[ai].target;
                 target_number = match triplet_hash_find(&th, atarget + 1, 0, 0) {
                     Some(found) => found,
                     None => {
@@ -526,18 +540,16 @@ pub fn fsm_minus(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm>
                 let mut b_has_trans = 0;
                 let mut btarget = 0;
                 let mut bi = point_b[b as usize].transitions;
-                while net2.states[bi].state_no == b {
-                    if net1.states[ai].r#in == net2.states[bi].r#in
-                        && net1.states[ai].out == net2.states[bi].out
-                    {
+                while fsm2[bi].state_no == b {
+                    if fsm1[ai].r#in == fsm2[bi].r#in && fsm1[ai].out == fsm2[bi].out {
                         b_has_trans = 1;
-                        btarget = net2.states[bi].target;
+                        btarget = fsm2[bi].target;
                         break;
                     }
                     bi += 1;
                 }
                 if b_has_trans != 0 {
-                    let atarget = net1.states[ai].target;
+                    let atarget = fsm1[ai].target;
                     target_number = match triplet_hash_find(&th, atarget + 1, btarget + 1, 0) {
                         Some(found) => found,
                         None => {
@@ -546,13 +558,13 @@ pub fn fsm_minus(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm>
                             int_stack.push(atarget + 1);
                             /* C inserts (machine_b->target)+1, which equals
                             btarget+1 (the scan broke at the matching line) */
-                            let mbtarget = net2.states[bi].target;
+                            let mbtarget = fsm2[bi].target;
                             triplet_hash_insert(&mut th, atarget + 1, mbtarget + 1, 0)
                         }
                     };
                 } else {
                     /* b is dead */
-                    let atarget = net1.states[ai].target;
+                    let atarget = fsm1[ai].target;
                     target_number = match triplet_hash_find(&th, atarget + 1, 0, 0) {
                         Some(found) => found,
                         None => {
@@ -564,7 +576,7 @@ pub fn fsm_minus(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm>
                     };
                 }
             }
-            let (line_in, line_out) = (net1.states[ai].r#in as i32, net1.states[ai].out as i32);
+            let (line_in, line_out) = (fsm1[ai].r#in as i32, fsm1[ai].out as i32);
             fsm_state_add_arc(
                 &mut builder,
                 current_state,
@@ -633,11 +645,14 @@ pub fn fsm_term_negation(opts: &FomaOptions, net1: Box<Fsm>) -> Box<Fsm> {
 // [spec:foma:sem:fomalib.fsm-invert-fn]
 pub fn fsm_invert(net: Box<Fsm>) -> Box<Fsm> {
     let mut net = net;
-    let mut i = 0usize;
-    while net.states[i].state_no != -1 {
-        let s = &mut net.states[i];
-        std::mem::swap(&mut s.r#in, &mut s.out);
-        i += 1;
+    {
+        let mut fsm = net.states.rows_mut();
+        let mut i = 0usize;
+        while fsm[i].state_no != -1 {
+            let s = &mut fsm[i];
+            std::mem::swap(&mut s.r#in, &mut s.out);
+            i += 1;
+        }
     }
     std::mem::swap(&mut net.arcs_sorted_in, &mut net.arcs_sorted_out);
     net

@@ -16,7 +16,7 @@ use crate::sigma::{sigma_find, sigma_max, sigma_string};
 use crate::stringhash::{sh_add_string, sh_find_string, sh_get_value, sh_init};
 use crate::structures::map_firstlines;
 use crate::types::{
-    ApplyMedHandle, Astarnode, Fsm, IDENTITY, MED_DEFAULT_CUTOFF, MED_DEFAULT_LIMIT,
+    ApplyMedHandle, Astarnode, Fsm, FsmState, IDENTITY, MED_DEFAULT_CUTOFF, MED_DEFAULT_LIMIT,
     MED_DEFAULT_MAX_HEAP_SIZE, Medlookup, Sigma,
 };
 
@@ -38,14 +38,14 @@ struct Sccinfo {
 
 /* (net + off) line-table field accessors. `off` is an index into the net's
 sentinel-terminated line table (a `struct fsm_state *` in C). */
-fn ls_state_no(net: &Fsm, off: usize) -> i32 {
-    net.states[off].state_no
+fn ls_state_no(fsm: &[FsmState], off: usize) -> i32 {
+    fsm[off].state_no
 }
-fn ls_in(net: &Fsm, off: usize) -> i16 {
-    net.states[off].r#in
+fn ls_in(fsm: &[FsmState], off: usize) -> i16 {
+    fsm[off].r#in
 }
-fn ls_target(net: &Fsm, off: usize) -> i32 {
-    net.states[off].target
+fn ls_target(fsm: &[FsmState], off: usize) -> i32 {
+    fsm[off].target
 }
 
 /* medh->curr_ptr-> field accessors (curr_ptr is the persisted resume cursor). */
@@ -59,22 +59,22 @@ fn med_curr_ptr(medh: &ApplyMedHandle) -> usize {
         .expect("curr_ptr positioned during an active walk")
 }
 fn cur_state_no(medh: &ApplyMedHandle) -> i32 {
-    med_net(medh).states[med_curr_ptr(medh)].state_no
+    medh.net_rows[med_curr_ptr(medh)].state_no
 }
 fn cur_in(medh: &ApplyMedHandle) -> i16 {
-    med_net(medh).states[med_curr_ptr(medh)].r#in
+    medh.net_rows[med_curr_ptr(medh)].r#in
 }
 fn cur_target(medh: &ApplyMedHandle) -> i32 {
-    med_net(medh).states[med_curr_ptr(medh)].target
+    medh.net_rows[med_curr_ptr(medh)].target
 }
 fn cur_final(medh: &ApplyMedHandle) -> i8 {
-    med_net(medh).states[med_curr_ptr(medh)].final_state
+    medh.net_rows[med_curr_ptr(medh)].final_state
 }
 fn next_state_no(medh: &ApplyMedHandle) -> i32 {
     net_line_state_no(medh, med_curr_ptr(medh) + 1)
 }
 fn net_line_state_no(medh: &ApplyMedHandle, off: usize) -> i32 {
-    med_net(medh).states[off].state_no
+    medh.net_rows[off].state_no
 }
 
 // [spec:foma:def:spelling.print-sym-fn]
@@ -456,6 +456,8 @@ pub fn fsm_create_letter_lookup(medh: &mut ApplyMedHandle, net: &Fsm) {
 
     let num_states: i32 = net.statecount;
     let num_symbols: i32 = sigma_max(&net.sigma);
+    /* One flat snapshot backs the ls_* line accessors through the SCC walk. */
+    let fsm = net.states.rows();
 
     /* BITNSLOTS(num_symbols+1) */
     medh.bytes_per_letter_array = ((num_symbols + 1) + CHAR_BIT - 1) / CHAR_BIT;
@@ -486,26 +488,26 @@ pub fn fsm_create_letter_lookup(medh: &mut ApplyMedHandle, net: &Fsm) {
                     break;
                 }
                 curr_ptr = ptr_stack.pop();
-                v = ls_state_no(net, curr_ptr); /* source state number */
-                vp = ls_target(net, curr_ptr); /* target state number */
+                v = ls_state_no(&fsm, curr_ptr); /* source state number */
+                vp = ls_target(&fsm, curr_ptr); /* target state number */
 
                 /* T: v.letterlist = list_union(v'->list, current edge label) */
                 letterbits_union(v, vp, &mut medh.letterbits, bpla);
-                letterbits_add(v, ls_in(net, curr_ptr) as i32, &mut medh.letterbits, bpla);
+                letterbits_add(v, ls_in(&fsm, curr_ptr) as i32, &mut medh.letterbits, bpla);
 
                 sccinfo[v as usize].lowlink = sccinfo[v as usize]
                     .lowlink
                     .min(sccinfo[vp as usize].lowlink);
 
-                if ls_state_no(net, curr_ptr + 1) != ls_state_no(net, curr_ptr) {
+                if ls_state_no(&fsm, curr_ptr + 1) != ls_state_no(&fsm, curr_ptr) {
                     pc = Pc::L4;
                 } else {
                     pc = Pc::L3;
                 }
             }
             Pc::L1 => {
-                v = ls_state_no(net, curr_ptr);
-                vp = ls_target(net, curr_ptr); /* target */
+                v = ls_state_no(&fsm, curr_ptr);
+                vp = ls_target(&fsm, curr_ptr); /* target */
                 /* T: v.lowlink = index, index++, Tpush(v) */
                 sccinfo[v as usize].index = index;
                 sccinfo[v as usize].lowlink = index;
@@ -520,11 +522,11 @@ pub fn fsm_create_letter_lookup(medh: &mut ApplyMedHandle, net: &Fsm) {
                 }
             }
             Pc::L2 => {
-                letterbits_add(v, ls_in(net, curr_ptr) as i32, &mut medh.letterbits, bpla);
+                letterbits_add(v, ls_in(&fsm, curr_ptr) as i32, &mut medh.letterbits, bpla);
                 if sccinfo[vp as usize].index == 0 {
                     /* push (v,e) ptr on stack */
                     ptr_stack.push(curr_ptr);
-                    let tgt = ls_target(net, curr_ptr) as usize;
+                    let tgt = ls_target(&fsm, curr_ptr) as usize;
                     curr_ptr = medh.state_array[tgt].transitions;
                     /* (v,e) = (v',firstedge), goto init */
                     pc = Pc::L1;
@@ -540,10 +542,10 @@ pub fn fsm_create_letter_lookup(medh: &mut ApplyMedHandle, net: &Fsm) {
                 }
             }
             Pc::L3 => {
-                if ls_state_no(net, curr_ptr + 1) == ls_state_no(net, curr_ptr) {
+                if ls_state_no(&fsm, curr_ptr + 1) == ls_state_no(&fsm, curr_ptr) {
                     curr_ptr += 1;
-                    v = ls_state_no(net, curr_ptr);
-                    vp = ls_target(net, curr_ptr); /* target */
+                    v = ls_state_no(&fsm, curr_ptr);
+                    vp = ls_target(&fsm, curr_ptr); /* target */
                     pc = Pc::L2;
                 } else {
                     pc = Pc::L4;
@@ -583,16 +585,16 @@ pub fn fsm_create_letter_lookup(medh: &mut ApplyMedHandle, net: &Fsm) {
                 if depth == medh.maxdepth {
                     break; /* continue outer while */
                 }
-                if ls_in(net, curr_ptr) != -1 {
-                    letterbits_add(v, ls_in(net, curr_ptr) as i32, &mut medh.nletterbits, bpla);
+                if ls_in(&fsm, curr_ptr) != -1 {
+                    letterbits_add(v, ls_in(&fsm, curr_ptr) as i32, &mut medh.nletterbits, bpla);
                 }
-                if ls_target(net, curr_ptr) != -1 {
-                    if ls_state_no(net, curr_ptr) == ls_state_no(net, curr_ptr + 1) {
+                if ls_target(&fsm, curr_ptr) != -1 {
+                    if ls_state_no(&fsm, curr_ptr) == ls_state_no(&fsm, curr_ptr + 1) {
                         ptr_stack.push(curr_ptr + 1);
                         int_stack.push(depth);
                     }
                     depth += 1;
-                    let tgt = ls_target(net, curr_ptr) as usize;
+                    let tgt = ls_target(&fsm, curr_ptr) as usize;
                     curr_ptr = medh.state_array[tgt].transitions;
                     /* goto looper */
                 } else {
@@ -649,10 +651,13 @@ pub fn apply_med_init(net: &Fsm) -> Box<ApplyMedHandle> {
         sigmahash: None,
         state_array: Vec::new(),
         net: None,
+        net_rows: Vec::new(),
         curr_ptr: None,
         hascm: false,
     });
     medh.net = Some(Box::new(net.clone())); /* DEVIATION: owned copy of borrowed net */
+    /* One flat snapshot backs the cur_* line accessors through the MED walk. */
+    medh.net_rows = net.states.rows().to_vec();
     medh.agenda = vec![
         Astarnode {
             wordpos: 0,

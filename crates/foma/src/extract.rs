@@ -26,38 +26,41 @@ pub fn fsm_lower(net: Box<Fsm>) -> Box<Fsm> {
     /* C: fsm = net->states — reads below index net.states directly */
     let mut builder = fsm_state_init(sigma_max(&net.sigma));
     let mut prevstate = -1;
-    let mut i: i32 = 0;
-    while net.states[i as usize].state_no != -1 {
-        if prevstate != -1 && prevstate != net.states[i as usize].state_no {
-            fsm_state_end_state(&mut builder);
+    {
+        let fsm = net.states.rows();
+        let mut i: i32 = 0;
+        while fsm[i as usize].state_no != -1 {
+            if prevstate != -1 && prevstate != fsm[i as usize].state_no {
+                fsm_state_end_state(&mut builder);
+            }
+            if prevstate != fsm[i as usize].state_no {
+                fsm_state_set_current_state(
+                    &mut builder,
+                    fsm[i as usize].state_no,
+                    fsm[i as usize].final_state as i32,
+                    fsm[i as usize].start_state as i32,
+                );
+            }
+            if fsm[i as usize].target != -1 {
+                let out = if fsm[i as usize].out as i32 == UNKNOWN {
+                    IDENTITY
+                } else {
+                    fsm[i as usize].out as i32
+                };
+                fsm_state_add_arc(
+                    &mut builder,
+                    fsm[i as usize].state_no,
+                    out,
+                    out,
+                    fsm[i as usize].target,
+                    fsm[i as usize].final_state as i32,
+                    fsm[i as usize].start_state as i32,
+                );
+            }
+            /* C for-loop increment clause: prevstate = (fsm+i)->state_no, i++ */
+            prevstate = fsm[i as usize].state_no;
+            i += 1;
         }
-        if prevstate != net.states[i as usize].state_no {
-            fsm_state_set_current_state(
-                &mut builder,
-                net.states[i as usize].state_no,
-                net.states[i as usize].final_state as i32,
-                net.states[i as usize].start_state as i32,
-            );
-        }
-        if net.states[i as usize].target != -1 {
-            let out = if net.states[i as usize].out as i32 == UNKNOWN {
-                IDENTITY
-            } else {
-                net.states[i as usize].out as i32
-            };
-            fsm_state_add_arc(
-                &mut builder,
-                net.states[i as usize].state_no,
-                out,
-                out,
-                net.states[i as usize].target,
-                net.states[i as usize].final_state as i32,
-                net.states[i as usize].start_state as i32,
-            );
-        }
-        /* C for-loop increment clause: prevstate = (fsm+i)->state_no, i++ */
-        prevstate = net.states[i as usize].state_no;
-        i += 1;
     }
     fsm_state_end_state(&mut builder);
     /* drop the old line table; fsm_state_close installs the rebuilt one */
@@ -77,38 +80,41 @@ pub fn fsm_upper(net: Box<Fsm>) -> Box<Fsm> {
     /* C: fsm = net->states — reads below index net.states directly */
     let mut builder = fsm_state_init(sigma_max(&net.sigma));
     let mut prevstate = -1;
-    let mut i: i32 = 0;
-    while net.states[i as usize].state_no != -1 {
-        if prevstate != -1 && prevstate != net.states[i as usize].state_no {
-            fsm_state_end_state(&mut builder);
+    {
+        let fsm = net.states.rows();
+        let mut i: i32 = 0;
+        while fsm[i as usize].state_no != -1 {
+            if prevstate != -1 && prevstate != fsm[i as usize].state_no {
+                fsm_state_end_state(&mut builder);
+            }
+            if prevstate != fsm[i as usize].state_no {
+                fsm_state_set_current_state(
+                    &mut builder,
+                    fsm[i as usize].state_no,
+                    fsm[i as usize].final_state as i32,
+                    fsm[i as usize].start_state as i32,
+                );
+            }
+            if fsm[i as usize].target != -1 {
+                let r#in = if fsm[i as usize].r#in as i32 == UNKNOWN {
+                    IDENTITY
+                } else {
+                    fsm[i as usize].r#in as i32
+                };
+                fsm_state_add_arc(
+                    &mut builder,
+                    fsm[i as usize].state_no,
+                    r#in,
+                    r#in,
+                    fsm[i as usize].target,
+                    fsm[i as usize].final_state as i32,
+                    fsm[i as usize].start_state as i32,
+                );
+            }
+            /* C for-loop increment clause: prevstate = (fsm+i)->state_no, i++ */
+            prevstate = fsm[i as usize].state_no;
+            i += 1;
         }
-        if prevstate != net.states[i as usize].state_no {
-            fsm_state_set_current_state(
-                &mut builder,
-                net.states[i as usize].state_no,
-                net.states[i as usize].final_state as i32,
-                net.states[i as usize].start_state as i32,
-            );
-        }
-        if net.states[i as usize].target != -1 {
-            let r#in = if net.states[i as usize].r#in as i32 == UNKNOWN {
-                IDENTITY
-            } else {
-                net.states[i as usize].r#in as i32
-            };
-            fsm_state_add_arc(
-                &mut builder,
-                net.states[i as usize].state_no,
-                r#in,
-                r#in,
-                net.states[i as usize].target,
-                net.states[i as usize].final_state as i32,
-                net.states[i as usize].start_state as i32,
-            );
-        }
-        /* C for-loop increment clause: prevstate = (fsm+i)->state_no, i++ */
-        prevstate = net.states[i as usize].state_no;
-        i += 1;
     }
     fsm_state_end_state(&mut builder);
     /* drop the old line table; fsm_state_close installs the rebuilt one */
@@ -135,6 +141,7 @@ mod tests {
 
     fn arc_labels(net: &Fsm) -> Vec<(i16, i16)> {
         net.states
+            .rows()
             .iter()
             .take_while(|l| l.state_no != -1)
             .filter(|l| l.target != -1)

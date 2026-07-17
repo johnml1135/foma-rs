@@ -234,12 +234,13 @@ pub fn foma_write_prolog(net: &mut Fsm, filename: Option<&str>) -> Result<(), Fo
     /* Print identifier: fprintf(out, "%s%s%s", "network(", identifier, ").\n") */
     writeln!(out, "network({}).", identifier)?;
 
+    let fsm = net.states.rows();
     let mut i = 0usize;
-    while net.states[i].state_no != -1 {
-        let state_no = net.states[i].state_no;
-        let in_ = net.states[i].r#in;
-        let out_ = net.states[i].out;
-        let final_state = net.states[i].final_state;
+    while fsm[i].state_no != -1 {
+        let state_no = fsm[i].state_no;
+        let in_ = fsm[i].r#in;
+        let out_ = fsm[i].out;
+        let final_state = fsm[i].final_state;
         if final_state == 1 {
             finals[state_no as usize] = 1;
         } else {
@@ -269,11 +270,11 @@ pub fn foma_write_prolog(net: &mut Fsm, filename: Option<&str>) -> Result<(), Fo
     }
 
     let mut i = 0usize;
-    while net.states[i].state_no != -1 {
-        let state_no = net.states[i].state_no;
-        let target = net.states[i].target;
-        let in_ = net.states[i].r#in as i32;
-        let out_ = net.states[i].out as i32;
+    while fsm[i].state_no != -1 {
+        let state_no = fsm[i].state_no;
+        let target = fsm[i].target;
+        let in_ = fsm[i].r#in as i32;
+        let out_ = fsm[i].out as i32;
         if target == -1 {
             i += 1;
             continue;
@@ -1064,7 +1065,7 @@ pub fn io_net_read(iobh: &mut IoBufHandle) -> Result<Option<Box<Fsm>>, FomaError
     each row instead: a well-formed file yields exactly linecount rows, a
     malformed one can't overrun a fixed buffer, and a negative/huge linecount no
     longer mis-sizes anything. */
-    net.states = Vec::new().into();
+    let mut v: Vec<FsmState> = Vec::new();
     let mut laststate: i32 = -1;
     loop {
         io_gets(iobh, &mut buf);
@@ -1125,8 +1126,9 @@ pub fn io_net_read(iobh: &mut IoBufHandle) -> Result<Option<Box<Fsm>>, FomaError
         } else {
             1
         };
-        net.states.push(st);
+        v.push(st);
     }
+    net.states = v.into();
 
     if buf == "##cmatrix##" {
         crate::spelling::cmatrix_init(&mut net);
@@ -1273,9 +1275,10 @@ pub fn foma_net_print<W: std::io::Write + ?Sized>(
     /* State array */
     let mut laststate: i32 = -1;
     outfile.write_all(b"##states##\n")?;
+    let rows = net.states.rows();
     let mut i = 0usize;
-    while net.states[i].state_no != -1 {
-        let fsm = &net.states[i];
+    while rows[i].state_no != -1 {
+        let fsm = &rows[i];
         if fsm.state_no != laststate {
             if fsm.r#in != fsm.out {
                 writeln!(
@@ -1332,9 +1335,10 @@ pub fn net_print_att<W: std::io::Write + ?Sized>(
         /* (sl+0)->symbol = g_att_epsilon */
         sl[0].symbol = Some(opts.att_epsilon.clone());
     }
+    let rows = net.states.rows();
     let mut i = 0usize;
-    while net.states[i].state_no != -1 {
-        let fsm = &net.states[i];
+    while rows[i].state_no != -1 {
+        let fsm = &rows[i];
         if fsm.target != -1 {
             writeln!(
                 outfile,
@@ -1349,8 +1353,8 @@ pub fn net_print_att<W: std::io::Write + ?Sized>(
     }
     let mut prev: i32 = -1;
     let mut i = 0usize;
-    while net.states[i].state_no != -1 {
-        let fsm = &net.states[i];
+    while rows[i].state_no != -1 {
+        let fsm = &rows[i];
         if fsm.state_no != prev && fsm.final_state == 1 {
             writeln!(outfile, "{}", fsm.state_no)?;
         }
@@ -1620,9 +1624,10 @@ mod tests {
     /* Transition table (state_no, in, out, target, final) up to the sentinel. */
     fn state_lines(net: &Fsm) -> Vec<(i32, i16, i16, i32, i8)> {
         let mut v = Vec::new();
+        let rows = net.states.rows();
         let mut i = 0usize;
-        while net.states[i].state_no != -1 {
-            let s = &net.states[i];
+        while rows[i].state_no != -1 {
+            let s = &rows[i];
             v.push((s.state_no, s.r#in, s.out, s.target, s.final_state));
             i += 1;
         }

@@ -109,33 +109,35 @@ pub fn fsm_sort_arcs(net: &mut Fsm, direction: i32) {
     /* direction 1 = in, direction = 2, out */
     let scin: fn(&FsmState, &FsmState) -> core::cmp::Ordering = linesortcompin;
     let scout: fn(&FsmState, &FsmState) -> core::cmp::Ordering = linesortcompout;
-    let fsm = &mut net.states;
-    let mut numlines: i32 = 0;
-    let mut lasthead: usize = 0;
-    let mut i: usize = 0;
-    while fsm[i].state_no != -1 {
-        if fsm[i].state_no != fsm[i + 1].state_no || fsm[i].target == -1 {
-            numlines += 1;
-            if fsm[i].target == -1 {
-                numlines -= 1;
-            }
-            if numlines > 1 {
-                /* Sort, set numlines = 0 */
-                /* C: qsort (unstable); a stable slice sort is an admissible
-                qsort behavior */
-                if direction == 1 {
-                    fsm[lasthead..lasthead + numlines as usize].sort_by(scin);
-                } else {
-                    fsm[lasthead..lasthead + numlines as usize].sort_by(scout);
+    {
+        let mut fsm = net.states.rows_mut();
+        let mut numlines: i32 = 0;
+        let mut lasthead: usize = 0;
+        let mut i: usize = 0;
+        while fsm[i].state_no != -1 {
+            if fsm[i].state_no != fsm[i + 1].state_no || fsm[i].target == -1 {
+                numlines += 1;
+                if fsm[i].target == -1 {
+                    numlines -= 1;
                 }
+                if numlines > 1 {
+                    /* Sort, set numlines = 0 */
+                    /* C: qsort (unstable); a stable slice sort is an admissible
+                    qsort behavior */
+                    if direction == 1 {
+                        fsm[lasthead..lasthead + numlines as usize].sort_by(scin);
+                    } else {
+                        fsm[lasthead..lasthead + numlines as usize].sort_by(scout);
+                    }
+                }
+                numlines = 0;
+                lasthead = i + 1;
+                i += 1;
+                continue;
             }
-            numlines = 0;
-            lasthead = i + 1;
+            numlines += 1;
             i += 1;
-            continue;
         }
-        numlines += 1;
-        i += 1;
     }
     if net.arity == 1 {
         net.arcs_sorted_in = true;
@@ -162,7 +164,10 @@ pub fn map_firstlines(net: &Fsm) -> Vec<StateArray> {
     state number that never appears reads as index 0 rather than garbage. */
     let mut sa: Vec<StateArray> =
         vec![StateArray { transitions: 0 }; (net.statecount + 1) as usize];
-    let fsm = &net.states;
+    /* C: fsm = net->states — the returned `transitions` are indices into the
+    flat row sequence; callers walk their own materialized `rows()` (identical
+    row order), so the indices line up. */
+    let fsm = net.states.rows();
     let mut i: usize = 0;
     while fsm[i].state_no != -1 {
         if fsm[i].state_no != sold {
@@ -238,20 +243,23 @@ pub fn fsm_sigma_pairs_net(net: Box<Fsm>) -> Box<Fsm> {
     let mut builder = fsm_state_init(sigma_max(&net.sigma));
     fsm_state_set_current_state(&mut builder, 0, 0, 1);
     let mut pathcount: i32 = 0;
-    let mut i: usize = 0;
-    while net.states[i].state_no != -1 {
-        if net.states[i].target == -1 {
+    {
+        let fsm = net.states.rows();
+        let mut i: usize = 0;
+        while fsm[i].state_no != -1 {
+            if fsm[i].target == -1 {
+                i += 1;
+                continue;
+            }
+            let r#in: i16 = fsm[i].r#in;
+            let out: i16 = fsm[i].out;
+            if pairs[(smax * r#in as i32 + out as i32) as usize] == 0 {
+                fsm_state_add_arc(&mut builder, 0, r#in as i32, out as i32, 1, 0, 1);
+                pairs[(smax * r#in as i32 + out as i32) as usize] = 1;
+                pathcount += 1;
+            }
             i += 1;
-            continue;
         }
-        let r#in: i16 = net.states[i].r#in;
-        let out: i16 = net.states[i].out;
-        if pairs[(smax * r#in as i32 + out as i32) as usize] == 0 {
-            fsm_state_add_arc(&mut builder, 0, r#in as i32, out as i32, 1, 0, 1);
-            pairs[(smax * r#in as i32 + out as i32) as usize] = 1;
-            pathcount += 1;
-        }
-        i += 1;
     }
     fsm_state_end_state(&mut builder);
     fsm_state_set_current_state(&mut builder, 1, 1, 0);
@@ -345,7 +353,7 @@ pub fn fsm_empty_string() -> Box<Fsm> {
     let mut net = fsm_create("");
     /* C: malloc(2 lines), uninitialized; every line is written by the
     add_fsm_arc calls below */
-    net.states = vec![
+    let mut v = vec![
         FsmState {
             state_no: 0,
             r#in: 0,
@@ -355,10 +363,10 @@ pub fn fsm_empty_string() -> Box<Fsm> {
             start_state: 0,
         };
         2
-    ]
-    .into();
-    add_fsm_arc(&mut net.states, 0, 0, -1, -1, -1, 1, 1);
-    add_fsm_arc(&mut net.states, 1, -1, -1, -1, -1, -1, -1);
+    ];
+    add_fsm_arc(&mut v, 0, 0, -1, -1, -1, 1, 1);
+    add_fsm_arc(&mut v, 1, -1, -1, -1, -1, -1, -1);
+    net.states = v.into();
     fsm_update_flags(&mut net, YES, YES, YES, YES, YES, NO);
     net.statecount = 1;
     net.finalcount = 1;
@@ -375,7 +383,7 @@ pub fn fsm_empty_string() -> Box<Fsm> {
 pub fn fsm_identity() -> Box<Fsm> {
     let mut net = fsm_create("");
     /* C: malloc(3 lines), uninitialized; written by add_fsm_arc below */
-    net.states = vec![
+    let mut v = vec![
         FsmState {
             state_no: 0,
             r#in: 0,
@@ -385,11 +393,11 @@ pub fn fsm_identity() -> Box<Fsm> {
             start_state: 0,
         };
         3
-    ]
-    .into();
-    add_fsm_arc(&mut net.states, 0, 0, 2, 2, 1, 0, 1);
-    add_fsm_arc(&mut net.states, 1, 1, -1, -1, -1, 1, 0);
-    add_fsm_arc(&mut net.states, 2, -1, -1, -1, -1, -1, -1);
+    ];
+    add_fsm_arc(&mut v, 0, 0, 2, 2, 1, 0, 1);
+    add_fsm_arc(&mut v, 1, 1, -1, -1, -1, 1, 0);
+    add_fsm_arc(&mut v, 2, -1, -1, -1, -1, -1, -1);
+    net.states = v.into();
     net.sigma = vec![Sigma {
         number: IDENTITY,
         symbol: "@_IDENTITY_SYMBOL_@".into(),
@@ -457,7 +465,7 @@ pub fn fsm_isuniversal(opts: &FomaOptions, net: Box<Fsm>) -> bool {
     sentinel, over an alphabet of only reserved symbols (sigma_max < 3). */
     let mut net = fsm_minimize(opts, net);
     fsm_compact(&mut net);
-    let fsm = &net.states;
+    let fsm = net.states.rows();
     fsm[0].target == 0
         && fsm[0].final_state == 1
         && fsm[0].r#in as i32 == IDENTITY
@@ -473,8 +481,9 @@ pub fn fsm_isuniversal(opts: &FomaOptions, net: Box<Fsm>) -> bool {
 pub fn fsm_isempty(opts: &FomaOptions, net: &mut Fsm) -> bool {
     /* &mut: fsm_copy refreshes the source's counts via fsm_count */
     let minimal = fsm_minimize(opts, fsm_copy(net));
-    let fsm = &minimal.states;
+    let fsm = minimal.states.rows();
     let result = fsm[0].target == -1 && fsm[0].final_state == 0 && fsm[1].state_no == -1;
+    drop(fsm);
     fsm_destroy(minimal);
     result
 }
@@ -491,7 +500,7 @@ pub fn fsm_issequential(net: &Fsm) -> bool {
         sigtable[i as usize] = -2;
         i += 1;
     }
-    let fsm = &net.states;
+    let fsm = net.states.rows();
     let mut seentrans = 0;
     let mut epstrans = 0;
     let mut laststate: i32 = -1;
@@ -670,6 +679,9 @@ pub fn fsm_isidentity(opts: &FomaOptions, net: &mut Fsm) -> bool {
         num_states as usize
     ];
     let state_array = map_firstlines(&tmp);
+    /* One materialized read snapshot backs every `fsm[..]` index below;
+    state_array's indices address the same row order. */
+    let fsm = tmp.states.rows();
     /* C: ptr_stack_clear() to reset the shared stack — a fresh owned stack is
     already empty */
     let mut ptr_stack = PtrStack::new();
@@ -686,8 +698,8 @@ pub fn fsm_isidentity(opts: &FomaOptions, net: &mut Fsm) -> bool {
         let mut curr_ptr = ptr_stack.pop();
 
         'nopop: loop {
-            let v = tmp.states[curr_ptr].state_no; /* source state number */
-            let vp = tmp.states[curr_ptr].target; /* target state number */
+            let v = fsm[curr_ptr].state_no; /* source state number */
+            let vp = fsm[curr_ptr].target; /* target state number */
             /* C computes currd = discrepancy+v here (pointer arithmetic
             only; not dereferenced before the v/vp checks) */
             if v != -1 {
@@ -696,8 +708,8 @@ pub fn fsm_isidentity(opts: &FomaOptions, net: &mut Fsm) -> bool {
             if v == -1 || vp == -1 {
                 break 'nopop; /* continue the pop loop */
             }
-            let r#in = tmp.states[curr_ptr].r#in;
-            let out = tmp.states[curr_ptr].out;
+            let r#in = fsm[curr_ptr].r#in;
+            let out = fsm[curr_ptr].out;
 
             /* Check arc and conditions e) d) b) */
             /* e) */
@@ -794,11 +806,11 @@ pub fn fsm_isidentity(opts: &FomaOptions, net: &mut Fsm) -> bool {
 
             /* Check target conditions a) c) */
             /* a) */
-            if tmp.states[state_array[vp as usize].transitions].final_state != 0 && newlength != 0 {
+            if fsm[state_array[vp as usize].transitions].final_state != 0 && newlength != 0 {
                 failed = true;
                 break 'stack_loop;
             }
-            if tmp.states[curr_ptr].state_no == tmp.states[curr_ptr + 1].state_no {
+            if fsm[curr_ptr].state_no == fsm[curr_ptr + 1].state_no {
                 ptr_stack.push(curr_ptr + 1);
             }
             if discrepancy[vp as usize].visited {
@@ -844,10 +856,13 @@ pub fn fsm_isidentity(opts: &FomaOptions, net: &mut Fsm) -> bool {
 // [spec:foma:sem:fomalib.fsm-markallfinal-fn]
 pub fn fsm_markallfinal(net: Box<Fsm>) -> Box<Fsm> {
     let mut net = net;
-    let mut i: usize = 0;
-    while net.states[i].state_no != -1 {
-        net.states[i].final_state = YES as i8;
-        i += 1;
+    {
+        let mut fsm = net.states.rows_mut();
+        let mut i: usize = 0;
+        while fsm[i].state_no != -1 {
+            fsm[i].final_state = YES as i8;
+            i += 1;
+        }
     }
     net
 }
@@ -864,17 +879,20 @@ pub fn fsm_lowerdet(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
     let mut maxarc: i32 = 0;
     let maxsigma = sigma_max(&net.sigma);
 
-    let mut i: usize = 0;
-    let mut j: i32 = 0;
-    while net.states[i].state_no != -1 {
-        if net.states[i].target != -1 {
-            j += 1;
+    {
+        let fsm = net.states.rows();
+        let mut i: usize = 0;
+        let mut j: i32 = 0;
+        while fsm[i].state_no != -1 {
+            if fsm[i].target != -1 {
+                j += 1;
+            }
+            if fsm[i + 1].state_no != fsm[i].state_no {
+                maxarc = if maxarc > j { maxarc } else { j };
+                j = 0;
+            }
+            i += 1;
         }
-        if net.states[i + 1].state_no != net.states[i].state_no {
-            maxarc = if maxarc > j { maxarc } else { j };
-            j = 0;
-        }
-        i += 1;
     }
     if maxarc > (maxsigma - 2) {
         let mut i = maxarc;
@@ -887,23 +905,26 @@ pub fn fsm_lowerdet(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
         }
         sigma_sort(&mut net);
     }
-    let mut i: usize = 0;
-    let mut j: i32 = 3;
-    while net.states[i].state_no != -1 {
-        if net.states[i].target != -1 {
-            /* int→short truncation as in C */
-            net.states[i].out = j as i16;
-            j += 1;
-            net.states[i].r#in = if net.states[i].r#in as i32 == IDENTITY {
-                UNKNOWN as i16
-            } else {
-                net.states[i].r#in
-            };
+    {
+        let mut fsm = net.states.rows_mut();
+        let mut i: usize = 0;
+        let mut j: i32 = 3;
+        while fsm[i].state_no != -1 {
+            if fsm[i].target != -1 {
+                /* int→short truncation as in C */
+                fsm[i].out = j as i16;
+                j += 1;
+                fsm[i].r#in = if fsm[i].r#in as i32 == IDENTITY {
+                    UNKNOWN as i16
+                } else {
+                    fsm[i].r#in
+                };
+            }
+            if fsm[i + 1].state_no != fsm[i].state_no {
+                j = 3;
+            }
+            i += 1;
         }
-        if net.states[i + 1].state_no != net.states[i].state_no {
-            j = 3;
-        }
-        i += 1;
     }
     net
 }
@@ -920,17 +941,20 @@ pub fn fsm_lowerdeteps(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
     let mut maxarc: i32 = 0;
     let maxsigma = sigma_max(&net.sigma);
 
-    let mut i: usize = 0;
-    let mut j: i32 = 0;
-    while net.states[i].state_no != -1 {
-        if net.states[i].target != -1 {
-            j += 1;
+    {
+        let fsm = net.states.rows();
+        let mut i: usize = 0;
+        let mut j: i32 = 0;
+        while fsm[i].state_no != -1 {
+            if fsm[i].target != -1 {
+                j += 1;
+            }
+            if fsm[i + 1].state_no != fsm[i].state_no {
+                maxarc = if maxarc > j { maxarc } else { j };
+                j = 0;
+            }
+            i += 1;
         }
-        if net.states[i + 1].state_no != net.states[i].state_no {
-            maxarc = if maxarc > j { maxarc } else { j };
-            j = 0;
-        }
-        i += 1;
     }
     if maxarc > (maxsigma - 2) {
         let mut i = maxarc;
@@ -943,23 +967,26 @@ pub fn fsm_lowerdeteps(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
         }
         sigma_sort(&mut net);
     }
-    let mut i: usize = 0;
-    let mut j: i32 = 3;
-    while net.states[i].state_no != -1 {
-        if net.states[i].target != -1 && net.states[i].out as i32 != EPSILON {
-            /* int→short truncation as in C */
-            net.states[i].out = j as i16;
-            j += 1;
-            net.states[i].r#in = if net.states[i].r#in as i32 == IDENTITY {
-                UNKNOWN as i16
-            } else {
-                net.states[i].r#in
-            };
+    {
+        let mut fsm = net.states.rows_mut();
+        let mut i: usize = 0;
+        let mut j: i32 = 3;
+        while fsm[i].state_no != -1 {
+            if fsm[i].target != -1 && fsm[i].out as i32 != EPSILON {
+                /* int→short truncation as in C */
+                fsm[i].out = j as i16;
+                j += 1;
+                fsm[i].r#in = if fsm[i].r#in as i32 == IDENTITY {
+                    UNKNOWN as i16
+                } else {
+                    fsm[i].r#in
+                };
+            }
+            if fsm[i + 1].state_no != fsm[i].state_no {
+                j = 3;
+            }
+            i += 1;
         }
-        if net.states[i + 1].state_no != net.states[i].state_no {
-            j = 3;
-        }
-        i += 1;
     }
     net
 }
@@ -1010,151 +1037,154 @@ pub fn fsm_extract_nonidentity(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
     let mut newlength: i32;
     let mut startfrom: i32;
 
-    while !ptr_stack.is_empty() {
-        let mut curr_ptr = ptr_stack.pop();
+    {
+        let mut fsm = net.states.rows_mut();
+        while !ptr_stack.is_empty() {
+            let mut curr_ptr = ptr_stack.pop();
 
-        'nopop: loop {
-            let failed = 'body: {
-                let v = net.states[curr_ptr].state_no; /* source state number */
-                let vp = net.states[curr_ptr].target; /* target state number */
-                if v != -1 {
-                    discrepancy[v as usize].visited = true;
-                }
-                if v == -1 || vp == -1 {
-                    break 'nopop; /* continue the pop loop */
-                }
-                let r#in = net.states[curr_ptr].r#in;
-                let out = net.states[curr_ptr].out;
+            'nopop: loop {
+                let failed = 'body: {
+                    let v = fsm[curr_ptr].state_no; /* source state number */
+                    let vp = fsm[curr_ptr].target; /* target state number */
+                    if v != -1 {
+                        discrepancy[v as usize].visited = true;
+                    }
+                    if v == -1 || vp == -1 {
+                        break 'nopop; /* continue the pop loop */
+                    }
+                    let r#in = fsm[curr_ptr].r#in;
+                    let out = fsm[curr_ptr].out;
 
-                /* Check arc and conditions e) d) b) */
-                /* e) */
-                if r#in as i32 == UNKNOWN || out as i32 == UNKNOWN {
-                    break 'body true;
-                }
-                /* d) */
-                if r#in as i32 == IDENTITY && discrepancy[v as usize].length != 0 {
-                    break 'body true;
-                }
-                /* b) */
-                if discrepancy[v as usize].length != 0 {
-                    if discrepancy[v as usize].length > 0
-                        && out as i32 != EPSILON
-                        && out != discrepancy[v as usize].string[0]
-                    {
+                    /* Check arc and conditions e) d) b) */
+                    /* e) */
+                    if r#in as i32 == UNKNOWN || out as i32 == UNKNOWN {
                         break 'body true;
                     }
-                    if discrepancy[v as usize].length < 0
-                        && r#in as i32 != EPSILON
-                        && r#in != discrepancy[v as usize].string[0]
-                    {
+                    /* d) */
+                    if r#in as i32 == IDENTITY && discrepancy[v as usize].length != 0 {
                         break 'body true;
                     }
-                }
-                if discrepancy[v as usize].length == 0
-                    && r#in != out
-                    && r#in as i32 != EPSILON
-                    && out as i32 != EPSILON
-                {
-                    break 'body true;
-                }
-
-                /* Calculate new discrepancy */
-                let currd_length = discrepancy[v as usize].length as i32;
-                if currd_length != 0 {
-                    if r#in as i32 != EPSILON && out as i32 != EPSILON {
-                        factor = 0;
-                    } else if r#in as i32 == EPSILON {
-                        factor = -1;
-                    } else if out as i32 == EPSILON {
-                        factor = 1;
-                    }
-
-                    newlength = currd_length + factor;
-                    startfrom = if newlength.abs() <= currd_length.abs() {
-                        1
-                    } else {
-                        0
-                    };
-                } else {
-                    if r#in as i32 != EPSILON && out as i32 != EPSILON {
-                        newlength = 0;
-                    } else {
-                        newlength = if out as i32 == EPSILON { 1 } else { -1 };
-                    }
-                    startfrom = 0;
-                }
-
-                /* calloc(abs(newlength), sizeof(int)) — never freed in C
-                (leak, no aliasing hazard) */
-                let mut newstring: Vec<i16> = vec![0; newlength.unsigned_abs() as usize];
-
-                let mut i: i32 = startfrom;
-                let mut j: i32 = 0;
-                while i < currd_length.abs() {
-                    newstring[j as usize] = discrepancy[v as usize].string[i as usize];
-                    i += 1;
-                    j += 1;
-                }
-                if newlength != 0 {
-                    if currd_length > 0 && newlength >= currd_length {
-                        newstring[j as usize] = r#in;
-                    }
-                    if currd_length < 0 && newlength <= currd_length {
-                        newstring[j as usize] = out;
-                    }
-                    if currd_length == 0 && newlength < currd_length {
-                        newstring[j as usize] = out;
-                    }
-                    if currd_length == 0 && newlength > currd_length {
-                        newstring[j as usize] = r#in;
-                    }
-                }
-
-                /* Check target conditions a) c) */
-                /* a) */
-                if net.states[state_array[vp as usize].transitions].final_state != 0
-                    && newlength != 0
-                {
-                    break 'body true;
-                }
-                if net.states[curr_ptr].state_no == net.states[curr_ptr + 1].state_no {
-                    ptr_stack.push(curr_ptr + 1);
-                }
-
-                if discrepancy[vp as usize].visited {
-                    /* C: //free(newstring); (commented out upstream) */
-                    if discrepancy[vp as usize].length as i32 != newlength {
-                        break 'body true;
-                    }
-                    let mut i: i32 = 0;
-                    while i < newlength.abs() {
-                        if discrepancy[vp as usize].string[i as usize] != newstring[i as usize] {
+                    /* b) */
+                    if discrepancy[v as usize].length != 0 {
+                        if discrepancy[v as usize].length > 0
+                            && out as i32 != EPSILON
+                            && out != discrepancy[v as usize].string[0]
+                        {
                             break 'body true;
                         }
-                        i += 1;
+                        if discrepancy[v as usize].length < 0
+                            && r#in as i32 != EPSILON
+                            && r#in != discrepancy[v as usize].string[0]
+                        {
+                            break 'body true;
+                        }
                     }
-                    break 'body false; /* falls through to C's `continue;` */
-                } else {
-                    /* Add discrepancy to target state */
-                    discrepancy[vp as usize].length = newlength as i16;
-                    /* C: targetd->string = newstring (aliased); owned copy
-                    here (the C buffer is leaked, never freed) */
-                    discrepancy[vp as usize].string = newstring;
-                    curr_ptr = state_array[vp as usize].transitions;
-                    continue 'nopop; /* goto nopop */
+                    if discrepancy[v as usize].length == 0
+                        && r#in != out
+                        && r#in as i32 != EPSILON
+                        && out as i32 != EPSILON
+                    {
+                        break 'body true;
+                    }
+
+                    /* Calculate new discrepancy */
+                    let currd_length = discrepancy[v as usize].length as i32;
+                    if currd_length != 0 {
+                        if r#in as i32 != EPSILON && out as i32 != EPSILON {
+                            factor = 0;
+                        } else if r#in as i32 == EPSILON {
+                            factor = -1;
+                        } else if out as i32 == EPSILON {
+                            factor = 1;
+                        }
+
+                        newlength = currd_length + factor;
+                        startfrom = if newlength.abs() <= currd_length.abs() {
+                            1
+                        } else {
+                            0
+                        };
+                    } else {
+                        if r#in as i32 != EPSILON && out as i32 != EPSILON {
+                            newlength = 0;
+                        } else {
+                            newlength = if out as i32 == EPSILON { 1 } else { -1 };
+                        }
+                        startfrom = 0;
+                    }
+
+                    /* calloc(abs(newlength), sizeof(int)) — never freed in C
+                    (leak, no aliasing hazard) */
+                    let mut newstring: Vec<i16> = vec![0; newlength.unsigned_abs() as usize];
+
+                    let mut i: i32 = startfrom;
+                    let mut j: i32 = 0;
+                    while i < currd_length.abs() {
+                        newstring[j as usize] = discrepancy[v as usize].string[i as usize];
+                        i += 1;
+                        j += 1;
+                    }
+                    if newlength != 0 {
+                        if currd_length > 0 && newlength >= currd_length {
+                            newstring[j as usize] = r#in;
+                        }
+                        if currd_length < 0 && newlength <= currd_length {
+                            newstring[j as usize] = out;
+                        }
+                        if currd_length == 0 && newlength < currd_length {
+                            newstring[j as usize] = out;
+                        }
+                        if currd_length == 0 && newlength > currd_length {
+                            newstring[j as usize] = r#in;
+                        }
+                    }
+
+                    /* Check target conditions a) c) */
+                    /* a) */
+                    if fsm[state_array[vp as usize].transitions].final_state != 0 && newlength != 0
+                    {
+                        break 'body true;
+                    }
+                    if fsm[curr_ptr].state_no == fsm[curr_ptr + 1].state_no {
+                        ptr_stack.push(curr_ptr + 1);
+                    }
+
+                    if discrepancy[vp as usize].visited {
+                        /* C: //free(newstring); (commented out upstream) */
+                        if discrepancy[vp as usize].length as i32 != newlength {
+                            break 'body true;
+                        }
+                        let mut i: i32 = 0;
+                        while i < newlength.abs() {
+                            if discrepancy[vp as usize].string[i as usize] != newstring[i as usize]
+                            {
+                                break 'body true;
+                            }
+                            i += 1;
+                        }
+                        break 'body false; /* falls through to C's `continue;` */
+                    } else {
+                        /* Add discrepancy to target state */
+                        discrepancy[vp as usize].length = newlength as i16;
+                        /* C: targetd->string = newstring (aliased); owned copy
+                        here (the C buffer is leaked, never freed) */
+                        discrepancy[vp as usize].string = newstring;
+                        curr_ptr = state_array[vp as usize].transitions;
+                        continue 'nopop; /* goto nopop */
+                    }
+                };
+                if failed {
+                    /* fail: relabel the arc's output to @KILL@ and re-push the
+                    sibling line (when failure occurs at the revisit-comparison
+                    stage the sibling was already pushed once — the second push
+                    is a redundant re-traversal, as in C) */
+                    fsm[curr_ptr].out = killnum as i16;
+                    if fsm[curr_ptr].state_no == fsm[curr_ptr + 1].state_no {
+                        ptr_stack.push(curr_ptr + 1);
+                    }
                 }
-            };
-            if failed {
-                /* fail: relabel the arc's output to @KILL@ and re-push the
-                sibling line (when failure occurs at the revisit-comparison
-                stage the sibling was already pushed once — the second push
-                is a redundant re-traversal, as in C) */
-                net.states[curr_ptr].out = killnum as i16;
-                if net.states[curr_ptr].state_no == net.states[curr_ptr + 1].state_no {
-                    ptr_stack.push(curr_ptr + 1);
-                }
+                break 'nopop;
             }
-            break 'nopop;
         }
     }
     ptr_stack.clear();
@@ -1213,7 +1243,7 @@ pub fn fsm_copy(net: &mut Fsm) -> Box<Fsm> {
     });
 
     net_copy.sigma = sigma_copy(&net.sigma);
-    net_copy.states = fsm_state_copy(&net.states, net.linecount).into();
+    net_copy.states = fsm_state_copy(&net.states.rows(), net.linecount).into();
     net_copy
 }
 
@@ -1308,7 +1338,7 @@ pub fn union_quantifiers(quantifiers: &Quantifiers) -> Box<Fsm> {
         q = node.next.as_deref();
     }
     /* C: malloc((syms+1) lines), uninitialized; written below */
-    net.states = vec![
+    let mut v = vec![
         FsmState {
             state_no: 0,
             r#in: 0,
@@ -1318,14 +1348,14 @@ pub fn union_quantifiers(quantifiers: &Quantifiers) -> Box<Fsm> {
             start_state: 0,
         };
         (syms + 1) as usize
-    ]
-    .into();
+    ];
     let mut i: i32 = 0;
     while i < syms {
-        add_fsm_arc(&mut net.states, i, 0, symlo + i, symlo + i, 0, 1, 1);
+        add_fsm_arc(&mut v, i, 0, symlo + i, symlo + i, 0, 1, 1);
         i += 1;
     }
-    add_fsm_arc(&mut net.states, i, -1, -1, -1, -1, -1, -1);
+    add_fsm_arc(&mut v, i, -1, -1, -1, -1, -1, -1);
+    net.states = v.into();
     net.arccount = syms;
     net.statecount = 1;
     net.finalcount = 1;
@@ -1590,9 +1620,9 @@ mod tests {
             2,
         );
         fsm_sort_arcs(&mut net, 1);
-        assert_eq!(net.states[0].r#in, 2);
-        assert_eq!(net.states[1].r#in, 5);
-        assert_eq!(net.states[2].r#in, 8);
+        assert_eq!(net.states.rows()[0].r#in, 2);
+        assert_eq!(net.states.rows()[1].r#in, 5);
+        assert_eq!(net.states.rows()[2].r#in, 8);
         // arity != 1, direction 1: in sorted, out flag cleared
         assert!(net.arcs_sorted_in);
         assert!(!net.arcs_sorted_out);
@@ -1613,9 +1643,9 @@ mod tests {
             2,
         );
         fsm_sort_arcs(&mut net, 2);
-        assert_eq!(net.states[0].out, 1);
-        assert_eq!(net.states[1].out, 4);
-        assert_eq!(net.states[2].out, 7);
+        assert_eq!(net.states.rows()[0].out, 1);
+        assert_eq!(net.states.rows()[1].out, 4);
+        assert_eq!(net.states.rows()[2].out, 7);
         assert!(net.arcs_sorted_out);
         assert!(!net.arcs_sorted_in);
     }
@@ -1672,13 +1702,13 @@ mod tests {
         let net = fsm_empty_set();
         assert_eq!(net.states.len(), 2);
         // lone non-final arcless start state
-        assert_eq!(net.states[0].state_no, 0);
-        assert_eq!(net.states[0].target, -1);
-        assert_eq!(net.states[0].final_state, 0);
-        assert_eq!(net.states[0].start_state, 1);
-        assert_eq!(net.states[0].r#in, -1);
-        assert_eq!(net.states[0].out, -1);
-        assert_eq!(net.states[1].state_no, -1); // sentinel
+        assert_eq!(net.states.rows()[0].state_no, 0);
+        assert_eq!(net.states.rows()[0].target, -1);
+        assert_eq!(net.states.rows()[0].final_state, 0);
+        assert_eq!(net.states.rows()[0].start_state, 1);
+        assert_eq!(net.states.rows()[0].r#in, -1);
+        assert_eq!(net.states.rows()[0].out, -1);
+        assert_eq!(net.states.rows()[1].state_no, -1); // sentinel
         assert_eq!(net.statecount, 1);
         assert_eq!(net.finalcount, 0);
         assert_eq!(net.arccount, 0);
@@ -1698,11 +1728,11 @@ mod tests {
     fn empty_string_shape() {
         let net = fsm_empty_string();
         assert_eq!(net.states.len(), 2);
-        assert_eq!(net.states[0].state_no, 0);
-        assert_eq!(net.states[0].target, -1);
-        assert_eq!(net.states[0].final_state, 1); // final start state
-        assert_eq!(net.states[0].start_state, 1);
-        assert_eq!(net.states[1].state_no, -1); // sentinel
+        assert_eq!(net.states.rows()[0].state_no, 0);
+        assert_eq!(net.states.rows()[0].target, -1);
+        assert_eq!(net.states.rows()[0].final_state, 1); // final start state
+        assert_eq!(net.states.rows()[0].start_state, 1);
+        assert_eq!(net.states.rows()[1].state_no, -1); // sentinel
         assert_eq!(net.statecount, 1);
         assert_eq!(net.finalcount, 1);
         assert_eq!(net.arccount, 0);
@@ -1717,17 +1747,17 @@ mod tests {
         let net = fsm_identity();
         assert_eq!(net.states.len(), 3);
         // line 0: IDENTITY:IDENTITY arc 0 -> 1
-        assert_eq!(net.states[0].state_no, 0);
-        assert_eq!(net.states[0].r#in as i32, IDENTITY);
-        assert_eq!(net.states[0].out as i32, IDENTITY);
-        assert_eq!(net.states[0].target, 1);
-        assert_eq!(net.states[0].final_state, 0);
-        assert_eq!(net.states[0].start_state, 1);
+        assert_eq!(net.states.rows()[0].state_no, 0);
+        assert_eq!(net.states.rows()[0].r#in as i32, IDENTITY);
+        assert_eq!(net.states.rows()[0].out as i32, IDENTITY);
+        assert_eq!(net.states.rows()[0].target, 1);
+        assert_eq!(net.states.rows()[0].final_state, 0);
+        assert_eq!(net.states.rows()[0].start_state, 1);
         // line 1: final non-start
-        assert_eq!(net.states[1].state_no, 1);
-        assert_eq!(net.states[1].target, -1);
-        assert_eq!(net.states[1].final_state, 1);
-        assert_eq!(net.states[2].state_no, -1); // sentinel
+        assert_eq!(net.states.rows()[1].state_no, 1);
+        assert_eq!(net.states.rows()[1].target, -1);
+        assert_eq!(net.states.rows()[1].final_state, 1);
+        assert_eq!(net.states.rows()[2].state_no, -1); // sentinel
         // single sigma node = IDENTITY symbol
         assert_eq!(net.sigma.len(), 1);
         assert_eq!(net.sigma[0].number, IDENTITY);
@@ -1922,9 +1952,9 @@ mod tests {
     #[test]
     fn markallfinal_sets_every_line_final() {
         let net = fsm_markallfinal(fsm_identity());
-        assert_eq!(net.states[0].final_state, YES as i8); // was 0
-        assert_eq!(net.states[1].final_state, YES as i8);
-        assert_eq!(net.states[2].state_no, -1); // sentinel untouched
+        assert_eq!(net.states.rows()[0].final_state, YES as i8); // was 0
+        assert_eq!(net.states.rows()[1].final_state, YES as i8);
+        assert_eq!(net.states.rows()[2].state_no, -1); // sentinel untouched
     }
 
     // [spec:foma:sem:structures.fsm-lowerdet-fn/test]
@@ -1936,6 +1966,7 @@ mod tests {
         let net = fsm_lowerdet(opts, parse("a:b | a:c"));
         let mut outs: Vec<i16> = net
             .states
+            .rows()
             .iter()
             .filter(|s| s.state_no == 0 && s.target != -1)
             .map(|s| s.out)
@@ -1945,8 +1976,8 @@ mod tests {
 
         // IDENTITY input is rewritten to UNKNOWN, output relabeled to 3
         let idnet = fsm_lowerdet(opts, fsm_identity());
-        let arc = idnet
-            .states
+        let idrows = idnet.states.rows();
+        let arc = idrows
             .iter()
             .find(|s| s.state_no == 0 && s.target != -1)
             .unwrap();
@@ -1961,16 +1992,16 @@ mod tests {
         let opts = &FomaOptions::default();
         // a:0 has an epsilon-output arc: lowerdet -> out 3, lowerdeteps -> out 0
         let det = fsm_lowerdet(opts, parse("a:0"));
-        let a1 = det
-            .states
+        let detrows = det.states.rows();
+        let a1 = detrows
             .iter()
             .find(|s| s.state_no == 0 && s.target != -1)
             .unwrap();
         assert_eq!(a1.out, 3);
 
         let eps = fsm_lowerdeteps(opts, parse("a:0"));
-        let a2 = eps
-            .states
+        let epsrows = eps.states.rows();
+        let a2 = epsrows
             .iter()
             .find(|s| s.state_no == 0 && s.target != -1)
             .unwrap();
@@ -1996,9 +2027,9 @@ mod tests {
         // full table duplicated (linecount includes the sentinel)
         assert_eq!(copy.states.len(), net.linecount as usize);
         // deep copy: mutating the copy does not touch the source buffer
-        let src0 = net.states[0].r#in;
-        copy.states[0].r#in = 77;
-        assert_eq!(net.states[0].r#in, src0);
+        let src0 = net.states.rows()[0].r#in;
+        copy.states.rows_mut()[0].r#in = 77;
+        assert_eq!(net.states.rows()[0].r#in, src0);
     }
 
     // [spec:foma:sem:structures.fsm-state-copy-fn/test]
@@ -2006,12 +2037,12 @@ mod tests {
     #[test]
     fn state_copy_duplicates_n_lines() {
         let net = fsm_identity(); // 3 lines incl. sentinel
-        let full = fsm_state_copy(&net.states, 3);
+        let full = fsm_state_copy(&net.states.rows(), 3);
         assert_eq!(full.len(), 3);
-        assert_eq!(full[0].state_no, net.states[0].state_no);
+        assert_eq!(full[0].state_no, net.states.rows()[0].state_no);
         assert_eq!(full[2].state_no, -1);
         // partial copy of just 2 lines
-        let partial = fsm_state_copy(&net.states, 2);
+        let partial = fsm_state_copy(&net.states.rows(), 2);
         assert_eq!(partial.len(), 2);
     }
 
@@ -2020,7 +2051,7 @@ mod tests {
     #[test]
     fn find_arccount_counts_lines_before_sentinel() {
         // includes arcless marker lines, excludes the sentinel
-        assert_eq!(find_arccount(&fsm_identity().states), 2);
+        assert_eq!(find_arccount(&fsm_identity().states.rows()), 2);
         assert_eq!(find_arccount(&fsm_empty()), 1);
     }
 
@@ -2092,20 +2123,20 @@ mod tests {
         assert_eq!(net.statecount, 1);
         assert_eq!(net.finalcount, 1);
         // each arc is a self-loop, final+start, consecutive symbol numbers
-        assert_eq!(net.states[0].state_no, 0);
-        assert_eq!(net.states[0].target, 0);
-        assert_eq!(net.states[0].final_state, 1);
-        assert_eq!(net.states[0].start_state, 1);
-        assert_eq!(net.states[0].r#in, net.states[0].out);
-        assert_eq!(net.states[1].r#in, net.states[0].r#in + 1);
-        assert_eq!(net.states[2].state_no, -1); // sentinel
+        assert_eq!(net.states.rows()[0].state_no, 0);
+        assert_eq!(net.states.rows()[0].target, 0);
+        assert_eq!(net.states.rows()[0].final_state, 1);
+        assert_eq!(net.states.rows()[0].start_state, 1);
+        assert_eq!(net.states.rows()[0].r#in, net.states.rows()[0].out);
+        assert_eq!(net.states.rows()[1].r#in, net.states.rows()[0].r#in + 1);
+        assert_eq!(net.states.rows()[2].state_no, -1); // sentinel
 
         // empty list: table is just the sentinel (no state 0); linecount 1
         // (the sentinel), per the Wave 4 convention fix
         clear_quantifiers(&mut q);
         let empty = union_quantifiers(&q);
         assert_eq!(empty.states.len(), 1);
-        assert_eq!(empty.states[0].state_no, -1);
+        assert_eq!(empty.states.rows()[0].state_no, -1);
         assert_eq!(empty.linecount, 1);
         assert_eq!(empty.arccount, 0);
     }

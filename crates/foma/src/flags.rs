@@ -424,7 +424,7 @@ pub(crate) fn flag_purge(net: &mut Fsm, name: Option<&str>) {
         }
     }
 
-    let fsm = &mut net.states;
+    let mut fsm = net.states.rows_mut();
     let mut i = 0usize;
     while fsm[i].state_no != -1 {
         if fsm[i].r#in >= 0 && fsm[i].out >= 0 {
@@ -437,6 +437,7 @@ pub(crate) fn flag_purge(net: &mut Fsm, name: Option<&str>) {
         }
         i += 1;
     }
+    drop(fsm);
 
     /* free(ftable) — drop */
     net.is_deterministic = Tern::No;
@@ -698,29 +699,32 @@ pub fn flag_twosided(opts: &FomaOptions, mut net: Box<Fsm>) -> Box<Fsm> {
     let mut change = false;
     let mut i = 0usize;
     let mut newarcs = 0usize;
-    while net.states[i].state_no != -1 {
-        maxstate = if net.states[i].state_no > maxstate {
-            net.states[i].state_no
-        } else {
-            maxstate
-        };
-        if net.states[i].target == -1 {
+    {
+        let mut fsm = net.states.rows_mut();
+        while fsm[i].state_no != -1 {
+            maxstate = if fsm[i].state_no > maxstate {
+                fsm[i].state_no
+            } else {
+                maxstate
+            };
+            if fsm[i].target == -1 {
+                i += 1;
+                continue;
+            }
+            if isflag[fsm[i].r#in as usize] && fsm[i].out == EPSILON as i16 {
+                change = true;
+                fsm[i].out = fsm[i].r#in;
+            } else if isflag[fsm[i].out as usize] && fsm[i].r#in == EPSILON as i16 {
+                change = true;
+                fsm[i].r#in = fsm[i].out;
+            }
+            if (isflag[fsm[i].r#in as usize] || isflag[fsm[i].out as usize])
+                && fsm[i].r#in != fsm[i].out
+            {
+                newarcs += 1;
+            }
             i += 1;
-            continue;
         }
-        if isflag[net.states[i].r#in as usize] && net.states[i].out == EPSILON as i16 {
-            change = true;
-            net.states[i].out = net.states[i].r#in;
-        } else if isflag[net.states[i].out as usize] && net.states[i].r#in == EPSILON as i16 {
-            change = true;
-            net.states[i].r#in = net.states[i].out;
-        }
-        if (isflag[net.states[i].r#in as usize] || isflag[net.states[i].out as usize])
-            && net.states[i].r#in != net.states[i].out
-        {
-            newarcs += 1;
-        }
-        i += 1;
     }
 
     if newarcs == 0 {
@@ -732,77 +736,71 @@ pub fn flag_twosided(opts: &FomaOptions, mut net: Box<Fsm>) -> Box<Fsm> {
         }
         return net;
     }
-    /* Grow the line table to hold the i original lines, newarcs split arcs,
-    and one new sentinel. */
-    net.states.resize(
-        i + newarcs + 1,
-        FsmState {
-            state_no: 0,
-            r#in: 0,
-            out: 0,
-            target: 0,
-            final_state: 0,
-            start_state: 0,
-        },
-    );
     let tail = i;
     let mut j = i as i32;
     maxstate += 1;
-    for i in 0..tail {
-        if net.states[i].target == -1 {
-            continue;
-        }
-        let in_i = net.states[i].r#in;
-        let out_i = net.states[i].out;
-        let target_i = net.states[i].target;
-        if (isflag[in_i as usize] || isflag[out_i as usize]) && in_i != out_i {
-            if isflag[in_i as usize] && !isflag[out_i as usize] {
-                j = add_fsm_arc(
-                    &mut net.states,
-                    j,
-                    maxstate,
-                    EPSILON,
-                    out_i as i32,
-                    target_i,
-                    0,
-                    0,
-                );
-                net.states[i].out = net.states[i].r#in;
-                net.states[i].target = maxstate;
-                maxstate += 1;
-            } else if isflag[out_i as usize] && !isflag[in_i as usize] {
-                j = add_fsm_arc(
-                    &mut net.states,
-                    j,
-                    maxstate,
-                    out_i as i32,
-                    out_i as i32,
-                    target_i,
-                    0,
-                    0,
-                );
-                net.states[i].out = EPSILON as i16;
-                net.states[i].target = maxstate;
-                maxstate += 1;
-            } else if isflag[in_i as usize] && isflag[out_i as usize] {
-                j = add_fsm_arc(
-                    &mut net.states,
-                    j,
-                    maxstate,
-                    out_i as i32,
-                    out_i as i32,
-                    target_i,
-                    0,
-                    0,
-                );
-                net.states[i].out = net.states[i].r#in;
-                net.states[i].target = maxstate;
-                maxstate += 1;
+    {
+        let mut fsm = net.states.rows_mut();
+        /* Grow the line table to hold the i original lines, newarcs split arcs,
+        and one new sentinel. */
+        fsm.resize(
+            tail + newarcs + 1,
+            FsmState {
+                state_no: 0,
+                r#in: 0,
+                out: 0,
+                target: 0,
+                final_state: 0,
+                start_state: 0,
+            },
+        );
+        for i in 0..tail {
+            if fsm[i].target == -1 {
+                continue;
+            }
+            let in_i = fsm[i].r#in;
+            let out_i = fsm[i].out;
+            let target_i = fsm[i].target;
+            if (isflag[in_i as usize] || isflag[out_i as usize]) && in_i != out_i {
+                if isflag[in_i as usize] && !isflag[out_i as usize] {
+                    j = add_fsm_arc(&mut fsm, j, maxstate, EPSILON, out_i as i32, target_i, 0, 0);
+                    fsm[i].out = fsm[i].r#in;
+                    fsm[i].target = maxstate;
+                    maxstate += 1;
+                } else if isflag[out_i as usize] && !isflag[in_i as usize] {
+                    j = add_fsm_arc(
+                        &mut fsm,
+                        j,
+                        maxstate,
+                        out_i as i32,
+                        out_i as i32,
+                        target_i,
+                        0,
+                        0,
+                    );
+                    fsm[i].out = EPSILON as i16;
+                    fsm[i].target = maxstate;
+                    maxstate += 1;
+                } else if isflag[in_i as usize] && isflag[out_i as usize] {
+                    j = add_fsm_arc(
+                        &mut fsm,
+                        j,
+                        maxstate,
+                        out_i as i32,
+                        out_i as i32,
+                        target_i,
+                        0,
+                        0,
+                    );
+                    fsm[i].out = fsm[i].r#in;
+                    fsm[i].target = maxstate;
+                    maxstate += 1;
+                }
             }
         }
+        /* Add sentinel */
+        add_fsm_arc(&mut fsm, j, -1, -1, -1, -1, -1, -1);
     }
-    /* Add sentinel */
-    add_fsm_arc(&mut net.states, j, -1, -1, -1, -1, -1, -1);
     net.is_deterministic = Tern::Unk;
     net.is_minimized = Tern::Unk;
     fsm_topsort(fsm_minimize(opts, net))
@@ -843,6 +841,7 @@ mod tests {
     fn arc_labels(net: &Fsm) -> Vec<(String, String)> {
         let mut v: Vec<(String, String)> = net
             .states
+            .rows()
             .iter()
             .take_while(|l| l.state_no != -1)
             .filter(|l| l.target != -1)

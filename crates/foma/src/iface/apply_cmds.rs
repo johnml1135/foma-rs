@@ -494,16 +494,17 @@ fn shortest_acyclic_length(net: &crate::types::Fsm) -> i32 {
     let mut adj: Vec<Vec<i32>> = vec![Vec::new(); n];
     let mut is_final = vec![false; n];
     let mut start: Option<i32> = None;
+    let fsm = net.states.rows();
     let mut i = 0usize;
-    while net.states[i].state_no != -1 {
-        let s = net.states[i].state_no;
-        if net.states[i].start_state != 0 {
+    while fsm[i].state_no != -1 {
+        let s = fsm[i].state_no;
+        if fsm[i].start_state != 0 {
             start = Some(s);
         }
-        if net.states[i].final_state != 0 {
+        if fsm[i].final_state != 0 {
             is_final[s as usize] = true;
         }
-        let t = net.states[i].target;
+        let t = fsm[i].target;
         if t != -1 {
             adj[s as usize].push(t);
         }

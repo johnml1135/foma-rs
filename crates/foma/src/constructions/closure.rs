@@ -64,48 +64,51 @@ pub fn fsm_kleene_closure(opts: &FomaOptions, net: Box<Fsm>, operation: i32) -> 
     }
     let mut laststate = 0;
     let mut arccount = 1;
-    let mut i = 0usize;
-    while net.states[i].state_no != -1 {
-        let curr_state = net.states[i].state_no + 1;
-        let curr_target = if net.states[i].target == -1 {
-            -1
-        } else {
-            net.states[i].target + 1
-        };
-        if curr_target == -1 && net.states[i].final_state == 1 {
-            add_fsm_arc(&mut new_fsm, j, curr_state, EPSILON, EPSILON, 0, 1, 0);
+    {
+        let fsm = net.states.rows();
+        let mut i = 0usize;
+        while fsm[i].state_no != -1 {
+            let curr_state = fsm[i].state_no + 1;
+            let curr_target = if fsm[i].target == -1 {
+                -1
+            } else {
+                fsm[i].target + 1
+            };
+            if curr_target == -1 && fsm[i].final_state == 1 {
+                add_fsm_arc(&mut new_fsm, j, curr_state, EPSILON, EPSILON, 0, 1, 0);
+                j += 1;
+                arccount += 1;
+                i += 1;
+                laststate = curr_state;
+                continue;
+            }
+            if curr_state != laststate && fsm[i].final_state == 1 {
+                arccount += 1;
+                add_fsm_arc(&mut new_fsm, j, curr_state, EPSILON, EPSILON, 0, 1, 0);
+                j += 1;
+            }
+            let (line_in, line_out, final_state) = (
+                fsm[i].r#in as i32,
+                fsm[i].out as i32,
+                fsm[i].final_state as i32,
+            );
+            add_fsm_arc(
+                &mut new_fsm,
+                j,
+                curr_state,
+                line_in,
+                line_out,
+                curr_target,
+                final_state,
+                0,
+            );
             j += 1;
-            arccount += 1;
+            if curr_target != -1 {
+                arccount += 1;
+            }
             i += 1;
             laststate = curr_state;
-            continue;
         }
-        if curr_state != laststate && net.states[i].final_state == 1 {
-            arccount += 1;
-            add_fsm_arc(&mut new_fsm, j, curr_state, EPSILON, EPSILON, 0, 1, 0);
-            j += 1;
-        }
-        let (line_in, line_out, final_state) = (
-            net.states[i].r#in as i32,
-            net.states[i].out as i32,
-            net.states[i].final_state as i32,
-        );
-        add_fsm_arc(
-            &mut new_fsm,
-            j,
-            curr_state,
-            line_in,
-            line_out,
-            curr_target,
-            final_state,
-            0,
-        );
-        j += 1;
-        if curr_target != -1 {
-            arccount += 1;
-        }
-        i += 1;
-        laststate = curr_state;
     }
     add_fsm_arc(&mut new_fsm, j, -1, -1, -1, -1, -1, -1);
     j += 1;

@@ -350,65 +350,72 @@ pub(crate) fn rebuild_machine(m: &mut Minimizer, net: Box<Fsm>) -> Box<Fsm> {
         myp = m.phead[pi].next;
     }
 
-    let mut i: usize = 0;
-    while net.states[i].state_no != -1 {
-        let thise = net.states[i].state_no as usize; /* thise = E+state_no */
-        let g = m.e[thise].group;
-        if m.phead[g].first_e == Some(thise) {
-            new_linecount += 1;
-            if net.states[i].start_state == 1 {
-                m.phead[g].t_count = 0;
-                m.phead[g].count = 1;
-            } else if m.phead[g].count == 0 {
-                m.phead[g].t_count = group_num;
-                group_num += 1;
-                m.phead[g].count = 1;
-            }
-        }
-        i += 1;
-    }
-
+    /* the reads below index the line table and the two add_fsm_arc calls plus
+    the truncate rewrite it in place, so one rows_mut guard covers the whole
+    rewrite; it drops before the net.linecount/arccount/statecount writes */
     let mut j: i32 = 0;
-    let mut i: usize = 0;
-    while net.states[i].state_no != -1 {
-        let thise = net.states[i].state_no as usize;
-        let g = m.e[thise].group;
-        if m.phead[g].first_e == Some(thise) {
-            let source = m.phead[g].t_count;
-            let target = if net.states[i].target == -1 {
-                -1
-            } else {
-                m.phead[m.e[net.states[i].target as usize].group].t_count
-            };
-            let r#in = net.states[i].r#in as i32;
-            let out = net.states[i].out as i32;
-            let start_state = net.states[i].start_state as i32;
-            let final_flag = m.finals[thise] as i32;
-            add_fsm_arc(
-                &mut net.states,
-                j,
-                source,
-                r#in,
-                out,
-                target,
-                final_flag,
-                start_state,
-            );
-            /* C reads (fsm+i)->target again AFTER the write to (fsm+j); when
-            j == i the rewritten target's -1-ness matches the original's */
-            arccount = if net.states[i].target == -1 {
-                arccount
-            } else {
-                arccount + 1
-            };
-            j += 1;
-        }
-        i += 1;
-    }
+    {
+        let mut fsm = net.states.rows_mut();
 
-    add_fsm_arc(&mut net.states, j, -1, -1, -1, -1, -1, -1);
-    /* truncate to (new_linecount + 1) lines (the +1 counts the sentinel) */
-    net.states.truncate((new_linecount + 1) as usize);
+        let mut i: usize = 0;
+        while fsm[i].state_no != -1 {
+            let thise = fsm[i].state_no as usize; /* thise = E+state_no */
+            let g = m.e[thise].group;
+            if m.phead[g].first_e == Some(thise) {
+                new_linecount += 1;
+                if fsm[i].start_state == 1 {
+                    m.phead[g].t_count = 0;
+                    m.phead[g].count = 1;
+                } else if m.phead[g].count == 0 {
+                    m.phead[g].t_count = group_num;
+                    group_num += 1;
+                    m.phead[g].count = 1;
+                }
+            }
+            i += 1;
+        }
+
+        let mut i: usize = 0;
+        while fsm[i].state_no != -1 {
+            let thise = fsm[i].state_no as usize;
+            let g = m.e[thise].group;
+            if m.phead[g].first_e == Some(thise) {
+                let source = m.phead[g].t_count;
+                let target = if fsm[i].target == -1 {
+                    -1
+                } else {
+                    m.phead[m.e[fsm[i].target as usize].group].t_count
+                };
+                let r#in = fsm[i].r#in as i32;
+                let out = fsm[i].out as i32;
+                let start_state = fsm[i].start_state as i32;
+                let final_flag = m.finals[thise] as i32;
+                add_fsm_arc(
+                    &mut fsm,
+                    j,
+                    source,
+                    r#in,
+                    out,
+                    target,
+                    final_flag,
+                    start_state,
+                );
+                /* C reads (fsm+i)->target again AFTER the write to (fsm+j); when
+                j == i the rewritten target's -1-ness matches the original's */
+                arccount = if fsm[i].target == -1 {
+                    arccount
+                } else {
+                    arccount + 1
+                };
+                j += 1;
+            }
+            i += 1;
+        }
+
+        add_fsm_arc(&mut fsm, j, -1, -1, -1, -1, -1, -1);
+        /* truncate to (new_linecount + 1) lines (the +1 counts the sentinel) */
+        fsm.truncate((new_linecount + 1) as usize);
+    }
     net.linecount = j + 1;
     net.arccount = arccount;
     net.statecount = m.total_states;
@@ -731,14 +738,16 @@ pub(crate) fn generate_inverse(m: &mut Minimizer, net: &Fsm) {
     m.trans_array_minimize = vec![TransArray::default(); net.statecount as usize];
     m.trans_list_minimize = vec![TransList::default(); net.arccount as usize];
 
+    let fsm = net.states.rows();
+
     /* Figure out the number of transitions each one has */
     let mut i: usize = 0;
-    while net.states[i].state_no != -1 {
-        if net.states[i].target == -1 {
+    while fsm[i].state_no != -1 {
+        if fsm[i].target == -1 {
             i += 1;
             continue;
         }
-        let target = net.states[i].target as usize;
+        let target = fsm[i].target as usize;
         m.e[target].inv_count += 1;
         let g = m.e[target].group;
         m.phead[g].inv_count += 1;
@@ -753,15 +762,14 @@ pub(crate) fn generate_inverse(m: &mut Minimizer, net: &Fsm) {
     }
 
     let mut i: usize = 0;
-    while net.states[i].state_no != -1 {
-        if net.states[i].target == -1 {
+    while fsm[i].state_no != -1 {
+        if fsm[i].target == -1 {
             i += 1;
             continue;
         }
-        let symbol =
-            symbol_pair_to_single_symbol(m, net.states[i].r#in as i32, net.states[i].out as i32);
-        let source = net.states[i].state_no;
-        let target = net.states[i].target as usize;
+        let symbol = symbol_pair_to_single_symbol(m, fsm[i].r#in as i32, fsm[i].out as i32);
+        let source = fsm[i].state_no;
+        let target = fsm[i].target as usize;
         let slot = m.trans_array_minimize[target].transitions
             + m.trans_array_minimize[target].tail as usize;
         m.trans_list_minimize[slot].inout = symbol;
@@ -813,16 +821,17 @@ pub(crate) fn sigma_to_pairs(m: &mut Minimizer, net: &mut Fsm) {
     let mut x: i32 = 0;
     m.num_finals = 0;
     net.arity = 1;
+    let fsm = net.states.rows();
     let mut i: usize = 0;
-    while net.states[i].state_no != -1 {
-        let sno = net.states[i].state_no as usize;
+    while fsm[i].state_no != -1 {
+        let sno = fsm[i].state_no as usize;
         /* C: finals[state_no] != 1 on a _Bool */
-        if net.states[i].final_state == 1 && !m.finals[sno] {
+        if fsm[i].final_state == 1 && !m.finals[sno] {
             m.num_finals += 1;
             m.finals[sno] = true;
         }
-        let y = net.states[i].r#in as i32;
-        let z = net.states[i].out as i32;
+        let y = fsm[i].r#in as i32;
+        let z = fsm[i].out as i32;
         if y != z || y == UNKNOWN || z == UNKNOWN {
             net.arity = 2;
         }
@@ -929,6 +938,7 @@ mod tests {
         /* exactly one structural final state (the merged {1,2}) ... */
         let finals: Vec<i32> = m
             .states
+            .rows()
             .iter()
             .filter(|s| s.state_no != -1 && s.final_state != 0)
             .map(|s| s.state_no)
@@ -986,8 +996,11 @@ mod tests {
         fsm_construct_add_arc(&mut hc, 0, 1, "a", "a");
         fsm_construct_set_final(&mut hc, 1);
         let mut net = fsm_construct_done(hc);
-        for s in net.states.iter_mut() {
-            s.final_state = 0; /* strip all finals -> finalcount 0 after fsm_count */
+        {
+            let mut fsm = net.states.rows_mut();
+            for s in fsm.iter_mut() {
+                s.final_state = 0; /* strip all finals -> finalcount 0 after fsm_count */
+            }
         }
         let e = fsm_minimize_hop(net);
         assert_eq!(e.statecount, 1);
@@ -1112,7 +1125,7 @@ mod tests {
         assert_eq!(m.epsilon_symbol, -1);
         assert_eq!(m.num_finals, 1);
         assert!(m.finals[1] && !m.finals[0]);
-        for st in net.states.iter() {
+        for st in net.states.rows().iter() {
             let (i, o) = (st.r#in as i32, st.out as i32);
             if i < 0 || o < 0 {
                 continue;

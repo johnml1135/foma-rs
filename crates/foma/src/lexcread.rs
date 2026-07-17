@@ -450,7 +450,7 @@ fn lexc_add_network(lx: &mut LexcCompiler) {
     /* Renum arcs — net->states is mutated in place */
     let mut maxstate = 0i32;
     {
-        let fsm = &mut net.states;
+        let mut fsm = net.states.rows_mut();
         let mut i = 0usize;
         while fsm[i].state_no != -1 {
             if fsm[i].r#in != -1 {
@@ -527,23 +527,23 @@ fn lexc_add_network(lx: &mut LexcCompiler) {
     }
 
     {
+        let fsm = net.states.rows();
         let mut i = 0usize;
-        while net.states[i].state_no != -1 {
-            if net.states[i].target != -1 {
-                let newstate = slist[net.states[i].state_no as usize];
+        while fsm[i].state_no != -1 {
+            if fsm[i].target != -1 {
+                let newstate = slist[fsm[i].state_no as usize];
                 let newtrans = lx.trans_arena.len();
                 lx.trans_arena.push(Trans {
-                    r#in: net.states[i].r#in,
-                    out: net.states[i].out,
-                    target: slist[net.states[i].target as usize],
+                    r#in: fsm[i].r#in,
+                    out: fsm[i].out,
+                    target: slist[fsm[i].target as usize],
                     next: lx.state_arena[newstate].trans,
                 });
                 lx.state_arena[newstate].trans = Some(newtrans);
                 /* Add new symbols for @:@ transitions */
                 /* TODO: make this work for ?: or :? trans as well */
                 if unknown_symbols == 1
-                    && (net.states[i].r#in as i32 == IDENTITY
-                        || net.states[i].out as i32 == IDENTITY)
+                    && (fsm[i].r#in as i32 == IDENTITY || fsm[i].out as i32 == IDENTITY)
                 {
                     let mut j = 0usize;
                     while unk[j] != 0 {
@@ -551,7 +551,7 @@ fn lexc_add_network(lx: &mut LexcCompiler) {
                         lx.trans_arena.push(Trans {
                             r#in: unk[j] as i16,
                             out: unk[j] as i16,
-                            target: slist[net.states[i].target as usize],
+                            target: slist[fsm[i].target as usize],
                             next: lx.state_arena[newstate].trans,
                         });
                         lx.state_arena[newstate].trans = Some(nt);
@@ -559,7 +559,7 @@ fn lexc_add_network(lx: &mut LexcCompiler) {
                     }
                 }
             }
-            finals[net.states[i].state_no as usize] = net.states[i].final_state as i32;
+            finals[fsm[i].state_no as usize] = fsm[i].final_state as i32;
             i += 1;
         }
     }

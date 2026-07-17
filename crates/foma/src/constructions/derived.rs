@@ -143,7 +143,7 @@ pub fn fsm_symbol(symbol: &str) -> Box<Fsm> {
         /* Epsilon */
         sigma_add_special(EPSILON, &mut net.sigma);
         /* C: malloc(2 lines), uninitialized; written by add_fsm_arc below */
-        net.states = vec![
+        let mut v = vec![
             FsmState {
                 state_no: 0,
                 r#in: 0,
@@ -153,10 +153,10 @@ pub fn fsm_symbol(symbol: &str) -> Box<Fsm> {
                 start_state: 0,
             };
             2
-        ]
-        .into();
-        add_fsm_arc(&mut net.states, 0, 0, -1, -1, -1, 1, 1);
-        add_fsm_arc(&mut net.states, 1, -1, -1, -1, -1, -1, -1);
+        ];
+        add_fsm_arc(&mut v, 0, 0, -1, -1, -1, 1, 1);
+        add_fsm_arc(&mut v, 1, -1, -1, -1, -1, -1, -1);
+        net.states = v.into();
         net.arccount = 0;
         net.statecount = 1;
         net.linecount = 1;
@@ -171,7 +171,7 @@ pub fn fsm_symbol(symbol: &str) -> Box<Fsm> {
             sigma_add(symbol, &mut net.sigma)
         };
         /* C: malloc(3 lines), uninitialized; written by add_fsm_arc below */
-        net.states = vec![
+        let mut v = vec![
             FsmState {
                 state_no: 0,
                 r#in: 0,
@@ -181,11 +181,11 @@ pub fn fsm_symbol(symbol: &str) -> Box<Fsm> {
                 start_state: 0,
             };
             3
-        ]
-        .into();
-        add_fsm_arc(&mut net.states, 0, 0, symbol_no, symbol_no, 1, 0, 1);
-        add_fsm_arc(&mut net.states, 1, 1, -1, -1, -1, 1, 0);
-        add_fsm_arc(&mut net.states, 2, -1, -1, -1, -1, -1, -1);
+        ];
+        add_fsm_arc(&mut v, 0, 0, symbol_no, symbol_no, 1, 0, 1);
+        add_fsm_arc(&mut v, 1, 1, -1, -1, -1, 1, 0);
+        add_fsm_arc(&mut v, 2, -1, -1, -1, -1, -1, -1);
+        net.states = v.into();
         net.arity = 1;
         net.pathcount = 1;
         net.arccount = 1;
@@ -366,15 +366,18 @@ pub fn fsm_substitute_symbol(net: Box<Fsm>, original: &str, substitute: &str) ->
             None => sigma_add(substitute, &mut net.sigma),
         }
     };
-    let mut i = 0usize;
-    while net.states[i].state_no != -1 {
-        if net.states[i].r#in as i32 == o {
-            net.states[i].r#in = s as i16;
+    {
+        let mut fsm = net.states.rows_mut();
+        let mut i = 0usize;
+        while fsm[i].state_no != -1 {
+            if fsm[i].r#in as i32 == o {
+                fsm[i].r#in = s as i16;
+            }
+            if fsm[i].out as i32 == o {
+                fsm[i].out = s as i16;
+            }
+            i += 1;
         }
-        if net.states[i].out as i32 == o {
-            net.states[i].out = s as i16;
-        }
-        i += 1;
     }
     sigma_remove(original, &mut net.sigma);
     sigma_sort(&mut net);
@@ -466,8 +469,9 @@ pub fn fsm_unflatten(
 
     let mut builder = fsm_state_init(sigma_max(&net.sigma));
 
-    let point_a = init_state_pointers(&net.states);
+    let point_a = init_state_pointers(&net.states.rows());
 
+    let fsm = net.states.rows();
     while !int_stack.is_empty() {
         /* Get a pair of states to examine */
 
@@ -488,19 +492,19 @@ pub fn fsm_unflatten(
         fsm_state_set_current_state(&mut builder, current_state, current_final, current_start);
 
         let mut ei = point_a[a as usize].transitions;
-        while net.states[ei].state_no == a {
-            if net.states[ei].target == -1 {
+        while fsm[ei].state_no == a {
+            if fsm[ei].target == -1 {
                 ei += 1;
                 continue;
             }
-            let b = net.states[ei].target;
+            let b = fsm[ei].target;
             let mut oi = point_a[b as usize].transitions;
-            while net.states[oi].state_no == b {
-                if net.states[oi].target == -1 {
+            while fsm[oi].state_no == b {
+                if fsm[oi].target == -1 {
                     oi += 1;
                     continue;
                 }
-                let odd_target = net.states[oi].target;
+                let odd_target = fsm[oi].target;
                 let target_number = match triplet_hash_find(&th, odd_target, odd_target, 0) {
                     Some(n) => n,
                     None => {
@@ -510,8 +514,8 @@ pub fn fsm_unflatten(
                         triplet_hash_insert(&mut th, odd_target, odd_target, 0)
                     }
                 };
-                let mut r#in = net.states[ei].r#in as i32;
-                let mut out = net.states[oi].r#in as i32;
+                let mut r#in = fsm[ei].r#in as i32;
+                let mut out = fsm[oi].r#in as i32;
                 if out == repeat {
                     out = r#in;
                 } else if r#in == IDENTITY || out == IDENTITY {
@@ -539,6 +543,7 @@ pub fn fsm_unflatten(
         }
         fsm_state_end_state(&mut builder);
     }
+    drop(fsm);
     /* free(net->states) */
     net.states = Vec::new().into();
     fsm_state_close(&mut builder, &mut net);
@@ -577,9 +582,11 @@ pub fn fsm_shuffle(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
 
     let mut builder = fsm_state_init(sigma_max(&net1.sigma));
 
-    let point_a = init_state_pointers(&net1.states);
-    let point_b = init_state_pointers(&net2.states);
+    let point_a = init_state_pointers(&net1.states.rows());
+    let point_b = init_state_pointers(&net2.states.rows());
 
+    let fsm1 = net1.states.rows();
+    let fsm2 = net2.states.rows();
     while !int_stack.is_empty() {
         /* Get a pair of states to examine */
 
@@ -606,12 +613,12 @@ pub fn fsm_shuffle(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
 
         /* Follow A, B stays */
         let mut ai = point_a[a as usize].transitions;
-        while net1.states[ai].state_no == a {
-            if net1.states[ai].target == -1 {
+        while fsm1[ai].state_no == a {
+            if fsm1[ai].target == -1 {
                 ai += 1;
                 continue;
             }
-            let atarget = net1.states[ai].target;
+            let atarget = fsm1[ai].target;
             let target_number = match triplet_hash_find(&th, atarget, b, 0) {
                 Some(n) => n,
                 None => {
@@ -621,7 +628,7 @@ pub fn fsm_shuffle(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
                     triplet_hash_insert(&mut th, atarget, b, 0)
                 }
             };
-            let (ain, aout) = (net1.states[ai].r#in as i32, net1.states[ai].out as i32);
+            let (ain, aout) = (fsm1[ai].r#in as i32, fsm1[ai].out as i32);
             fsm_state_add_arc(
                 &mut builder,
                 current_state,
@@ -636,12 +643,12 @@ pub fn fsm_shuffle(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
 
         /* Follow B, A stays */
         let mut bi = point_b[b as usize].transitions;
-        while net2.states[bi].state_no == b {
-            if net2.states[bi].target == -1 {
+        while fsm2[bi].state_no == b {
+            if fsm2[bi].target == -1 {
                 bi += 1;
                 continue;
             }
-            let btarget = net2.states[bi].target;
+            let btarget = fsm2[bi].target;
             let target_number = match triplet_hash_find(&th, a, btarget, 0) {
                 Some(n) => n,
                 None => {
@@ -651,7 +658,7 @@ pub fn fsm_shuffle(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
                     triplet_hash_insert(&mut th, a, btarget, 0)
                 }
             };
-            let (bin, bout) = (net2.states[bi].r#in as i32, net2.states[bi].out as i32);
+            let (bin, bout) = (fsm2[bi].r#in as i32, fsm2[bi].out as i32);
             fsm_state_add_arc(
                 &mut builder,
                 current_state,
@@ -667,6 +674,8 @@ pub fn fsm_shuffle(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
         /* Check arctrack */
         fsm_state_end_state(&mut builder);
     }
+    drop(fsm1);
+    drop(fsm2);
 
     /* free(net1->states) */
     net1.states = Vec::new().into();
@@ -703,9 +712,11 @@ pub fn fsm_equivalent(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> boo
     let mut th = triplet_hash_init();
     triplet_hash_insert(&mut th, 0, 0, 0);
 
-    let point_a = init_state_pointers(&net1.states);
-    let point_b = init_state_pointers(&net2.states);
+    let point_a = init_state_pointers(&net1.states.rows());
+    let point_b = init_state_pointers(&net2.states.rows());
 
+    let fsm1 = net1.states.rows();
+    let fsm2 = net2.states.rows();
     /* C: goto not_equivalent — labelled block with the same target */
     'not_equivalent: {
         while !int_stack.is_empty() {
@@ -719,21 +730,19 @@ pub fn fsm_equivalent(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> boo
             }
             /* Check that all arcs in A have matching arc in B, push new state pair on stack */
             let mut ai = point_a[a as usize].transitions;
-            while net1.states[ai].state_no == a {
-                if net1.states[ai].target == -1 {
+            while fsm1[ai].state_no == a {
+                if fsm1[ai].target == -1 {
                     break;
                 }
                 let mut matching_arc = 0;
                 let mut bi = point_b[b as usize].transitions;
-                while net2.states[bi].state_no == b {
-                    if net2.states[bi].target == -1 {
+                while fsm2[bi].state_no == b {
+                    if fsm2[bi].target == -1 {
                         break;
                     }
-                    if net1.states[ai].r#in == net2.states[bi].r#in
-                        && net1.states[ai].out == net2.states[bi].out
-                    {
+                    if fsm1[ai].r#in == fsm2[bi].r#in && fsm1[ai].out == fsm2[bi].out {
                         matching_arc = 1;
-                        let (atarget, btarget) = (net1.states[ai].target, net2.states[bi].target);
+                        let (atarget, btarget) = (fsm1[ai].target, fsm2[bi].target);
                         if triplet_hash_find(&th, atarget, btarget, 0).is_none() {
                             /* STACK_2_PUSH(machine_b->target, machine_a->target) */
                             int_stack.push(btarget);
@@ -750,16 +759,14 @@ pub fn fsm_equivalent(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> boo
                 ai += 1;
             }
             let mut bi = point_b[b as usize].transitions;
-            while net2.states[bi].state_no == b {
-                if net2.states[bi].target == -1 {
+            while fsm2[bi].state_no == b {
+                if fsm2[bi].target == -1 {
                     break;
                 }
                 let mut matching_arc = 0;
                 let mut ai = point_a[a as usize].transitions;
-                while net1.states[ai].state_no == a {
-                    if net1.states[ai].r#in == net2.states[bi].r#in
-                        && net1.states[ai].out == net2.states[bi].out
-                    {
+                while fsm1[ai].state_no == a {
+                    if fsm1[ai].r#in == fsm2[bi].r#in && fsm1[ai].out == fsm2[bi].out {
                         matching_arc = 1;
                         break;
                     }
@@ -773,6 +780,8 @@ pub fn fsm_equivalent(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> boo
         }
         equivalent = true;
     }
+    drop(fsm1);
+    drop(fsm2);
     fsm_destroy(net1);
     fsm_destroy(net2);
     /* free(point_a); free(point_b) */
@@ -803,7 +812,7 @@ pub fn fsm_universal() -> Box<Fsm> {
     let mut net = fsm_create("");
     fsm_update_flags(&mut net, YES, YES, YES, YES, NO, NO);
     /* C: malloc(2 lines), uninitialized; written by add_fsm_arc below */
-    net.states = vec![
+    let mut v = vec![
         FsmState {
             state_no: 0,
             r#in: 0,
@@ -813,11 +822,11 @@ pub fn fsm_universal() -> Box<Fsm> {
             start_state: 0,
         };
         2
-    ]
-    .into();
+    ];
     let s = sigma_add_special(IDENTITY, &mut net.sigma);
-    add_fsm_arc(&mut net.states, 0, 0, s, s, 0, 1, 1);
-    add_fsm_arc(&mut net.states, 1, -1, -1, -1, -1, -1, -1);
+    add_fsm_arc(&mut v, 0, 0, s, s, 0, 1, 1);
+    add_fsm_arc(&mut v, 1, -1, -1, -1, -1, -1, -1);
+    net.states = v.into();
     net.arccount = 1;
     net.statecount = 1;
     net.linecount = 2;
@@ -1187,13 +1196,14 @@ pub fn fsm_ignore(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>, operation:
     let mut splices = 0;
     let mut j: i32 = 0;
     let mut i = 0usize;
-    while net1.states[i].state_no != -1 {
-        if handled_states1[net1.states[i].state_no as usize] == 0 {
+    let fsm1 = net1.states.rows();
+    while fsm1[i].state_no != -1 {
+        if handled_states1[fsm1[i].state_no as usize] == 0 {
             let target = start_splice + splices * splice_size;
             let (state_no, final_state, start_state) = (
-                net1.states[i].state_no,
-                net1.states[i].final_state as i32,
-                net1.states[i].start_state as i32,
+                fsm1[i].state_no,
+                fsm1[i].final_state as i32,
+                fsm1[i].start_state as i32,
             );
             add_fsm_arc(
                 &mut new_fsm,
@@ -1209,12 +1219,9 @@ pub fn fsm_ignore(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>, operation:
             handled_states1[state_no as usize] = 1;
             j += 1;
             splices += 1;
-            if net1.states[i].r#in != -1 {
-                let (line_in, line_out, tgt) = (
-                    net1.states[i].r#in as i32,
-                    net1.states[i].out as i32,
-                    net1.states[i].target,
-                );
+            if fsm1[i].r#in != -1 {
+                let (line_in, line_out, tgt) =
+                    (fsm1[i].r#in as i32, fsm1[i].out as i32, fsm1[i].target);
                 add_fsm_arc(
                     &mut new_fsm,
                     j,
@@ -1229,12 +1236,12 @@ pub fn fsm_ignore(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>, operation:
             }
         } else {
             let (state_no, line_in, line_out, tgt, final_state, start_state) = (
-                net1.states[i].state_no,
-                net1.states[i].r#in as i32,
-                net1.states[i].out as i32,
-                net1.states[i].target,
-                net1.states[i].final_state as i32,
-                net1.states[i].start_state as i32,
+                fsm1[i].state_no,
+                fsm1[i].r#in as i32,
+                fsm1[i].out as i32,
+                fsm1[i].target,
+                fsm1[i].final_state as i32,
+                fsm1[i].start_state as i32,
             );
             add_fsm_arc(
                 &mut new_fsm,
@@ -1250,12 +1257,14 @@ pub fn fsm_ignore(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>, operation:
         }
         i += 1;
     }
+    drop(fsm1);
 
     /* Add a sequence of fsm2s at the end, with arcs back to the appropriate states */
 
     let mut state_add_counter = start_splice;
 
     let mut returns = 0;
+    let fsm2 = net2.states.rows();
     while splices > 0 {
         /* Zero handled return arc states */
 
@@ -1264,11 +1273,9 @@ pub fn fsm_ignore(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>, operation:
         }
 
         let mut i = 0usize;
-        while net2.states[i].state_no != -1 {
-            if net2.states[i].final_state == 1
-                && handled_states2[net2.states[i].state_no as usize] == 0
-            {
-                let state_no = net2.states[i].state_no;
+        while fsm2[i].state_no != -1 {
+            if fsm2[i].final_state == 1 && handled_states2[fsm2[i].state_no as usize] == 0 {
+                let state_no = fsm2[i].state_no;
                 add_fsm_arc(
                     &mut new_fsm,
                     j,
@@ -1281,12 +1288,9 @@ pub fn fsm_ignore(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>, operation:
                 );
                 j += 1;
                 handled_states2[state_no as usize] = 1;
-                if net2.states[i].target != -1 {
-                    let (line_in, line_out, tgt) = (
-                        net2.states[i].r#in as i32,
-                        net2.states[i].out as i32,
-                        net2.states[i].target,
-                    );
+                if fsm2[i].target != -1 {
+                    let (line_in, line_out, tgt) =
+                        (fsm2[i].r#in as i32, fsm2[i].out as i32, fsm2[i].target);
                     add_fsm_arc(
                         &mut new_fsm,
                         j,
@@ -1305,10 +1309,10 @@ pub fn fsm_ignore(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>, operation:
                 // number. C shifted unconditionally; a -1 target cannot occur for a
                 // minimized net2, but a non-minimized net2 would be corrupted.
                 let (state_no, line_in, line_out, tgt) = (
-                    net2.states[i].state_no,
-                    net2.states[i].r#in as i32,
-                    net2.states[i].out as i32,
-                    net2.states[i].target,
+                    fsm2[i].state_no,
+                    fsm2[i].r#in as i32,
+                    fsm2[i].out as i32,
+                    fsm2[i].target,
                 );
                 let shifted_tgt = if tgt == -1 {
                     -1
@@ -1333,6 +1337,7 @@ pub fn fsm_ignore(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>, operation:
         splices -= 1;
         returns += 1;
     }
+    drop(fsm2);
 
     add_fsm_arc(&mut new_fsm, j, -1, -1, -1, -1, -1, -1);
     /* free(handled_states1); free(handled_states2); free(return_state) */
@@ -1391,51 +1396,54 @@ pub fn fsm_compact(net: &mut Fsm) {
 
     let mut prevstate = 0;
 
-    let mut i = 0usize;
-    loop {
-        if net.states[i].state_no != prevstate {
-            let mut j: i32 = 3;
-            while j <= numsymbols {
-                if checktable[j as usize].state_no != prevstate
-                    && checktable[IDENTITY as usize].state_no != prevstate
-                {
+    {
+        let fsm = net.states.rows();
+        let mut i = 0usize;
+        loop {
+            if fsm[i].state_no != prevstate {
+                let mut j: i32 = 3;
+                while j <= numsymbols {
+                    if checktable[j as usize].state_no != prevstate
+                        && checktable[IDENTITY as usize].state_no != prevstate
+                    {
+                        j += 1;
+                        continue;
+                    }
+                    if checktable[j as usize].target == checktable[IDENTITY as usize].target
+                        && checktable[j as usize].state_no == checktable[IDENTITY as usize].state_no
+                    {
+                        j += 1;
+                        continue;
+                    }
+                    potential[j as usize] = false;
                     j += 1;
-                    continue;
                 }
-                if checktable[j as usize].target == checktable[IDENTITY as usize].target
-                    && checktable[j as usize].state_no == checktable[IDENTITY as usize].state_no
-                {
-                    j += 1;
-                    continue;
+            }
+
+            if fsm[i].state_no == -1 {
+                break;
+            }
+
+            let r#in = fsm[i].r#in as i32;
+            let out = fsm[i].out as i32;
+            let state = fsm[i].state_no;
+            let target = fsm[i].target;
+
+            if r#in != -1 && out != -1 {
+                if (r#in == out && r#in > 2) || r#in == IDENTITY {
+                    checktable[r#in as usize].state_no = state;
+                    checktable[r#in as usize].target = target;
                 }
-                potential[j as usize] = false;
-                j += 1;
+                if r#in != out && r#in > 2 {
+                    potential[r#in as usize] = false;
+                }
+                if r#in != out && out > 2 {
+                    potential[out as usize] = false;
+                }
             }
+            prevstate = state;
+            i += 1;
         }
-
-        if net.states[i].state_no == -1 {
-            break;
-        }
-
-        let r#in = net.states[i].r#in as i32;
-        let out = net.states[i].out as i32;
-        let state = net.states[i].state_no;
-        let target = net.states[i].target;
-
-        if r#in != -1 && out != -1 {
-            if (r#in == out && r#in > 2) || r#in == IDENTITY {
-                checktable[r#in as usize].state_no = state;
-                checktable[r#in as usize].target = target;
-            }
-            if r#in != out && r#in > 2 {
-                potential[r#in as usize] = false;
-            }
-            if r#in != out && out > 2 {
-                potential[out as usize] = false;
-            }
-        }
-        prevstate = state;
-        i += 1;
     }
     let mut removable = 0;
     let mut i: i32 = 3;
@@ -1451,20 +1459,53 @@ pub fn fsm_compact(net: &mut Fsm) {
         drop(checktable);
         return;
     }
-    let mut i = 0usize;
-    let mut j: i32 = 0;
-    loop {
-        let r#in = net.states[i].r#in as i32;
+    {
+        let mut fsm = net.states.rows_mut();
+        let mut i = 0usize;
+        let mut j: i32 = 0;
+        loop {
+            let r#in = fsm[i].r#in as i32;
 
-        let (state_no, out, target, final_state, start_state) = (
-            net.states[i].state_no,
-            net.states[i].out as i32,
-            net.states[i].target,
-            net.states[i].final_state as i32,
-            net.states[i].start_state as i32,
+            let (state_no, out, target, final_state, start_state) = (
+                fsm[i].state_no,
+                fsm[i].out as i32,
+                fsm[i].target,
+                fsm[i].final_state as i32,
+                fsm[i].start_state as i32,
+            );
+            add_fsm_arc(
+                &mut fsm,
+                j,
+                state_no,
+                r#in,
+                out,
+                target,
+                final_state,
+                start_state,
+            );
+            if r#in == -1 {
+                i += 1;
+                j += 1;
+            } else if potential[r#in as usize] && r#in > 2 {
+                i += 1;
+            } else {
+                i += 1;
+                j += 1;
+            }
+            if fsm[i].state_no == -1 {
+                break;
+            }
+        }
+        let (state_no, r#in, out, target, final_state, start_state) = (
+            fsm[i].state_no,
+            fsm[i].r#in as i32,
+            fsm[i].out as i32,
+            fsm[i].target,
+            fsm[i].final_state as i32,
+            fsm[i].start_state as i32,
         );
         add_fsm_arc(
-            &mut net.states,
+            &mut fsm,
             j,
             state_no,
             r#in,
@@ -1473,37 +1514,7 @@ pub fn fsm_compact(net: &mut Fsm) {
             final_state,
             start_state,
         );
-        if r#in == -1 {
-            i += 1;
-            j += 1;
-        } else if potential[r#in as usize] && r#in > 2 {
-            i += 1;
-        } else {
-            i += 1;
-            j += 1;
-        }
-        if net.states[i].state_no == -1 {
-            break;
-        }
     }
-    let (state_no, r#in, out, target, final_state, start_state) = (
-        net.states[i].state_no,
-        net.states[i].r#in as i32,
-        net.states[i].out as i32,
-        net.states[i].target,
-        net.states[i].final_state as i32,
-        net.states[i].start_state as i32,
-    );
-    add_fsm_arc(
-        &mut net.states,
-        j,
-        state_no,
-        r#in,
-        out,
-        target,
-        final_state,
-        start_state,
-    );
 
     /* drop every alphabet entry with number > 2 flagged in `potential` */
     net.sigma
@@ -1522,16 +1533,17 @@ pub fn fsm_symbol_occurs(net: &Fsm, symbol: &str, side: Sides) -> bool {
     let Some(sym) = sigma_find(symbol, &net.sigma) else {
         return false;
     };
+    let fsm = net.states.rows();
     let mut i = 0usize;
-    while net.states[i].state_no != -1 {
-        if side == Sides::UPPER && net.states[i].r#in as i32 == sym {
+    while fsm[i].state_no != -1 {
+        if side == Sides::UPPER && fsm[i].r#in as i32 == sym {
             return true;
         }
-        if side == Sides::LOWER && net.states[i].out as i32 == sym {
+        if side == Sides::LOWER && fsm[i].out as i32 == sym {
             return true;
         }
         if side == (Sides::UPPER | Sides::LOWER)
-            && (net.states[i].r#in as i32 == sym || net.states[i].out as i32 == sym)
+            && (fsm[i].r#in as i32 == sym || fsm[i].out as i32 == sym)
         {
             return true;
         }
@@ -1855,11 +1867,13 @@ pub fn fsm_left_rewr(opts: &FomaOptions, net: Box<Fsm>, rewr: Box<Fsm>) -> Box<F
     in/out are -1) has nothing to rewrite with — return net unchanged instead of
     relabelling on a sentinel symbol and silently building a wrong machine (C read
     states[0] unconditionally). */
-    if rewr.states.is_empty() || rewr.states[0].r#in < 0 || rewr.states[0].out < 0 {
-        return net;
-    }
-    let relabelin = rewr.states[0].r#in as i32;
-    let relabelout = rewr.states[0].out as i32;
+    let (relabelin, relabelout) = {
+        let fsm = rewr.states.rows();
+        if fsm.is_empty() || fsm[0].r#in < 0 || fsm[0].out < 0 {
+            return net;
+        }
+        (fsm[0].r#in as i32, fsm[0].out as i32)
+    };
 
     let mut inh = fsm_read_init(net);
     let sinkstate = fsm_get_num_states(&inh);

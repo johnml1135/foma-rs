@@ -397,6 +397,10 @@ pub struct FsmReadHandle {
     pub sigma_list_size: i32,
     // DEVIATION from C (borrowed pointer — the handle never owns the net; see fsm-read-done sem)
     pub net: Option<Box<Fsm>>,
+    /// A materialized flat snapshot of the net's compressed line table, built
+    /// once at `fsm_read_init`; the arc accessors index this by cursor rather
+    /// than re-materializing the [`crate::line_table::LineTable`] per call.
+    pub rows: Vec<FsmState>,
     /// Per-state byte table: bit 0 = initial, bit 1 = final
     pub lookuptable: Vec<u8>,
     pub has_unknowns: bool,
@@ -536,6 +540,10 @@ pub struct ApplyMedHandle {
     pub state_array: Vec<StateArray>,
     // DEVIATION from C (borrowed pointer to the stack-owned net; the handle never owns it)
     pub net: Option<Box<Fsm>>,
+    /// A materialized flat snapshot of the net's compressed line table, built
+    /// once at `apply_med_init`; the `cur_*` cursor accessors index this rather
+    /// than re-materializing the [`crate::line_table::LineTable`] per lookup.
+    pub net_rows: Vec<FsmState>,
     /// Cursor: index into net's line table (C: struct fsm_state *; None ↔ NULL)
     pub curr_ptr: Option<usize>,
     pub hascm: bool,
@@ -691,6 +699,10 @@ pub struct ApplyHandle {
     pub last_net: Option<Box<Fsm>>,
     // DEVIATION from C (gstates = net->states, an interior pointer; base index into last_net's line table)
     pub gstates: usize,
+    /// A materialized flat snapshot of `last_net`'s compressed line table, built
+    /// once at `apply_init`; the per-arc `l_*` accessors index this rather than
+    /// re-materializing the [`crate::line_table::LineTable`] on every lookup.
+    pub gstates_rows: Vec<FsmState>,
     // DEVIATION from C (gsigma = net->sigma, an aliased pointer; owned copy here)
     pub gsigma: Vec<Sigma>,
     /// C: struct apply_state_index ** — malloc'd array of chain heads, one per state

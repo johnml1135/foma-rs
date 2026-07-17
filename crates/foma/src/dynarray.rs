@@ -826,7 +826,9 @@ pub fn fsm_read_init(net: Box<Fsm>) -> Box<FsmReadHandle> {
     let mut has_unknowns = false;
 
     let mut laststate = -1;
-    let fsm = &net.states;
+    // One flat snapshot: drives the init walk here and, moved into the handle
+    // below, backs the per-arc accessors for the handle's lifetime.
+    let fsm = net.states.rows().to_vec();
     let mut i = 0usize;
     while fsm[i].state_no != -1 {
         let sno = fsm[i].state_no;
@@ -896,6 +898,7 @@ pub fn fsm_read_init(net: Box<Fsm>) -> Box<FsmReadHandle> {
         lookuptable,
         has_unknowns,
         net: Some(net),
+        rows: fsm,
     })
 }
 
@@ -926,11 +929,7 @@ pub fn fsm_get_next_state_arc(handle: &mut FsmReadHandle) -> i32 {
         .expect("arcs_cursor parked by fsm_get_next_state")
         .wrapping_add(1);
     handle.arcs_cursor = Some(cursor);
-    let states = &handle
-        .net
-        .as_ref()
-        .expect("net present until fsm_read_done")
-        .states;
+    let states = &handle.rows;
     if states[cursor].state_no != handle.current_state || states[cursor].target == -1 {
         handle.arcs_cursor = Some(cursor.wrapping_sub(1));
         return 0;
@@ -943,11 +942,7 @@ pub fn fsm_get_next_state_arc(handle: &mut FsmReadHandle) -> i32 {
 // [spec:foma:def:fomalib.fsm-get-next-arc-fn]
 // [spec:foma:sem:fomalib.fsm-get-next-arc-fn]
 pub fn fsm_get_next_arc(handle: &mut FsmReadHandle) -> i32 {
-    let states = &handle
-        .net
-        .as_ref()
-        .expect("net present until fsm_read_done")
-        .states;
+    let states = &handle.rows;
     if handle.arcs_cursor.is_none() {
         let mut cursor = handle.arcs_head;
         /* skip sentinel lines (target == -1) */
@@ -986,12 +981,7 @@ pub fn fsm_get_arc_source(handle: &FsmReadHandle) -> i32 {
     let Some(cursor) = handle.arcs_cursor else {
         return -1;
     };
-    handle
-        .net
-        .as_ref()
-        .expect("net present until fsm_read_done")
-        .states[cursor]
-        .state_no
+    handle.rows[cursor].state_no
 }
 
 // [spec:foma:def:dynarray.fsm-get-arc-target-fn]
@@ -1002,12 +992,7 @@ pub fn fsm_get_arc_target(handle: &FsmReadHandle) -> i32 {
     let Some(cursor) = handle.arcs_cursor else {
         return -1;
     };
-    handle
-        .net
-        .as_ref()
-        .expect("net present until fsm_read_done")
-        .states[cursor]
-        .target
+    handle.rows[cursor].target
 }
 
 // [spec:foma:def:dynarray.fsm-get-symbol-number-fn]
@@ -1034,12 +1019,7 @@ pub fn fsm_get_arc_in(handle: &FsmReadHandle) -> Option<&str> {
     /* C returns a borrowed char* into the handle's sigma list, or NULL
     when the cursor is NULL */
     let cursor = handle.arcs_cursor?;
-    let index = handle
-        .net
-        .as_ref()
-        .expect("net present until fsm_read_done")
-        .states[cursor]
-        .r#in;
+    let index = handle.rows[cursor].r#in;
     /* no sentinel check: in == -1 indexes out of bounds in C.
     DEVIATION from C (OOB read; Rust panics) */
     handle.fsm_sigma_list[index as usize].symbol.as_deref()
@@ -1054,12 +1034,7 @@ pub fn fsm_get_arc_num_in(handle: &FsmReadHandle) -> i32 {
         return -1;
     };
     /* short→int promotion; a sentinel line's stored -1 returns as-is */
-    handle
-        .net
-        .as_ref()
-        .expect("net present until fsm_read_done")
-        .states[cursor]
-        .r#in as i32
+    handle.rows[cursor].r#in as i32
 }
 
 // [spec:foma:def:dynarray.fsm-get-arc-num-out-fn]
@@ -1071,12 +1046,7 @@ pub fn fsm_get_arc_num_out(handle: &FsmReadHandle) -> i32 {
         return -1;
     };
     /* short→int promotion; a sentinel line's stored -1 returns as-is */
-    handle
-        .net
-        .as_ref()
-        .expect("net present until fsm_read_done")
-        .states[cursor]
-        .out as i32
+    handle.rows[cursor].out as i32
 }
 
 // [spec:foma:def:dynarray.fsm-get-arc-out-fn]
@@ -1087,12 +1057,7 @@ pub fn fsm_get_arc_out(handle: &FsmReadHandle) -> Option<&str> {
     /* C returns a borrowed char* into the handle's sigma list, or NULL
     when the cursor is NULL */
     let cursor = handle.arcs_cursor?;
-    let index = handle
-        .net
-        .as_ref()
-        .expect("net present until fsm_read_done")
-        .states[cursor]
-        .out;
+    let index = handle.rows[cursor].out;
     /* no sentinel check: out == -1 indexes out of bounds in C.
     DEVIATION from C (OOB read; Rust panics) */
     handle.fsm_sigma_list[index as usize].symbol.as_deref()
@@ -1227,12 +1192,7 @@ pub fn fsm_get_next_state(handle: &mut FsmReadHandle) -> i32 {
     in C — expect panics (DEVIATION pin) */
     let first =
         handle.states_head[cursor].expect("no state-number gap in a read handle's states_head");
-    let stateno = handle
-        .net
-        .as_ref()
-        .expect("net present until fsm_read_done")
-        .states[first]
-        .state_no;
+    let stateno = handle.rows[first].state_no;
     /* park arcs_cursor one line before the state's first line so that
     fsm_get_next_state_arc's pre-increment lands on it (C decrements the
     pointer below the array base for first == 0 — UB; wrapping index here) */
@@ -1300,9 +1260,10 @@ mod tests {
 
         /* exact line table incl. the sentinel terminator */
         assert_eq!(net.states.len(), 3);
-        assert_eq!(line(&net.states[0]), (0, 3, 3, 1, 0, 1));
-        assert_eq!(line(&net.states[1]), (1, -1, -1, -1, 1, 0));
-        assert_eq!(line(&net.states[2]), (-1, -1, -1, -1, -1, -1));
+        let fsm = net.states.rows();
+        assert_eq!(line(&fsm[0]), (0, 3, 3, 1, 0, 1));
+        assert_eq!(line(&fsm[1]), (1, -1, -1, -1, 1, 0));
+        assert_eq!(line(&fsm[2]), (-1, -1, -1, -1, -1, -1));
 
         /* counts and heuristic flags copied out by fsm_state_close */
         assert_eq!(net.arity, 1);
@@ -1640,9 +1601,10 @@ mod tests {
         assert_eq!(net.is_deterministic, Tern::Yes);
         assert_eq!(net.is_epsilon_free, Tern::Yes);
         /* line table: arc line, state-1 placeholder, sentinel */
-        assert_eq!(line(&net.states[0]), (0, 3, 3, 1, 0, 1));
-        assert_eq!(line(&net.states[1]), (1, -1, -1, -1, 1, 0));
-        assert_eq!(line(&net.states[2]), (-1, -1, -1, -1, -1, -1));
+        let fsm = net.states.rows();
+        assert_eq!(line(&fsm[0]), (0, 3, 3, 1, 0, 1));
+        assert_eq!(line(&fsm[1]), (1, -1, -1, -1, 1, 0));
+        assert_eq!(line(&fsm[2]), (-1, -1, -1, -1, -1, -1));
         /* sigma survived (single symbol, number 3 after sigma_sort) */
         assert_eq!(net.sigma.len(), 1);
         assert_eq!(net.sigma[0].number, 3);

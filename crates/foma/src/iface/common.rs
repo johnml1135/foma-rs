@@ -66,16 +66,17 @@ pub(crate) fn print_net(net: &mut Fsm, filename: Option<&str>) {
         println!("Writing network to file {}.", name);
     }
     fsm_count(net);
+    let fsm = net.states.rows();
     let mut finals = vec![0i32; net.statecount as usize];
     let mut i = 0usize;
     loop {
-        let state_no = net.states[i].state_no;
+        let state_no = fsm[i].state_no;
         if state_no == -1 {
             break;
         }
-        let final_state = net.states[i].final_state;
-        let in_ = net.states[i].r#in;
-        let out_ = net.states[i].out;
+        let final_state = fsm[i].final_state;
+        let in_ = fsm[i].r#in;
+        let out_ = fsm[i].out;
         finals[state_no as usize] = if final_state == 1 { 1 } else { 0 };
         if in_ != out_ {
             net.arity = 2;
@@ -111,15 +112,15 @@ pub(crate) fn print_net(net: &mut Fsm, filename: Option<&str>) {
     let mut previous_state: Option<i32> = None;
     let mut i = 0usize;
     loop {
-        let state_no = net.states[i].state_no;
+        let state_no = fsm[i].state_no;
         if state_no == -1 {
             break;
         }
-        let start_state = net.states[i].start_state;
-        let final_state = net.states[i].final_state;
-        let in_ = net.states[i].r#in as i32;
-        let out_ = net.states[i].out as i32;
-        let target = net.states[i].target;
+        let start_state = fsm[i].start_state;
+        let final_state = fsm[i].final_state;
+        let in_ = fsm[i].r#in as i32;
+        let out_ = fsm[i].out as i32;
+        let target = fsm[i].target;
         if Some(state_no) != previous_state {
             if start_state != 0 {
                 write!(out, "S").expect("writing net");
@@ -157,7 +158,7 @@ pub(crate) fn print_net(net: &mut Fsm, filename: Option<&str>) {
             write!(out, "f").expect("writing net");
         }
         write!(out, "s{}", target).expect("writing net");
-        if net.states[i + 1].state_no == state_no {
+        if fsm[i + 1].state_no == state_no {
             write!(out, ", ").expect("writing net");
         } else {
             writeln!(out, ".").expect("writing net");
@@ -258,14 +259,15 @@ pub(crate) fn print_sigma<W: std::io::Write + ?Sized>(sigma: &[Sigma], out: &mut
 // [spec:foma:sem:iface.print-dot-fn+2]
 pub(crate) fn print_dot(net: &mut Fsm, filename: Option<&str>) {
     fsm_count(net);
+    let fsm = net.states.rows();
     let mut finals = vec![0i16; net.statecount as usize];
     let mut i = 0usize;
     loop {
-        let state_no = net.states[i].state_no;
+        let state_no = fsm[i].state_no;
         if state_no == -1 {
             break;
         }
-        finals[state_no as usize] = if net.states[i].final_state == 1 { 1 } else { 0 };
+        finals[state_no as usize] = if fsm[i].final_state == 1 { 1 } else { 0 };
         i += 1;
     }
     let mut dotfile: Output = match filename {
@@ -296,11 +298,11 @@ pub(crate) fn print_dot(net: &mut Fsm, filename: Option<&str>) {
     let mut printed = vec![0i16; net.linecount as usize];
     let mut i = 0usize;
     loop {
-        let state_no_i = net.states[i].state_no;
+        let state_no_i = fsm[i].state_no;
         if state_no_i == -1 {
             break;
         }
-        let target_i = net.states[i].target;
+        let target_i = fsm[i].target;
         if target_i == -1 || printed[i] == 1 {
             i += 1;
             continue;
@@ -308,12 +310,12 @@ pub(crate) fn print_dot(net: &mut Fsm, filename: Option<&str>) {
         write!(dotfile, "{} -> {} [label=\"", state_no_i, target_i).expect("writing dot graph");
         let mut linelen = 0i32;
         let mut j = i;
-        while net.states[j].state_no == state_no_i {
-            let target_j = net.states[j].target;
+        while fsm[j].state_no == state_no_i {
+            let target_j = fsm[j].target;
             if target_i == target_j && printed[j] == 0 {
                 printed[j] = 1;
-                let in_j = net.states[j].r#in as i32;
-                let out_j = net.states[j].out as i32;
+                let in_j = fsm[j].r#in as i32;
+                let out_j = fsm[j].out as i32;
                 if in_j == out_j && out_j != UNKNOWN {
                     let sig = sigptr(&net.sigma, in_j);
                     dotfile

@@ -7,59 +7,126 @@
 //! Every consumer walked that flat table by index, peeking `fsm[i+1].state_no`
 //! to find state boundaries.
 //!
-//! `LineTable` is the seam that lets the backing store change without rewriting
-//! all those walks at once. Today it is a transparent newtype over the flat
-//! `Vec<FsmState>` and consumers still reach the rows through `Deref`. The
-//! backing store will later become a per-state compressed form (each arc drops
-//! its redundant `state_no`/`final_state`/`start_state`, which are properties of
-//! the state, not the arc), roughly halving arc memory; consumers move onto the
-//! accessor methods and the `Deref` view retires with that flip.
+//! `LineTable` is the seam that let the backing store change without rewriting
+//! all those walks in one commit. It now stores the compressed [`Csr`] form
+//! (each arc drops its redundant `state_no`/`final_state`/`start_state`, which
+//! are properties of the state, not the arc), roughly halving arc memory.
+//! Consumers that still think in flat rows borrow a materialized view through
+//! [`LineTable::rows`] / [`LineTable::rows_mut`]; the mutable guard recompresses
+//! on drop. Hot paths read the [`Csr`] blocks directly.
 
 use core::ops::{Deref, DerefMut};
 
 use crate::types::FsmState;
 
-/// The sentinel-terminated arc table of an [`Fsm`](crate::types::Fsm).
+/// The line table of an [`Fsm`](crate::types::Fsm), stored compressed.
 ///
-/// An empty table (no rows at all) corresponds to the C `NULL` line table.
+/// An empty table (C `NULL` `net->states`) is [`LineTable::new`].
 #[derive(Debug, Clone, Default)]
 pub struct LineTable {
-    rows: Vec<FsmState>,
+    csr: Csr,
 }
 
 impl LineTable {
     /// An empty table (C: a `NULL` `net->states`).
     pub fn new() -> LineTable {
-        LineTable { rows: Vec::new() }
+        LineTable {
+            csr: Csr::default(),
+        }
     }
 
-    /// Wrap a flat, sentinel-terminated row sequence.
+    /// Compress a flat, sentinel-terminated row sequence into a table.
     pub fn from_rows(rows: Vec<FsmState>) -> LineTable {
-        LineTable { rows }
+        LineTable {
+            csr: Csr::from_rows(&rows),
+        }
     }
 
-    /// Consume the table, yielding the flat row sequence.
+    /// Consume the table, materializing the flat row sequence.
     pub fn into_rows(self) -> Vec<FsmState> {
-        self.rows
+        self.csr.to_rows()
+    }
+
+    /// A materialized, read-only view of the flat rows. Derefs to
+    /// `[FsmState]`, so existing `fsm[i]` / `fsm[i+1]` walks read unchanged.
+    pub fn rows(&self) -> RowsRef {
+        RowsRef {
+            rows: self.csr.to_rows(),
+        }
+    }
+
+    /// A materialized, mutable view of the flat rows that recompresses into the
+    /// table when the guard drops. Derefs to `Vec<FsmState>` (push/truncate/
+    /// splice and in-place field writes all work).
+    pub fn rows_mut(&mut self) -> RowsMut<'_> {
+        let rows = self.csr.to_rows();
+        RowsMut { table: self, rows }
+    }
+
+    /// The compressed blocks, in appearance order (native, no materialization).
+    pub fn blocks(&self) -> &[StateBlock] {
+        self.csr.blocks()
+    }
+
+    /// The arcs of one block (native, no materialization).
+    pub fn block_arcs(&self, b: &StateBlock) -> &[CsrArc] {
+        self.csr.block_arcs(b)
+    }
+
+    /// Logical row count including the terminator — the C `linecount`.
+    pub fn len(&self) -> usize {
+        self.csr.logical_len()
+    }
+
+    /// True for the empty (C `NULL`) table.
+    pub fn is_empty(&self) -> bool {
+        self.csr.is_null()
     }
 }
 
 impl From<Vec<FsmState>> for LineTable {
     fn from(rows: Vec<FsmState>) -> LineTable {
-        LineTable { rows }
+        LineTable {
+            csr: Csr::from_rows(&rows),
+        }
     }
 }
 
-impl Deref for LineTable {
+/// Read guard: a materialized copy of the flat rows.
+pub struct RowsRef {
+    rows: Vec<FsmState>,
+}
+
+impl Deref for RowsRef {
+    type Target = [FsmState];
+    fn deref(&self) -> &[FsmState] {
+        &self.rows
+    }
+}
+
+/// Mutable guard: a materialized copy that recompresses into the source table
+/// when dropped.
+pub struct RowsMut<'a> {
+    table: &'a mut LineTable,
+    rows: Vec<FsmState>,
+}
+
+impl Deref for RowsMut<'_> {
     type Target = Vec<FsmState>;
     fn deref(&self) -> &Vec<FsmState> {
         &self.rows
     }
 }
 
-impl DerefMut for LineTable {
+impl DerefMut for RowsMut<'_> {
     fn deref_mut(&mut self) -> &mut Vec<FsmState> {
         &mut self.rows
+    }
+}
+
+impl Drop for RowsMut<'_> {
+    fn drop(&mut self) {
+        self.table.csr = Csr::from_rows(&self.rows);
     }
 }
 
@@ -210,32 +277,26 @@ impl Csr {
         let lo = b.arc_start as usize;
         &self.arcs[lo..lo + b.arc_len as usize]
     }
-}
 
-/// Debug-only guard: assert the CSR form round-trips a flat table byte-for-byte.
-/// Wired into the hot count path so the whole test corpus exercises it before
-/// [`LineTable`] adopts the compressed store. Compiles away in release builds.
-pub(crate) fn debug_assert_roundtrip(rows: &[FsmState]) {
-    #[cfg(debug_assertions)]
-    {
-        // The logical table runs through the terminator; a raw `net.states`
-        // buffer may carry dead rows past it (over-allocated and never
-        // truncated). CSR keeps only the logical table, so compare against the
-        // prefix through the terminator, not the raw buffer.
-        let logical = match rows.iter().position(|r| r.state_no == -1) {
-            Some(t) => &rows[..=t],
-            None => rows,
-        };
-        let round = Csr::from_rows(rows).to_rows();
-        debug_assert!(
-            round.as_slice() == logical,
-            "CSR round-trip diverged: {} logical rows, {} regenerated",
-            logical.len(),
-            round.len()
-        );
+    /// Logical flat-row count including the terminator (the C `linecount`): one
+    /// row per arc, one marker row per arc-less state, plus the terminator.
+    /// Zero for the empty (C `NULL`) table.
+    pub fn logical_len(&self) -> usize {
+        if self.terminator.is_none() {
+            return 0;
+        }
+        let body: usize = self
+            .blocks
+            .iter()
+            .map(|b| (b.arc_len as usize).max(1))
+            .sum();
+        body + 1
     }
-    #[cfg(not(debug_assertions))]
-    let _ = rows;
+
+    /// True for the empty (C `NULL`) table — no terminator, no rows.
+    pub fn is_null(&self) -> bool {
+        self.terminator.is_none()
+    }
 }
 
 #[cfg(test)]

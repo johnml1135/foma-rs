@@ -63,7 +63,7 @@ pub fn copy_mergesigma(mergesigma: &[Mergesigma]) -> Vec<Sigma> {
 /// `presence` (2 when expanding net1, 1 when expanding net2). Shared body of the
 /// two fsm_merge_sigma expansion passes, which C kept as a copy-paste pair.
 fn expand_unknowns(net: &mut Fsm, mergesigma: &[Mergesigma], presence: u8) {
-    let net_lines = find_arccount(&net.states);
+    let net_lines = find_arccount(&net.states.rows());
     let mut net_unk = 0;
     for m in mergesigma {
         if m.presence == presence {
@@ -71,10 +71,11 @@ fn expand_unknowns(net: &mut Fsm, mergesigma: &[Mergesigma], presence: u8) {
         }
     }
 
+    let fsm = net.states.rows();
     let mut net_adds = 0;
     let mut i = 0usize;
-    while net.states[i].state_no != -1 {
-        let (line_in, line_out) = (net.states[i].r#in as i32, net.states[i].out as i32);
+    while fsm[i].state_no != -1 {
+        let (line_in, line_out) = (fsm[i].r#in as i32, fsm[i].out as i32);
         if line_in == IDENTITY {
             net_adds += net_unk;
         }
@@ -104,13 +105,13 @@ fn expand_unknowns(net: &mut Fsm, mergesigma: &[Mergesigma], presence: u8) {
     ];
     let mut j: i32 = 0;
     let mut i = 0usize;
-    while net.states[i].state_no != -1 {
-        let state_no = net.states[i].state_no;
-        let line_in = net.states[i].r#in as i32;
-        let line_out = net.states[i].out as i32;
-        let target = net.states[i].target;
-        let final_state = net.states[i].final_state as i32;
-        let start_state = net.states[i].start_state as i32;
+    while fsm[i].state_no != -1 {
+        let state_no = fsm[i].state_no;
+        let line_in = fsm[i].r#in as i32;
+        let line_out = fsm[i].out as i32;
+        let target = fsm[i].target;
+        let final_state = fsm[i].final_state as i32;
+        let start_state = fsm[i].start_state as i32;
 
         if line_in == IDENTITY {
             add_fsm_arc(
@@ -272,6 +273,7 @@ fn expand_unknowns(net: &mut Fsm, mergesigma: &[Mergesigma], presence: u8) {
     }
 
     add_fsm_arc(&mut new_state, j, -1, -1, -1, -1, -1, -1);
+    drop(fsm);
     /* free(net->states); net->states = new_state */
     net.states = new_state.into();
 }
@@ -409,25 +411,31 @@ pub fn fsm_merge_sigma(opts: &FomaOptions, net1: &mut Fsm, net2: &mut Fsm) {
 
     /* Go over both net1 and net2 and replace arc numbers with new mappings */
 
-    let mut i = 0usize;
-    while net1.states[i].state_no != -1 {
-        if net1.states[i].r#in > 2 {
-            net1.states[i].r#in = mapping_1[net1.states[i].r#in as usize] as i16;
+    {
+        let mut fsm1 = net1.states.rows_mut();
+        let mut i = 0usize;
+        while fsm1[i].state_no != -1 {
+            if fsm1[i].r#in > 2 {
+                fsm1[i].r#in = mapping_1[fsm1[i].r#in as usize] as i16;
+            }
+            if fsm1[i].out > 2 {
+                fsm1[i].out = mapping_1[fsm1[i].out as usize] as i16;
+            }
+            i += 1;
         }
-        if net1.states[i].out > 2 {
-            net1.states[i].out = mapping_1[net1.states[i].out as usize] as i16;
-        }
-        i += 1;
     }
-    let mut i = 0usize;
-    while net2.states[i].state_no != -1 {
-        if net2.states[i].r#in > 2 {
-            net2.states[i].r#in = mapping_2[net2.states[i].r#in as usize] as i16;
+    {
+        let mut fsm2 = net2.states.rows_mut();
+        let mut i = 0usize;
+        while fsm2[i].state_no != -1 {
+            if fsm2[i].r#in > 2 {
+                fsm2[i].r#in = mapping_2[fsm2[i].r#in as usize] as i16;
+            }
+            if fsm2[i].out > 2 {
+                fsm2[i].out = mapping_2[fsm2[i].out as usize] as i16;
+            }
+            i += 1;
         }
-        if net2.states[i].out > 2 {
-            net2.states[i].out = mapping_2[net2.states[i].out as usize] as i16;
-        }
-        i += 1;
     }
 
     /* Copy mergesigma to net1, net2 */

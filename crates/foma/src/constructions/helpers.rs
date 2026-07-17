@@ -16,10 +16,11 @@ pub fn sort_cmp(a: &FsmState, b: &FsmState) -> core::cmp::Ordering {
 // [spec:foma:def:fomalibconf.fsm-sort-lines-fn]
 // [spec:foma:sem:fomalibconf.fsm-sort-lines-fn]
 pub fn fsm_sort_lines(net: &mut Fsm) {
-    let count = find_arccount(&net.states);
+    let mut fsm = net.states.rows_mut();
+    let count = find_arccount(&fsm);
     /* C: qsort (unstable) over the lines before the sentinel; a slice
     sort_unstable is an admissible qsort behavior */
-    net.states[..count as usize].sort_unstable_by(sort_cmp);
+    fsm[..count as usize].sort_unstable_by(sort_cmp);
 }
 
 // [spec:foma:def:constructions.fsm-update-flags-fn]
@@ -143,32 +144,24 @@ pub fn add_fsm_arc(
 // [spec:foma:def:fomalibconf.fsm-count-fn]
 // [spec:foma:sem:fomalibconf.fsm-count-fn]
 pub fn fsm_count(net: &mut Fsm) {
+    /* Counts read straight off the compressed blocks: one flat row per arc, one
+    marker row per arc-less state, plus the terminator; final/start is a per-
+    state property (a block's first-row value), so finalcount is just the count
+    of final blocks — exactly what the old per-state-boundary walk computed. */
     let mut linecount = 0;
     let mut arccount = 0;
     let mut finalcount = 0;
     let mut maxstate = 0;
 
-    let mut oldstate = -1;
-
-    let mut i = 0usize;
-    while net.states[i].state_no != -1 {
-        if net.states[i].state_no > maxstate {
-            maxstate = net.states[i].state_no;
+    for b in net.states.blocks() {
+        if b.state_no > maxstate {
+            maxstate = b.state_no;
         }
-
-        linecount += 1;
-        if net.states[i].target != -1 {
-            arccount += 1;
-            //        if (((fsm+i)->in != (fsm+i)->out) || ((fsm+i)->in == UNKNOWN) || ((fsm+i)->out == UNKNOWN))
-            //    arity = 2;
+        linecount += (b.arc_len as i32).max(1);
+        arccount += b.arc_len as i32;
+        if b.final_state != 0 {
+            finalcount += 1;
         }
-        if net.states[i].state_no != oldstate {
-            if net.states[i].final_state != 0 {
-                finalcount += 1;
-            }
-            oldstate = net.states[i].state_no;
-        }
-        i += 1;
     }
 
     linecount += 1;
@@ -176,21 +169,17 @@ pub fn fsm_count(net: &mut Fsm) {
     net.linecount = linecount;
     net.arccount = arccount;
     net.finalcount = finalcount;
-
-    // Validation for the in-flight CSR migration: on debug builds, assert the
-    // compressed form round-trips this table byte-for-byte. Compiles away in
-    // release. Remove once LineTable adopts the compressed store.
-    crate::line_table::debug_assert_roundtrip(&net.states);
 }
 
 // [spec:foma:def:constructions.fsm-add-to-states-fn]
 // [spec:foma:sem:constructions.fsm-add-to-states-fn]
 pub(crate) fn fsm_add_to_states(net: &mut Fsm, add: i32) {
+    let mut fsm = net.states.rows_mut();
     let mut i = 0usize;
-    while net.states[i].state_no != -1 {
-        net.states[i].state_no += add;
-        if net.states[i].target != -1 {
-            net.states[i].target += add;
+    while fsm[i].state_no != -1 {
+        fsm[i].state_no += add;
+        if fsm[i].target != -1 {
+            fsm[i].target += add;
         }
         i += 1;
     }
