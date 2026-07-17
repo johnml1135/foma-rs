@@ -176,6 +176,11 @@ pub fn fsm_count(net: &mut Fsm) {
     net.linecount = linecount;
     net.arccount = arccount;
     net.finalcount = finalcount;
+
+    // Validation for the in-flight CSR migration: on debug builds, assert the
+    // compressed form round-trips this table byte-for-byte. Compiles away in
+    // release. Remove once LineTable adopts the compressed store.
+    crate::line_table::debug_assert_roundtrip(&net.states);
 }
 
 // [spec:foma:def:constructions.fsm-add-to-states-fn]

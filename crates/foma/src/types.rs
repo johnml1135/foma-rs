@@ -252,7 +252,7 @@ pub struct Medlookup {
 
 /// Array of states (one line of the fsm line table)
 // [spec:foma:def:fomalib.fsm-state]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FsmState {
     /// State number
     pub state_no: i32,
