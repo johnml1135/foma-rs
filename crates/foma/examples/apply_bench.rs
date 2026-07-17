@@ -22,7 +22,7 @@ fn opts() -> FomaOptions {
     FomaOptions::default()
 }
 
-fn compile(rx: &str) -> Box<Fsm> {
+fn compile(rx: &str) -> Fsm {
     fsm_parse_regex(&opts(), rx, None, None)
         .unwrap_or_else(|| panic!("regex failed to compile: {rx:?}"))
 }

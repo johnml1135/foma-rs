@@ -191,7 +191,7 @@ pub const MED_DEFAULT_MAX_HEAP_SIZE: i32 = 262145;
 #[derive(Debug, Clone)]
 pub struct DefinedNetworks {
     pub name: Option<SmolStr>,
-    pub net: Option<Box<Fsm>>,
+    pub net: Option<Fsm>,
     pub next: Option<Box<DefinedNetworks>>,
 }
 
@@ -266,23 +266,23 @@ pub struct FsmState {
 // [spec:foma:def:fomalib.fsmcontexts]
 #[derive(Debug, Clone)]
 pub struct Fsmcontexts {
-    pub left: Option<Box<Fsm>>,
-    pub right: Option<Box<Fsm>>,
+    pub left: Option<Fsm>,
+    pub right: Option<Fsm>,
     pub next: Option<Box<Fsmcontexts>>,
     /// Only used internally when compiling rewrite rules
-    pub cpleft: Option<Box<Fsm>>,
+    pub cpleft: Option<Fsm>,
     /// ditto
-    pub cpright: Option<Box<Fsm>>,
+    pub cpright: Option<Fsm>,
 }
 
 // [spec:foma:def:fomalib.fsmrules]
 #[derive(Debug, Clone)]
 pub struct Fsmrules {
-    pub left: Option<Box<Fsm>>,
-    pub right: Option<Box<Fsm>>,
+    pub left: Option<Fsm>,
+    pub right: Option<Fsm>,
     /// Only needed for A -> B ... C rules
-    pub right2: Option<Box<Fsm>>,
-    pub cross_product: Option<Box<Fsm>>,
+    pub right2: Option<Fsm>,
+    pub cross_product: Option<Fsm>,
     pub next: Option<Box<Fsmrules>>,
     pub arrow_type: ArrowType,
     /// [.A.] rule
@@ -396,7 +396,7 @@ pub struct FsmReadHandle {
     pub fsm_sigma_list: Vec<FsmSigmaList>,
     pub sigma_list_size: i32,
     // DEVIATION from C (borrowed pointer — the handle never owns the net; see fsm-read-done sem)
-    pub net: Option<Box<Fsm>>,
+    pub net: Option<Fsm>,
     /// A materialized flat snapshot of the net's compressed line table, built
     /// once at `fsm_read_init`; the arc accessors index this by cursor rather
     /// than re-materializing the [`crate::line_table::LineTable`] per call.
@@ -539,7 +539,7 @@ pub struct ApplyMedHandle {
     /// C: malloc'd array (map_firstlines), one entry per state
     pub state_array: Vec<StateArray>,
     // DEVIATION from C (borrowed pointer to the stack-owned net; the handle never owns it)
-    pub net: Option<Box<Fsm>>,
+    pub net: Option<Fsm>,
     /// A materialized flat snapshot of the net's compressed line table, built
     /// once at `apply_med_init`; the `cur_*` cursor accessors index this rather
     /// than re-materializing the [`crate::line_table::LineTable`] per lookup.
@@ -696,7 +696,7 @@ pub struct ApplyHandle {
     pub oldflagvalue: Option<SmolStr>,
 
     // DEVIATION from C (borrowed pointer to the stack-owned net; the handle never owns it)
-    pub last_net: Option<Box<Fsm>>,
+    pub last_net: Option<Fsm>,
     // DEVIATION from C (gstates = net->states, an interior pointer; base index into last_net's line table)
     pub gstates: usize,
     /// A materialized flat snapshot of `last_net`'s compressed line table, built
@@ -736,7 +736,7 @@ pub struct StackEntry {
     pub number: i32,
     pub ah: Option<Box<ApplyHandle>>,
     pub amedh: Option<Box<ApplyMedHandle>>,
-    pub fsm: Option<Box<Fsm>>,
+    pub fsm: Option<Fsm>,
     // DEVIATION from C (the doubly-linked list is stored in a thread_local arena
     // in crate::stack; `next`/`previous` are arena indices — "struct stack_entry *"
     // pointer walks become index walks — not owning Box pointers, since safe Rust

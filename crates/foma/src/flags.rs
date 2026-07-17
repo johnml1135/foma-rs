@@ -58,8 +58,8 @@ pub struct Flags {
 // [spec:foma:sem:flags.flag-eliminate-fn+1]
 // [spec:foma:def:fomalib.flag-eliminate-fn+1]
 // [spec:foma:sem:fomalib.flag-eliminate-fn+1]
-pub fn flag_eliminate(opts: &FomaOptions, net: Box<Fsm>, name: Option<&str>) -> Box<Fsm> {
-    let mut filter: Option<Box<Fsm>> = None;
+pub fn flag_eliminate(opts: &FomaOptions, net: Fsm, name: Option<&str>) -> Fsm {
+    let mut filter: Option<Fsm> = None;
 
     if net.pathcount == 0 {
         if opts.verbose {
@@ -92,9 +92,9 @@ pub fn flag_eliminate(opts: &FomaOptions, net: Box<Fsm>, name: Option<&str>) -> 
 
     let mut f = flags.as_deref();
     while let Some(fl) = f {
-        let mut succeed_flags: Option<Box<Fsm>> = None;
-        let mut fail_flags: Option<Box<Fsm>> = None;
-        let mut self_: Option<Box<Fsm>> = None;
+        let mut succeed_flags: Option<Fsm> = None;
+        let mut fail_flags: Option<Fsm> = None;
+        let mut self_: Option<Fsm> = None;
 
         /* DEVIATION from C: the C ORed the type mask (`f->type | U|R|D|E`),
         which is always nonzero, so the intended restriction to U/R/D/E flags
@@ -267,7 +267,7 @@ pub fn flag_eliminate(opts: &FomaOptions, net: Box<Fsm>, name: Option<&str>) -> 
 
 // [spec:foma:def:flags.flag-create-symbol-fn]
 // [spec:foma:sem:flags.flag-create-symbol-fn]
-pub(crate) fn flag_create_symbol(r#type: FlagType, name: &str, value: Option<&str>) -> Box<Fsm> {
+pub(crate) fn flag_create_symbol(r#type: FlagType, name: &str, value: Option<&str>) -> Fsm {
     let value = value.unwrap_or_default();
 
     /* C: string = malloc(strlen(name)+strlen(value)+6), built with strcat and
@@ -685,7 +685,7 @@ pub fn flag_get_value(string: &str) -> Option<SmolStr> {
 // [spec:foma:sem:flags.flag-twosided-fn]
 // [spec:foma:def:fomalib.flag-twosided-fn]
 // [spec:foma:sem:fomalib.flag-twosided-fn]
-pub fn flag_twosided(opts: &FomaOptions, mut net: Box<Fsm>) -> Box<Fsm> {
+pub fn flag_twosided(opts: &FomaOptions, mut net: Fsm) -> Fsm {
     /* Enforces twosided flag diacritics */
 
     /* Mark flag symbols */

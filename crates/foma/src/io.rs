@@ -344,7 +344,7 @@ pub fn foma_write_prolog(net: &mut Fsm, filename: Option<&str>) -> Result<(), Fo
 // [spec:foma:sem:io.read-att-fn]
 // [spec:foma:def:fomalib.read-att-fn]
 // [spec:foma:sem:fomalib.read-att-fn]
-pub fn read_att(opts: &FomaOptions, filename: &str) -> Option<Box<Fsm>> {
+pub fn read_att(opts: &FomaOptions, filename: &str) -> Option<Fsm> {
     let infile = match File::open(filename) {
         Ok(f) => f,
         Err(_) => return None,
@@ -412,7 +412,7 @@ pub fn read_att(opts: &FomaOptions, filename: &str) -> Option<Box<Fsm>> {
 // [spec:foma:sem:io.fsm-read-prolog-fn+1]
 // [spec:foma:def:fomalib.fsm-read-prolog-fn+1]
 // [spec:foma:sem:fomalib.fsm-read-prolog-fn+1]
-pub fn fsm_read_prolog(filename: &str) -> Option<Box<Fsm>> {
+pub fn fsm_read_prolog(filename: &str) -> Option<Fsm> {
     /* The C source's strstr/strchr lookups below were unchecked (NULL-deref
     crash on a malformed line, or an out-of-order fact before the network
     declaration). On any missing delimiter or absent net handle, report a format
@@ -584,7 +584,7 @@ pub fn io_free(mut iobh: IoBufHandle) {
 // [spec:foma:sem:io.fsm-read-spaced-text-file-fn+1]
 // [spec:foma:def:fomalib.fsm-read-spaced-text-file-fn+1]
 // [spec:foma:sem:fomalib.fsm-read-spaced-text-file-fn+1]
-pub fn fsm_read_spaced_text_file(filename: &str) -> Option<Box<Fsm>> {
+pub fn fsm_read_spaced_text_file(filename: &str) -> Option<Fsm> {
     let text = match file_to_mem(filename) {
         Err(_) => return None,
         Ok(t) => t,
@@ -643,7 +643,7 @@ pub fn fsm_read_spaced_text_file(filename: &str) -> Option<Box<Fsm>> {
 // [spec:foma:sem:io.fsm-read-text-file-fn+1]
 // [spec:foma:def:fomalib.fsm-read-text-file-fn+1]
 // [spec:foma:sem:fomalib.fsm-read-text-file-fn+1]
-pub fn fsm_read_text_file(filename: &str) -> Option<Box<Fsm>> {
+pub fn fsm_read_text_file(filename: &str) -> Option<Fsm> {
     let text = match file_to_mem(filename) {
         Err(_) => return None,
         Ok(t) => t,
@@ -697,9 +697,7 @@ pub fn fsm_write_binary<W: std::io::Write>(net: &Fsm, out: W) -> std::io::Result
 // The opaque handle is reused across calls and freed on the NULL return, so the
 // caller passes it as `&mut Option<...>`; on the NULL path the handle is dropped
 // (io_free) and the caller's Option becomes None ("must not be used again").
-pub fn fsm_read_binary_file_multiple(
-    fsrh: &mut Option<Box<FsmReadBinaryHandle>>,
-) -> Option<Box<Fsm>> {
+pub fn fsm_read_binary_file_multiple(fsrh: &mut Option<Box<FsmReadBinaryHandle>>) -> Option<Fsm> {
     /* iobh = (struct io_buf_handle *) fsrh (must be non-NULL) */
     let result = {
         let handle = fsrh.as_mut().expect("fsrh handle must be present");
@@ -732,10 +730,10 @@ pub fn fsm_read_binary_file_multiple_init(filename: &str) -> Option<Box<FsmReadB
 // [spec:foma:sem:io.fsm-read-binary-file-fn+1]
 // [spec:foma:def:fomalib.fsm-read-binary-file-fn]
 // [spec:foma:sem:fomalib.fsm-read-binary-file-fn]
-// Wave 4: returns `Result<Box<Fsm>, FomaError>` instead of the C NULL sentinel —
+// Returns `Result<Fsm, FomaError>` instead of the C NULL sentinel —
 // an unreadable/empty file is `Err(Io)`, a structurally malformed image is
 // `Err(Format)`. The single regex.rs caller adapts with `.ok()`.
-pub fn fsm_read_binary_file(filename: &str) -> Result<Box<Fsm>, FomaError> {
+pub fn fsm_read_binary_file(filename: &str) -> Result<Fsm, FomaError> {
     let mut iobh = io_init();
     if io_gz_file_to_mem(&mut iobh, filename) == 0 {
         io_free(iobh);
@@ -754,7 +752,7 @@ pub fn fsm_read_binary_file(filename: &str) -> Result<Box<Fsm>, FomaError> {
 // memory. Sniffs the gzip magic (1f 8b) like io_gz_file_to_mem: if gzip,
 // GzDecoder-decompress into a Vec; otherwise use the bytes as-is. A trailing 0
 // terminates the buffer image, then io_net_read parses it.
-pub fn fsm_read_binary_mem(bytes: &[u8]) -> Result<Box<Fsm>, FomaError> {
+pub fn fsm_read_binary_mem(bytes: &[u8]) -> Result<Fsm, FomaError> {
     let mut content: Vec<u8> = Vec::new();
     if bytes.len() >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b {
         let mut dec = GzDecoder::new(bytes);
@@ -778,7 +776,7 @@ pub fn fsm_read_binary_mem(bytes: &[u8]) -> Result<Box<Fsm>, FomaError> {
 // how many input bytes it consumed. Lets a caller reading a multi-image stream
 // (e.g. HFST's per-transducer [header][gzip-image] framing) leave the remaining
 // images in place instead of swallowing the whole tail.
-pub fn fsm_read_binary_mem_prefix(bytes: &[u8]) -> Result<(Box<Fsm>, usize), FomaError> {
+pub fn fsm_read_binary_mem_prefix(bytes: &[u8]) -> Result<(Fsm, usize), FomaError> {
     let mut content: Vec<u8> = Vec::new();
     let consumed = if bytes.len() >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b {
         // A BUFREAD gzip decoder advances the underlying BufRead by exactly the
@@ -809,7 +807,7 @@ pub fn fsm_read_binary_mem_prefix(bytes: &[u8]) -> Result<(Box<Fsm>, usize), Fom
 // [spec:foma:sem:io.fsm-read-binary-fn]
 // New public API (no C counterpart): read a foma binary image from an arbitrary
 // reader by draining it to a Vec and delegating to fsm_read_binary_mem.
-pub fn fsm_read_binary<R: std::io::Read>(mut reader: R) -> Result<Box<Fsm>, FomaError> {
+pub fn fsm_read_binary<R: std::io::Read>(mut reader: R) -> Result<Fsm, FomaError> {
     let mut bytes: Vec<u8> = Vec::new();
     reader
         .read_to_end(&mut bytes)
@@ -922,7 +920,7 @@ pub(crate) fn explode_line(buf: &str, values: &mut Vec<i32>) -> i32 {
 // it). `Ok(None)` is a clean end of the buffer (no more nets); `Err` is a
 // structural format error (the C printed a diagnostic and returned NULL — the
 // caller now decides what to report).
-pub fn io_net_read(iobh: &mut IoBufHandle) -> Result<Option<Box<Fsm>>, FomaError> {
+pub fn io_net_read(iobh: &mut IoBufHandle) -> Result<Option<Fsm>, FomaError> {
     let mut buf = String::new();
     let mut lineint: Vec<i32> = Vec::new();
     /* char last_final = '1' (49) in C — a latent typo (an int 0/1 was surely
@@ -1588,7 +1586,7 @@ mod tests {
     }
 
     /* ---- helpers ---- */
-    fn parse(rx: &str) -> Box<Fsm> {
+    fn parse(rx: &str) -> Fsm {
         let opts = &FomaOptions::default();
         fsm_parse_regex(opts, rx, None, None).expect("regex should compile")
     }
@@ -1675,7 +1673,7 @@ mod tests {
 
     /* A hand-built a:b transducer whose field values mirror the C `save stack`
     output (so foma_net_print emits an exact, known byte image). */
-    fn craft_ab_net(name: &str) -> Box<Fsm> {
+    fn craft_ab_net(name: &str) -> Fsm {
         let mut net = fsm_create(name);
         net.arity = 2;
         net.arccount = 1;

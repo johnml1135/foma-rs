@@ -142,13 +142,13 @@
 > `[spec:foma:sem:io.io-gz-file-to-mem-fn]`, parse one net with
 > `[spec:foma:sem:io.io-net-read-fn]`, free the handle, and return the net. The net-name
 > string that C strdup'd and leaked is dropped here.
-> Returns `Result<Box<Fsm>, FomaError>` instead of the C NULL sentinel — an
+> Returns `Result<Fsm, FomaError>` instead of the C NULL sentinel — an
 > unreadable or empty file (io_gz_file_to_mem == 0) is `Err(FomaError::Io(..))`, a
 > structurally malformed image (io_net_read returns None) is `Err(FomaError::Format(..))`,
 > and a parsed net is `Ok`.
 
 > [spec:foma:def:io.fsm-read-binary-fn]
-> fn fsm_read_binary<R: Read>(reader: R) -> Result<Box<Fsm>, FomaError>
+> fn fsm_read_binary<R: Read>(reader: R) -> Result<Fsm, FomaError>
 
 > [spec:foma:sem:io.fsm-read-binary-fn]
 > New public API (no C counterpart): generic stream binary read. Drains `reader`
@@ -156,7 +156,7 @@
 > error is `Err(FomaError::Io(..))`.
 
 > [spec:foma:def:io.fsm-read-binary-mem-fn]
-> fn fsm_read_binary_mem(bytes: &[u8]) -> Result<Box<Fsm>, FomaError>
+> fn fsm_read_binary_mem(bytes: &[u8]) -> Result<Fsm, FomaError>
 
 > [spec:foma:sem:io.fsm-read-binary-mem-fn]
 > New public API (no C counterpart): read a foma binary image from memory. Sniffs

@@ -80,7 +80,7 @@ pub fn fsm_parse_regex(
     regex: &str,
     defined_nets: Option<&mut DefinedNetworks>,
     defined_funcs: Option<&mut DefinedFunctions>,
-) -> Option<Box<Fsm>> {
+) -> Option<Fsm> {
     /* C: strcpy a copy of `regex` with ";" appended, my_yyparse it at line 1,
     and on success return fsm_minimize(opts, current_parse). nfst-xre tolerates the
     optional trailing ";" itself, so no copy is needed. */
@@ -97,7 +97,7 @@ fn my_yyparse(
     regex: &str,
     defined_nets: Option<&mut DefinedNetworks>,
     defined_funcs: Option<&mut DefinedFunctions>,
-) -> Option<Box<Fsm>> {
+) -> Option<Fsm> {
     /* C: depth-limited reentrant driver. The C also saves/restores the global
     parser state (rewrite/contexts/rules/rewrite_rules) around the nested
     yyparse; this port builds those structures locally on the stack, so only
@@ -119,7 +119,7 @@ fn my_yyparse_inner(
     regex: &str,
     defined_nets: Option<&mut DefinedNetworks>,
     defined_funcs: Option<&mut DefinedFunctions>,
-) -> Option<Box<Fsm>> {
+) -> Option<Fsm> {
     let exprs = match nfst_xre::parse_all(regex) {
         Ok(e) => e,
         Err(e) => {
@@ -155,7 +155,7 @@ fn build_net(
     expr: &XreExpr,
     mut nets: Option<&mut DefinedNetworks>,
     mut funcs: Option<&mut DefinedFunctions>,
-) -> Option<Box<Fsm>> {
+) -> Option<Fsm> {
     match expr {
         // ──────────────── atoms ────────────────
         XreExpr::Symbol(s) => {
@@ -295,7 +295,7 @@ fn build_unary(
     inner: &XreExpr,
     nets: Option<&mut DefinedNetworks>,
     funcs: Option<&mut DefinedFunctions>,
-) -> Option<Box<Fsm>> {
+) -> Option<Fsm> {
     let net = build_net(opts, ps, inner, nets, funcs)?;
     Some(match op {
         /* network9 KLEENE_STAR: fsm_kleene_star(fsm_minimize(net)) */
@@ -356,7 +356,7 @@ fn word_symbols(expr: &XreExpr, out: &mut Vec<SmolStr>) -> bool {
 /// Build the automaton for a set of literal words as a trie; the caller's final
 /// `fsm_minimize` collapses it to the minimal DAWG (the trie is already
 /// deterministic, so minimization skips determinization).
-fn build_dawg(words: &[Vec<SmolStr>]) -> Box<Fsm> {
+fn build_dawg(words: &[Vec<SmolStr>]) -> Fsm {
     /* Size the trie hash to the arc count (chaining absorbs the load) rather
     than pay fsm_trie_init's 1M-bucket default, whose zero-fill would dwarf the
     build for a modest word set. The result is minimized, so the table size is
@@ -383,7 +383,7 @@ fn build_binary(
     right: &XreExpr,
     mut nets: Option<&mut DefinedNetworks>,
     mut funcs: Option<&mut DefinedFunctions>,
-) -> Option<Box<Fsm>> {
+) -> Option<Fsm> {
     let l = build_net(opts, ps, left, nets.as_deref_mut(), funcs.as_deref_mut())?;
     let r = build_net(opts, ps, right, nets, funcs)?;
     match op {
@@ -438,7 +438,7 @@ fn build_read_file(
     path: &str,
     nets: Option<&mut DefinedNetworks>,
     funcs: Option<&mut DefinedFunctions>,
-) -> Option<Box<Fsm>> {
+) -> Option<Fsm> {
     match kind {
         /* regex.l @"…"/@bin"…": fsm_read_binary_file */
         ReadKind::Binary => match fsm_read_binary_file(path).ok() {
@@ -501,7 +501,7 @@ fn function_apply(
     args: &[SpannedXre],
     mut nets: Option<&mut DefinedNetworks>,
     mut funcs: Option<&mut DefinedFunctions>,
-) -> Option<Box<Fsm>> {
+) -> Option<Fsm> {
     let numargs = args.len() as i32;
     let body = match funcs.as_deref() {
         Some(f) => match find_defined_function(f, name, numargs) {
@@ -519,7 +519,7 @@ fn function_apply(
 
     /* Build each argument net (C had these already built during the parse of
     the NAME(args) call). */
-    let mut arg_nets: Vec<Box<Fsm>> = Vec::new();
+    let mut arg_nets: Vec<Fsm> = Vec::new();
     for a in args {
         arg_nets.push(build_net(
             opts,
@@ -618,7 +618,7 @@ fn build_replace(
     rules: &[ReplaceRule],
     mut nets: Option<&mut DefinedNetworks>,
     mut funcs: Option<&mut DefinedFunctions>,
-) -> Option<Box<Fsm>> {
+) -> Option<Fsm> {
     let arrow_type = arrow_to_type(arrow);
 
     /* Each ReplaceRule (a `,,`-separated block) becomes one rewrite_set node;
@@ -702,7 +702,7 @@ fn build_restriction(
     contexts: &[RestrContext],
     mut nets: Option<&mut DefinedNetworks>,
     mut funcs: Option<&mut DefinedFunctions>,
-) -> Option<Box<Fsm>> {
+) -> Option<Fsm> {
     /* n0 CRESTRICT n0: fsm_context_restrict(body, contexts). */
     let x = build_net(opts, ps, body, nets.as_deref_mut(), funcs.as_deref_mut())?;
     let mut ctx_nodes: Vec<Fsmcontexts> = Vec::new();
@@ -745,7 +745,7 @@ fn build_substitute(
     what: &SubstituteWhat,
     nets: Option<&mut DefinedNetworks>,
     funcs: Option<&mut DefinedFunctions>,
-) -> Option<Box<Fsm>> {
+) -> Option<Fsm> {
     let net = build_net(opts, ps, haystack, nets, funcs)?;
     match what {
         /* sub1 sub2: fsm_substitute_symbol(net, subval1, subval2) — exactly one
@@ -814,7 +814,7 @@ fn build_mapping(
 }
 
 /// The right-hand side(s) of a mapping: (right, right2).
-type RhsPair = (Option<Box<Fsm>>, Option<Box<Fsm>>);
+type RhsPair = (Option<Fsm>, Option<Fsm>);
 
 fn build_rhs(
     opts: &FomaOptions,
@@ -849,7 +849,7 @@ fn build_side(
     s: &MappingSide,
     nets: Option<&mut DefinedNetworks>,
     funcs: Option<&mut DefinedFunctions>,
-) -> Option<Box<Fsm>> {
+) -> Option<Fsm> {
     match s {
         MappingSide::Expr(e) => build_net(opts, ps, &e.value, nets, funcs),
         MappingSide::Dotted(Some(e)) => build_net(opts, ps, &e.value, nets, funcs),
@@ -864,9 +864,9 @@ fn build_side(
 fn add_rule(
     opts: &FomaOptions,
     out: &mut Vec<Fsmrules>,
-    l: Box<Fsm>,
-    r: Option<Box<Fsm>>,
-    r2: Option<Box<Fsm>>,
+    l: Fsm,
+    r: Option<Fsm>,
+    r2: Option<Fsm>,
     ty: ArrowType,
 ) {
     if !ty.contains(ArrowType::DOTTED) {
@@ -897,8 +897,8 @@ fn add_rule(
     /* test = L ∩ [] : add the empty-[..] rule only if non-empty. */
     let mut test = fsm_intersect(opts, l, fsm_empty_string());
     if !fsm_isempty(opts, &mut test) {
-        let test_right = main.right.as_deref_mut().map(fsm_copy);
-        let test_right2 = main.right2.as_deref_mut().map(fsm_copy);
+        let test_right = main.right.as_mut().map(fsm_copy);
+        let test_right2 = main.right2.as_mut().map(fsm_copy);
         out.push(Fsmrules {
             left: Some(test),
             right: test_right,
@@ -916,7 +916,7 @@ fn add_rule(
 
 /// regex.y add_eprule: `[..] -> R (... R2)` — LHS is the empty string, and the
 /// arrow_type keeps ArrowType::DOTTED (unlike add_rule's main rule).
-fn add_eprule(out: &mut Vec<Fsmrules>, r: Option<Box<Fsm>>, r2: Option<Box<Fsm>>, ty: ArrowType) {
+fn add_eprule(out: &mut Vec<Fsmrules>, r: Option<Fsm>, r2: Option<Fsm>, ty: ArrowType) {
     out.push(Fsmrules {
         left: Some(fsm_empty_string()),
         right: r,
@@ -968,7 +968,7 @@ mod tests {
     /// C foma's `print size` numbers are produced downstream of
     /// fsm_parse_regex: the CLI regex command runs fsm_topsort (which sets
     /// pathcount) and stack_add runs fsm_count — mirror that pipeline here.
-    fn counted(net: Box<Fsm>) -> (i32, i32, i64) {
+    fn counted(net: Fsm) -> (i32, i32, i64) {
         let mut net = fsm_topsort(net);
         fsm_count(&mut net);
         (net.statecount, net.arccount, net.pathcount)

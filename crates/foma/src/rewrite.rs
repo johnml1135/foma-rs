@@ -53,12 +53,12 @@ use crate::types::{ArrowType, Fsm, Fsmcontexts, ReplaceDir, RewriteSet};
 // [spec:foma:def:rewrite.rewrite-batch]
 #[derive(Debug)]
 pub struct RewriteBatch {
-    pub rulenames: Option<Box<Fsm>>,
-    pub isyms: Option<Box<Fsm>>,
-    pub any: Option<Box<Fsm>>,
-    pub itape: Option<Box<Fsm>>,
-    pub any4tape: Option<Box<Fsm>>,
-    pub epextend: Option<Box<Fsm>>,
+    pub rulenames: Option<Fsm>,
+    pub isyms: Option<Fsm>,
+    pub any: Option<Fsm>,
+    pub itape: Option<Fsm>,
+    pub any4tape: Option<Fsm>,
+    pub epextend: Option<Fsm>,
     pub num_rules: i32,
     /// C: `char (*namestrings)[8]` — one sprintf'd "@#%04i@" row per rule.
     /// (The C rows overflow for rule numbers > 9999 — memory-unsafe,
@@ -75,7 +75,7 @@ pub static SPECIALSYMBOLS: [&str; 8] =
 // [spec:foma:sem:rewrite.fsm-rewrite-fn]
 // [spec:foma:def:fomalib.fsm-rewrite-fn]
 // [spec:foma:sem:fomalib.fsm-rewrite-fn]
-pub fn fsm_rewrite(opts: &FomaOptions, all_rules: &mut RewriteSet) -> Box<Fsm> {
+pub fn fsm_rewrite(opts: &FomaOptions, all_rules: &mut RewriteSet) -> Fsm {
     let mut num_rules: i32;
     let mut rule_number: i32;
     let mut dir: Option<ReplaceDir>;
@@ -153,15 +153,15 @@ pub fn fsm_rewrite(opts: &FomaOptions, all_rules: &mut RewriteSet) -> Box<Fsm> {
         while let Some(rs) = ruleset {
             let mut rules = rs.rewrite_rules.as_deref_mut();
             while let Some(r) = rules {
-                rewrite_add_special_syms(&rb, r.left.as_deref_mut());
-                rewrite_add_special_syms(&rb, r.right.as_deref_mut());
-                rewrite_add_special_syms(&rb, r.right2.as_deref_mut());
+                rewrite_add_special_syms(&rb, r.left.as_mut());
+                rewrite_add_special_syms(&rb, r.right.as_mut());
+                rewrite_add_special_syms(&rb, r.right2.as_mut());
                 rules = r.next.as_deref_mut();
             }
             let mut contexts = rs.rewrite_contexts.as_deref_mut();
             while let Some(c) = contexts {
-                rewrite_add_special_syms(&rb, c.left.as_deref_mut());
-                rewrite_add_special_syms(&rb, c.right.as_deref_mut());
+                rewrite_add_special_syms(&rb, c.left.as_mut());
+                rewrite_add_special_syms(&rb, c.right.as_mut());
                 contexts = c.next.as_deref_mut();
             }
             ruleset = rs.next.as_deref_mut();
@@ -177,49 +177,39 @@ pub fn fsm_rewrite(opts: &FomaOptions, all_rules: &mut RewriteSet) -> Box<Fsm> {
             let _ = dir; /* C: dir is assigned here but only read in the next loop */
             let mut rules = rs.rewrite_rules.as_deref_mut();
             while let Some(r) = rules {
-                let cp: Box<Fsm>;
+                let cp: Fsm;
                 if r.right.is_none() {
                     /* T(x)-type rule */
-                    let left_copy =
-                        fsm_copy(r.left.as_deref_mut().expect("rule left built for this op"));
+                    let left_copy = fsm_copy(r.left.as_mut().expect("rule left built for this op"));
                     let mut cp_new = rewrite_cp_transducer(opts, &mut rb, left_copy, rule_number);
                     r.cross_product = Some(fsm_copy(&mut cp_new));
-                    let left_copy =
-                        fsm_copy(r.left.as_deref_mut().expect("rule left built for this op"));
+                    let left_copy = fsm_copy(r.left.as_mut().expect("rule left built for this op"));
                     r.right = Some(fsm_minimize(opts, fsm_lower(left_copy)));
-                    let left_copy =
-                        fsm_copy(r.left.as_deref_mut().expect("rule left built for this op"));
+                    let left_copy = fsm_copy(r.left.as_mut().expect("rule left built for this op"));
                     /* replace the center with its upper side (old center dropped) */
                     r.left = Some(fsm_minimize(opts, fsm_upper(left_copy)));
-                    rewrite_add_special_syms(&rb, r.right.as_deref_mut());
-                    rewrite_add_special_syms(&rb, r.left.as_deref_mut());
+                    rewrite_add_special_syms(&rb, r.right.as_mut());
+                    rewrite_add_special_syms(&rb, r.left.as_mut());
                     cp = cp_new;
                 } else if r.right2.is_none() {
                     /* Regular rewrite rule */
-                    let left_copy =
-                        fsm_copy(r.left.as_deref_mut().expect("rule left built for this op"));
-                    let right_copy = fsm_copy(
-                        r.right
-                            .as_deref_mut()
-                            .expect("rule right built for this op"),
-                    );
+                    let left_copy = fsm_copy(r.left.as_mut().expect("rule left built for this op"));
+                    let Some(right) = r.right.as_mut() else {
+                        unreachable!("rule right built for this op")
+                    };
+                    let right_copy = fsm_copy(right);
                     let mut cp_new = rewrite_cp(opts, &mut rb, left_copy, right_copy, rule_number);
                     r.cross_product = Some(fsm_copy(&mut cp_new));
                     cp = cp_new;
                 } else {
                     /* A -> B ... C -type rule */
-                    let left_copy =
-                        fsm_copy(r.left.as_deref_mut().expect("rule left built for this op"));
-                    let right_copy = fsm_copy(
-                        r.right
-                            .as_deref_mut()
-                            .expect("rule right built for this op"),
-                    );
-                    let right2_copy = fsm_copy(
-                        r.right2
-                            .as_deref_mut()
-                            .expect("rule right2 built for this op"),
-                    );
+                    let left_copy = fsm_copy(r.left.as_mut().expect("rule left built for this op"));
+                    let Some(right) = r.right.as_mut() else {
+                        unreachable!("rule right built for this op")
+                    };
+                    let right_copy = fsm_copy(right);
+                    let right2_copy =
+                        fsm_copy(r.right2.as_mut().expect("rule right2 built for this op"));
                     let mut cp_new = rewrite_cp_markup(
                         opts,
                         &mut rb,
@@ -242,11 +232,7 @@ pub fn fsm_rewrite(opts: &FomaOptions, all_rules: &mut RewriteSet) -> Box<Fsm> {
     /* Create Base language */
     let mut boundary = fsm_parse_regex(opts, "\"@O@\" \"@0@\" \"@#@\" \"@ID@\"", None, None)
         .expect("constant rewrite regex compiles");
-    let any_copy = fsm_copy(
-        rb.any
-            .as_deref_mut()
-            .expect("rb.any built at fsm_rewrite start"),
-    );
+    let any_copy = fsm_copy(rb.any.as_mut().expect("rb.any built at fsm_rewrite start"));
     let outside = fsm_minimize(
         opts,
         fsm_concat(
@@ -290,73 +276,43 @@ pub fn fsm_rewrite(opts: &FomaOptions, all_rules: &mut RewriteSet) -> Box<Fsm> {
             while let Some(c) = contexts {
                 match dir {
                     Some(ReplaceDir::Upward) => {
-                        let left_copy = fsm_copy(
-                            c.left
-                                .as_deref_mut()
-                                .expect("context left built for this op"),
-                        );
+                        let left_copy =
+                            fsm_copy(c.left.as_mut().expect("context left built for this op"));
                         c.cpleft = Some(rewrite_upper(opts, &mut rb, left_copy));
-                        let right_copy = fsm_copy(
-                            c.right
-                                .as_deref_mut()
-                                .expect("context right built for this op"),
-                        );
+                        let right_copy =
+                            fsm_copy(c.right.as_mut().expect("context right built for this op"));
                         c.cpright = Some(rewrite_upper(opts, &mut rb, right_copy));
                     }
                     Some(ReplaceDir::Rightward) => {
-                        let left_copy = fsm_copy(
-                            c.left
-                                .as_deref_mut()
-                                .expect("context left built for this op"),
-                        );
+                        let left_copy =
+                            fsm_copy(c.left.as_mut().expect("context left built for this op"));
                         c.cpleft = Some(rewrite_lower(opts, &mut rb, left_copy));
-                        let right_copy = fsm_copy(
-                            c.right
-                                .as_deref_mut()
-                                .expect("context right built for this op"),
-                        );
+                        let right_copy =
+                            fsm_copy(c.right.as_mut().expect("context right built for this op"));
                         c.cpright = Some(rewrite_upper(opts, &mut rb, right_copy));
                     }
                     Some(ReplaceDir::Leftward) => {
-                        let left_copy = fsm_copy(
-                            c.left
-                                .as_deref_mut()
-                                .expect("context left built for this op"),
-                        );
+                        let left_copy =
+                            fsm_copy(c.left.as_mut().expect("context left built for this op"));
                         c.cpleft = Some(rewrite_upper(opts, &mut rb, left_copy));
-                        let right_copy = fsm_copy(
-                            c.right
-                                .as_deref_mut()
-                                .expect("context right built for this op"),
-                        );
+                        let right_copy =
+                            fsm_copy(c.right.as_mut().expect("context right built for this op"));
                         c.cpright = Some(rewrite_lower(opts, &mut rb, right_copy));
                     }
                     Some(ReplaceDir::Downward) => {
-                        let left_copy = fsm_copy(
-                            c.left
-                                .as_deref_mut()
-                                .expect("context left built for this op"),
-                        );
+                        let left_copy =
+                            fsm_copy(c.left.as_mut().expect("context left built for this op"));
                         c.cpleft = Some(rewrite_lower(opts, &mut rb, left_copy));
-                        let right_copy = fsm_copy(
-                            c.right
-                                .as_deref_mut()
-                                .expect("context right built for this op"),
-                        );
+                        let right_copy =
+                            fsm_copy(c.right.as_mut().expect("context right built for this op"));
                         c.cpright = Some(rewrite_lower(opts, &mut rb, right_copy));
                     }
                     Some(ReplaceDir::TwoLevel) => {
-                        let left_copy = fsm_copy(
-                            c.left
-                                .as_deref_mut()
-                                .expect("context left built for this op"),
-                        );
+                        let left_copy =
+                            fsm_copy(c.left.as_mut().expect("context left built for this op"));
                         c.cpleft = Some(rewrite_two_level(opts, &mut rb, left_copy, 0));
-                        let right_copy = fsm_copy(
-                            c.right
-                                .as_deref_mut()
-                                .expect("context right built for this op"),
-                        );
+                        let right_copy =
+                            fsm_copy(c.right.as_mut().expect("context right built for this op"));
                         c.cpright = Some(rewrite_two_level(opts, &mut rb, right_copy, 1));
                     }
                     None => {} /* no context-direction rewrite */
@@ -374,7 +330,7 @@ pub fn fsm_rewrite(opts: &FomaOptions, all_rules: &mut RewriteSet) -> Box<Fsm> {
                     /* ~[?* Center ~[EP ?*]] & ~[~[?* EP] Center ?*] */
                     let mut center = fsm_copy(
                         r.cross_product
-                            .as_deref_mut()
+                            .as_mut()
                             .expect("rule cross_product built for this op"),
                     );
                     base = fsm_intersect(
@@ -429,7 +385,7 @@ pub fn fsm_rewrite(opts: &FomaOptions, all_rules: &mut RewriteSet) -> Box<Fsm> {
                         opts,
                         &mut rb,
                         r.cross_product
-                            .as_deref_mut()
+                            .as_mut()
                             .expect("rule cross_product built for this op"),
                         rewrite_contexts.as_deref_mut(),
                     );
@@ -440,8 +396,7 @@ pub fn fsm_rewrite(opts: &FomaOptions, all_rules: &mut RewriteSet) -> Box<Fsm> {
                 if r.arrow_type.contains(ArrowType::RIGHT)
                     && !r.arrow_type.contains(ArrowType::OPTIONAL)
                 {
-                    let left_copy =
-                        fsm_copy(r.left.as_deref_mut().expect("rule left built for this op"));
+                    let left_copy = fsm_copy(r.left.as_mut().expect("rule left built for this op"));
                     c = fsm_union(
                         opts,
                         c,
@@ -455,11 +410,8 @@ pub fn fsm_rewrite(opts: &FomaOptions, all_rules: &mut RewriteSet) -> Box<Fsm> {
                 if r.arrow_type.contains(ArrowType::LEFT)
                     && !r.arrow_type.contains(ArrowType::OPTIONAL)
                 {
-                    let right_copy = fsm_copy(
-                        r.right
-                            .as_deref_mut()
-                            .expect("rule right built for this op"),
-                    );
+                    let right_copy =
+                        fsm_copy(r.right.as_mut().expect("rule right built for this op"));
                     c = fsm_union(
                         opts,
                         c,
@@ -473,7 +425,7 @@ pub fn fsm_rewrite(opts: &FomaOptions, all_rules: &mut RewriteSet) -> Box<Fsm> {
                 if r.arrow_type.contains(ArrowType::LONGEST_MATCH) {
                     if r.arrow_type.contains(ArrowType::RIGHT) {
                         let left_copy =
-                            fsm_copy(r.left.as_deref_mut().expect("rule left built for this op"));
+                            fsm_copy(r.left.as_mut().expect("rule left built for this op"));
                         let mut lang = rewrite_upper(opts, &mut rb, left_copy);
                         c = fsm_union(
                             opts,
@@ -481,7 +433,7 @@ pub fn fsm_rewrite(opts: &FomaOptions, all_rules: &mut RewriteSet) -> Box<Fsm> {
                             rewr_notleftmost(opts, &rb, &mut lang, rule_number, r.arrow_type),
                         );
                         let left_copy =
-                            fsm_copy(r.left.as_deref_mut().expect("rule left built for this op"));
+                            fsm_copy(r.left.as_mut().expect("rule left built for this op"));
                         let mut lang = rewrite_upper(opts, &mut rb, left_copy);
                         c = fsm_union(
                             opts,
@@ -490,22 +442,16 @@ pub fn fsm_rewrite(opts: &FomaOptions, all_rules: &mut RewriteSet) -> Box<Fsm> {
                         );
                     }
                     if r.arrow_type.contains(ArrowType::LEFT) {
-                        let right_copy = fsm_copy(
-                            r.right
-                                .as_deref_mut()
-                                .expect("rule right built for this op"),
-                        );
+                        let right_copy =
+                            fsm_copy(r.right.as_mut().expect("rule right built for this op"));
                         let mut lang = rewrite_lower(opts, &mut rb, right_copy);
                         c = fsm_union(
                             opts,
                             c,
                             rewr_notleftmost(opts, &rb, &mut lang, rule_number, r.arrow_type),
                         );
-                        let right_copy = fsm_copy(
-                            r.right
-                                .as_deref_mut()
-                                .expect("rule right built for this op"),
-                        );
+                        let right_copy =
+                            fsm_copy(r.right.as_mut().expect("rule right built for this op"));
                         let mut lang = rewrite_lower(opts, &mut rb, right_copy);
                         c = fsm_union(
                             opts,
@@ -517,7 +463,7 @@ pub fn fsm_rewrite(opts: &FomaOptions, all_rules: &mut RewriteSet) -> Box<Fsm> {
                 if r.arrow_type.contains(ArrowType::SHORTEST_MATCH) {
                     if r.arrow_type.contains(ArrowType::RIGHT) {
                         let left_copy =
-                            fsm_copy(r.left.as_deref_mut().expect("rule left built for this op"));
+                            fsm_copy(r.left.as_mut().expect("rule left built for this op"));
                         let mut lang = rewrite_upper(opts, &mut rb, left_copy);
                         c = fsm_union(
                             opts,
@@ -525,27 +471,21 @@ pub fn fsm_rewrite(opts: &FomaOptions, all_rules: &mut RewriteSet) -> Box<Fsm> {
                             rewr_notleftmost(opts, &rb, &mut lang, rule_number, r.arrow_type),
                         );
                         let left_copy =
-                            fsm_copy(r.left.as_deref_mut().expect("rule left built for this op"));
+                            fsm_copy(r.left.as_mut().expect("rule left built for this op"));
                         let mut lang = rewrite_upper(opts, &mut rb, left_copy);
                         c = fsm_union(opts, c, rewr_notshortest(opts, &rb, &mut lang, rule_number));
                     }
                     if r.arrow_type.contains(ArrowType::LEFT) {
-                        let right_copy = fsm_copy(
-                            r.right
-                                .as_deref_mut()
-                                .expect("rule right built for this op"),
-                        );
+                        let right_copy =
+                            fsm_copy(r.right.as_mut().expect("rule right built for this op"));
                         let mut lang = rewrite_lower(opts, &mut rb, right_copy);
                         c = fsm_union(
                             opts,
                             c,
                             rewr_notleftmost(opts, &rb, &mut lang, rule_number, r.arrow_type),
                         );
-                        let right_copy = fsm_copy(
-                            r.right
-                                .as_deref_mut()
-                                .expect("rule right built for this op"),
-                        );
+                        let right_copy =
+                            fsm_copy(r.right.as_mut().expect("rule right built for this op"));
                         let mut lang = rewrite_lower(opts, &mut rb, right_copy);
                         c = fsm_union(opts, c, rewr_notshortest(opts, &rb, &mut lang, rule_number));
                     }
@@ -575,7 +515,7 @@ pub fn fsm_rewrite(opts: &FomaOptions, all_rules: &mut RewriteSet) -> Box<Fsm> {
                         /* Extend left and right */
                         let cpleft_copy = fsm_copy(
                             ctx.cpleft
-                                .as_deref_mut()
+                                .as_mut()
                                 .expect("context cpleft built for this op"),
                         );
                         let left_extend = fsm_minimize(
@@ -592,7 +532,7 @@ pub fn fsm_rewrite(opts: &FomaOptions, all_rules: &mut RewriteSet) -> Box<Fsm> {
                         );
                         let cpright_copy = fsm_copy(
                             ctx.cpright
-                                .as_deref_mut()
+                                .as_mut()
                                 .expect("context cpright built for this op"),
                         );
                         let right_extend = fsm_minimize(
@@ -613,13 +553,13 @@ pub fn fsm_rewrite(opts: &FomaOptions, all_rules: &mut RewriteSet) -> Box<Fsm> {
                     } else {
                         let cpleft_copy = fsm_copy(
                             ctx.cpleft
-                                .as_deref_mut()
+                                .as_mut()
                                 .expect("context cpleft built for this op"),
                         );
                         let c_copy = fsm_copy(&mut c);
                         let cpright_copy = fsm_copy(
                             ctx.cpright
-                                .as_deref_mut()
+                                .as_mut()
                                 .expect("context cpright built for this op"),
                         );
                         let lcr =
@@ -697,7 +637,7 @@ pub fn rewr_notlongest(
     lang: &mut Fsm,
     rule_number: i32,
     arrow_type: ArrowType,
-) -> Box<Fsm> {
+) -> Fsm {
     /* define NotLongest(X)  [Upper(X)/Lower(X) & Tape1of4(IOpen Tape1Sig* ["@O@" | IOpen] Tape1Sig*)] */
     let mut nl = fsm_parse_regex(opts,
         "[\"@I[@\"|\"@I[]@\"] [\"@I[@\"|\"@I[]@\"|\"@I]@\"|\"@I@\"|\"@O@\"]* [\"@O@\"|\"@I[@\"|\"@I[]@\"] [\"@I[@\"|\"@I[]@\"|\"@I]@\"|\"@I@\"|\"@O@\"]*",
@@ -744,7 +684,7 @@ pub fn rewr_notshortest(
     rb: &RewriteBatch,
     lang: &mut Fsm,
     rule_number: i32,
-) -> Box<Fsm> {
+) -> Fsm {
     /* define NotShortest(X)   [Upper/Lower(X) & Tape1of4("@I[@" \IClose*)] */
     let mut ns = fsm_parse_regex(opts, "[\"@I[@\"] \\[\"@I]@\"]*", None, None)
         .expect("constant rewrite regex compiles");
@@ -777,7 +717,7 @@ pub fn rewr_notleftmost(
     lang: &mut Fsm,
     rule_number: i32,
     arrow_type: ArrowType,
-) -> Box<Fsm> {
+) -> Fsm {
     /* define Leftmost(X)   [Upper/Lower(X) & Tape1of4("@O@" Tape1Sig* IOpen Tape1Sig*) ] */
     let mut nl = fsm_parse_regex(
         opts,
@@ -842,7 +782,7 @@ pub fn rewr_notleftmost(
 
 // [spec:foma:def:rewrite.rewr-unrewritten-fn]
 // [spec:foma:sem:rewrite.rewr-unrewritten-fn]
-pub fn rewr_unrewritten(opts: &FomaOptions, rb: &mut RewriteBatch, lang: Box<Fsm>) -> Box<Fsm> {
+pub fn rewr_unrewritten(opts: &FomaOptions, rb: &mut RewriteBatch, lang: Fsm) -> Fsm {
     /* define Unrewritten(X) [X .o. [0:"@O@" 0:"@0@" ? 0:"@ID@"]*].l; */
     let c = fsm_minimize(
         opts,
@@ -856,11 +796,7 @@ pub fn rewr_unrewritten(opts: &FomaOptions, rb: &mut RewriteBatch, lang: Box<Fsm
                     fsm_cross_product(opts, fsm_empty_string(), fsm_symbol("@0@")),
                     fsm_concat(
                         opts,
-                        fsm_copy(
-                            rb.any
-                                .as_deref_mut()
-                                .expect("rb.any built at fsm_rewrite start"),
-                        ),
+                        fsm_copy(rb.any.as_mut().expect("rb.any built at fsm_rewrite start")),
                         fsm_cross_product(opts, fsm_empty_string(), fsm_symbol("@ID@")),
                     ),
                 ),
@@ -872,7 +808,7 @@ pub fn rewr_unrewritten(opts: &FomaOptions, rb: &mut RewriteBatch, lang: Box<Fsm
 
 // [spec:foma:def:rewrite.rewr-contains-fn]
 // [spec:foma:sem:rewrite.rewr-contains-fn]
-pub fn rewr_contains(opts: &FomaOptions, rb: &mut RewriteBatch, lang: Box<Fsm>) -> Box<Fsm> {
+pub fn rewr_contains(opts: &FomaOptions, rb: &mut RewriteBatch, lang: Fsm) -> Fsm {
     /* define NotContain(X) ~[[Tape1Sig Tape2Sig Tape3Sig Tape4Sig]* X ?*];
     (NO complement is taken despite the name — callers subtract) */
     let first = rewrite_any_4tape(opts, rb);
@@ -885,13 +821,7 @@ pub fn rewr_contains(opts: &FomaOptions, rb: &mut RewriteBatch, lang: Box<Fsm>) 
 
 // [spec:foma:def:rewrite.rewrite-tape-m-to-n-of-k-fn]
 // [spec:foma:sem:rewrite.rewrite-tape-m-to-n-of-k-fn]
-pub fn rewrite_tape_m_to_n_of_k(
-    opts: &FomaOptions,
-    lang: Box<Fsm>,
-    m: i32,
-    n: i32,
-    k: i32,
-) -> Box<Fsm> {
+pub fn rewrite_tape_m_to_n_of_k(opts: &FomaOptions, lang: Fsm, m: i32, n: i32, k: i32) -> Fsm {
     /* [X .o. [0:?^(m-1) ?^(n-m+1) 0:?^(k-n)]*].l */
     fsm_minimize(
         opts,
@@ -927,9 +857,9 @@ pub fn rewrite_tape_m_to_n_of_k(
 pub fn rewrite_two_level(
     opts: &FomaOptions,
     rb: &mut RewriteBatch,
-    lang: Box<Fsm>,
+    lang: Fsm,
     rightside: i32,
-) -> Box<Fsm> {
+) -> Fsm {
     let mut lang = lang;
     let lower = rewrite_lower(opts, rb, fsm_minimize(opts, fsm_lower(fsm_copy(&mut lang))));
     let upper = rewrite_upper(opts, rb, fsm_minimize(opts, fsm_upper(lang)));
@@ -956,7 +886,7 @@ pub fn rewrite_two_level(
 
 // [spec:foma:def:rewrite.rewrite-lower-fn]
 // [spec:foma:sem:rewrite.rewrite-lower-fn]
-pub fn rewrite_lower(opts: &FomaOptions, rb: &mut RewriteBatch, lower: Box<Fsm>) -> Box<Fsm> {
+pub fn rewrite_lower(opts: &FomaOptions, rb: &mut RewriteBatch, lower: Fsm) -> Fsm {
     /*
        Lower:
 
@@ -983,11 +913,7 @@ pub fn rewrite_lower(opts: &FomaOptions, rb: &mut RewriteBatch, lower: Box<Fsm>)
                     fsm_union(
                         opts,
                         fsm_symbol("@#@"),
-                        fsm_copy(
-                            rb.any
-                                .as_deref_mut()
-                                .expect("rb.any built at fsm_rewrite start"),
-                        ),
+                        fsm_copy(rb.any.as_mut().expect("rb.any built at fsm_rewrite start")),
                     ),
                     fsm_cross_product(opts, fsm_empty_string(), fsm_symbol("@ID@")),
                 ),
@@ -1004,7 +930,7 @@ pub fn rewrite_lower(opts: &FomaOptions, rb: &mut RewriteBatch, lower: Box<Fsm>)
                 fsm_empty_string(),
                 fsm_copy(
                     rb.isyms
-                        .as_deref_mut()
+                        .as_mut()
                         .expect("rb.isyms built at fsm_rewrite start"),
                 ),
             ),
@@ -1015,7 +941,7 @@ pub fn rewrite_lower(opts: &FomaOptions, rb: &mut RewriteBatch, lower: Box<Fsm>)
                     fsm_empty_string(),
                     fsm_copy(
                         rb.rulenames
-                            .as_deref_mut()
+                            .as_mut()
                             .expect("rb.rulenames built at fsm_rewrite start"),
                     ),
                 ),
@@ -1026,19 +952,11 @@ pub fn rewrite_lower(opts: &FomaOptions, rb: &mut RewriteBatch, lower: Box<Fsm>)
                         fsm_empty_string(),
                         fsm_union(
                             opts,
-                            fsm_copy(
-                                rb.any
-                                    .as_deref_mut()
-                                    .expect("rb.any built at fsm_rewrite start"),
-                            ),
+                            fsm_copy(rb.any.as_mut().expect("rb.any built at fsm_rewrite start")),
                             fsm_symbol("@0@"),
                         ),
                     ),
-                    fsm_copy(
-                        rb.any
-                            .as_deref_mut()
-                            .expect("rb.any built at fsm_rewrite start"),
-                    ),
+                    fsm_copy(rb.any.as_mut().expect("rb.any built at fsm_rewrite start")),
                 ),
             ),
         ),
@@ -1053,7 +971,7 @@ pub fn rewrite_lower(opts: &FomaOptions, rb: &mut RewriteBatch, lower: Box<Fsm>)
                 fsm_empty_string(),
                 fsm_copy(
                     rb.isyms
-                        .as_deref_mut()
+                        .as_mut()
                         .expect("rb.isyms built at fsm_rewrite start"),
                 ),
             ),
@@ -1064,7 +982,7 @@ pub fn rewrite_lower(opts: &FomaOptions, rb: &mut RewriteBatch, lower: Box<Fsm>)
                     fsm_empty_string(),
                     fsm_copy(
                         rb.rulenames
-                            .as_deref_mut()
+                            .as_mut()
                             .expect("rb.rulenames built at fsm_rewrite start"),
                     ),
                 ),
@@ -1073,11 +991,7 @@ pub fn rewrite_lower(opts: &FomaOptions, rb: &mut RewriteBatch, lower: Box<Fsm>)
                     fsm_cross_product(
                         opts,
                         fsm_empty_string(),
-                        fsm_copy(
-                            rb.any
-                                .as_deref_mut()
-                                .expect("rb.any built at fsm_rewrite start"),
-                        ),
+                        fsm_copy(rb.any.as_mut().expect("rb.any built at fsm_rewrite start")),
                     ),
                     fsm_cross_product(opts, fsm_empty_string(), fsm_symbol("@0@")),
                 ),
@@ -1094,7 +1008,7 @@ pub fn rewrite_lower(opts: &FomaOptions, rb: &mut RewriteBatch, lower: Box<Fsm>)
 
 // [spec:foma:def:rewrite.rewrite-any-4tape-fn]
 // [spec:foma:sem:rewrite.rewrite-any-4tape-fn]
-pub fn rewrite_any_4tape(opts: &FomaOptions, rb: &mut RewriteBatch) -> Box<Fsm> {
+pub fn rewrite_any_4tape(opts: &FomaOptions, rb: &mut RewriteBatch) -> Fsm {
     /*
       Upper:
 
@@ -1124,9 +1038,7 @@ pub fn rewrite_any_4tape(opts: &FomaOptions, rb: &mut RewriteBatch) -> Box<Fsm> 
                                 fsm_union(
                                     opts,
                                     fsm_copy(
-                                        rb.any
-                                            .as_deref_mut()
-                                            .expect("rb.any built at fsm_rewrite start"),
+                                        rb.any.as_mut().expect("rb.any built at fsm_rewrite start"),
                                     ),
                                     fsm_symbol("@#@"),
                                 ),
@@ -1138,14 +1050,14 @@ pub fn rewrite_any_4tape(opts: &FomaOptions, rb: &mut RewriteBatch) -> Box<Fsm> 
                         opts,
                         fsm_copy(
                             rb.isyms
-                                .as_deref_mut()
+                                .as_mut()
                                 .expect("rb.isyms built at fsm_rewrite start"),
                         ),
                         fsm_concat(
                             opts,
                             fsm_copy(
                                 rb.rulenames
-                                    .as_deref_mut()
+                                    .as_mut()
                                     .expect("rb.rulenames built at fsm_rewrite start"),
                             ),
                             fsm_concat(
@@ -1153,18 +1065,14 @@ pub fn rewrite_any_4tape(opts: &FomaOptions, rb: &mut RewriteBatch) -> Box<Fsm> 
                                 fsm_union(
                                     opts,
                                     fsm_copy(
-                                        rb.any
-                                            .as_deref_mut()
-                                            .expect("rb.any built at fsm_rewrite start"),
+                                        rb.any.as_mut().expect("rb.any built at fsm_rewrite start"),
                                     ),
                                     fsm_symbol("@0@"),
                                 ),
                                 fsm_union(
                                     opts,
                                     fsm_copy(
-                                        rb.any
-                                            .as_deref_mut()
-                                            .expect("rb.any built at fsm_rewrite start"),
+                                        rb.any.as_mut().expect("rb.any built at fsm_rewrite start"),
                                     ),
                                     fsm_union(opts, fsm_symbol("@ID@"), fsm_symbol("@0@")),
                                 ),
@@ -1175,16 +1083,12 @@ pub fn rewrite_any_4tape(opts: &FomaOptions, rb: &mut RewriteBatch) -> Box<Fsm> 
             ),
         ));
     }
-    fsm_copy(
-        rb.any4tape
-            .as_deref_mut()
-            .expect("rb.any4tape built before use"),
-    )
+    fsm_copy(rb.any4tape.as_mut().expect("rb.any4tape built before use"))
 }
 
 // [spec:foma:def:rewrite.rewrite-upper-fn]
 // [spec:foma:sem:rewrite.rewrite-upper-fn]
-pub fn rewrite_upper(opts: &FomaOptions, rb: &mut RewriteBatch, upper: Box<Fsm>) -> Box<Fsm> {
+pub fn rewrite_upper(opts: &FomaOptions, rb: &mut RewriteBatch, upper: Fsm) -> Fsm {
     /*
       Upper:
 
@@ -1210,11 +1114,7 @@ pub fn rewrite_upper(opts: &FomaOptions, rb: &mut RewriteBatch, upper: Box<Fsm>)
                     fsm_union(
                         opts,
                         fsm_symbol("@#@"),
-                        fsm_copy(
-                            rb.any
-                                .as_deref_mut()
-                                .expect("rb.any built at fsm_rewrite start"),
-                        ),
+                        fsm_copy(rb.any.as_mut().expect("rb.any built at fsm_rewrite start")),
                     ),
                     fsm_cross_product(opts, fsm_empty_string(), fsm_symbol("@ID@")),
                 ),
@@ -1231,7 +1131,7 @@ pub fn rewrite_upper(opts: &FomaOptions, rb: &mut RewriteBatch, upper: Box<Fsm>)
                 fsm_empty_string(),
                 fsm_copy(
                     rb.isyms
-                        .as_deref_mut()
+                        .as_mut()
                         .expect("rb.isyms built at fsm_rewrite start"),
                 ),
             ),
@@ -1242,7 +1142,7 @@ pub fn rewrite_upper(opts: &FomaOptions, rb: &mut RewriteBatch, upper: Box<Fsm>)
                     fsm_empty_string(),
                     fsm_copy(
                         rb.rulenames
-                            .as_deref_mut()
+                            .as_mut()
                             .expect("rb.rulenames built at fsm_rewrite start"),
                     ),
                 ),
@@ -1252,11 +1152,7 @@ pub fn rewrite_upper(opts: &FomaOptions, rb: &mut RewriteBatch, upper: Box<Fsm>)
                     fsm_cross_product(
                         opts,
                         fsm_empty_string(),
-                        fsm_copy(
-                            rb.any
-                                .as_deref_mut()
-                                .expect("rb.any built at fsm_rewrite start"),
-                        ),
+                        fsm_copy(rb.any.as_mut().expect("rb.any built at fsm_rewrite start")),
                     ),
                 ),
             ),
@@ -1272,7 +1168,7 @@ pub fn rewrite_upper(opts: &FomaOptions, rb: &mut RewriteBatch, upper: Box<Fsm>)
                 fsm_empty_string(),
                 fsm_copy(
                     rb.isyms
-                        .as_deref_mut()
+                        .as_mut()
                         .expect("rb.isyms built at fsm_rewrite start"),
                 ),
             ),
@@ -1283,17 +1179,13 @@ pub fn rewrite_upper(opts: &FomaOptions, rb: &mut RewriteBatch, upper: Box<Fsm>)
                     fsm_empty_string(),
                     fsm_copy(
                         rb.rulenames
-                            .as_deref_mut()
+                            .as_mut()
                             .expect("rb.rulenames built at fsm_rewrite start"),
                     ),
                 ),
                 fsm_concat(
                     opts,
-                    fsm_copy(
-                        rb.any
-                            .as_deref_mut()
-                            .expect("rb.any built at fsm_rewrite start"),
-                    ),
+                    fsm_copy(rb.any.as_mut().expect("rb.any built at fsm_rewrite start")),
                     fsm_cross_product(
                         opts,
                         fsm_empty_string(),
@@ -1303,9 +1195,7 @@ pub fn rewrite_upper(opts: &FomaOptions, rb: &mut RewriteBatch, upper: Box<Fsm>)
                                 opts,
                                 fsm_symbol("@0@"),
                                 fsm_copy(
-                                    rb.any
-                                        .as_deref_mut()
-                                        .expect("rb.any built at fsm_rewrite start"),
+                                    rb.any.as_mut().expect("rb.any built at fsm_rewrite start"),
                                 ),
                             ),
                             fsm_symbol("@ID@"),
@@ -1325,7 +1215,7 @@ pub fn rewrite_upper(opts: &FomaOptions, rb: &mut RewriteBatch, upper: Box<Fsm>)
 
 // [spec:foma:def:rewrite.rewrite-align-fn]
 // [spec:foma:sem:rewrite.rewrite-align-fn]
-pub fn rewrite_align(opts: &FomaOptions, upper: Box<Fsm>, lower: Box<Fsm>) -> Box<Fsm> {
+pub fn rewrite_align(opts: &FomaOptions, upper: Fsm, lower: Fsm) -> Fsm {
     /* `[[`[[Tape1of2(upper "@0@"*) & Tape2of2(lower "@0@"*) & ~[[? ?]* "@0@" "@0@" [? ?]*]], %@%_IDENTITY%_SYMBOL%_%@,%@UNK%@] .o. [? ?|"@UNK@" "@UNK@":"@ID@"]*].l, %@UNK%@,%@%_IDENTITY%_SYMBOL%_%@] */
     let first = fsm_minimize(
         opts,
@@ -1379,12 +1269,7 @@ pub fn rewrite_align(opts: &FomaOptions, upper: Box<Fsm>, lower: Box<Fsm>) -> Bo
 
 // [spec:foma:def:rewrite.rewrite-align-markup-fn]
 // [spec:foma:sem:rewrite.rewrite-align-markup-fn]
-pub fn rewrite_align_markup(
-    opts: &FomaOptions,
-    upper: Box<Fsm>,
-    lower1: Box<Fsm>,
-    lower2: Box<Fsm>,
-) -> Box<Fsm> {
+pub fn rewrite_align_markup(opts: &FomaOptions, upper: Fsm, lower1: Fsm, lower2: Fsm) -> Fsm {
     /* [Tape1of2("@0@"*) & Tape2of2(lower1)] [Tape1of2(upper) & Tape2of2("@ID@"*)] [ Tape1of2(lower1) & Tape2of2("@0@"*)] */
     /* + make sure IDENTITY and UNKNOWN are taken care of */
     let first = fsm_minimize(
@@ -1436,7 +1321,7 @@ pub fn rewrite_align_markup(
 
 // [spec:foma:def:rewrite.rewrite-itape-fn]
 // [spec:foma:sem:rewrite.rewrite-itape-fn]
-pub fn rewrite_itape(opts: &FomaOptions, rb: &mut RewriteBatch) -> Box<Fsm> {
+pub fn rewrite_itape(opts: &FomaOptions, rb: &mut RewriteBatch) -> Fsm {
     if rb.itape.is_none() {
         rb.itape = Some(
             fsm_parse_regex(opts,
@@ -1447,7 +1332,7 @@ pub fn rewrite_itape(opts: &FomaOptions, rb: &mut RewriteBatch) -> Box<Fsm> {
             .expect("constant rewrite regex compiles"),
         );
     }
-    fsm_copy(rb.itape.as_deref_mut().expect("rb.itape built before use"))
+    fsm_copy(rb.itape.as_mut().expect("rb.itape built before use"))
 }
 
 // [spec:foma:def:rewrite.rewrite-cp-markup-fn]
@@ -1455,11 +1340,11 @@ pub fn rewrite_itape(opts: &FomaOptions, rb: &mut RewriteBatch) -> Box<Fsm> {
 pub fn rewrite_cp_markup(
     opts: &FomaOptions,
     rb: &mut RewriteBatch,
-    upper: Box<Fsm>,
-    lower1: Box<Fsm>,
-    lower2: Box<Fsm>,
+    upper: Fsm,
+    lower1: Fsm,
+    lower2: Fsm,
     rule_number: i32,
-) -> Box<Fsm> {
+) -> Fsm {
     /* Same as rewrite_cp, could be consolidated */
     /* define CP(X,Y) Tape23of3(Align2(X,Y)) & [ "@I[@"  ? ? ["@I@" ? ?]* "@I]@" ? ? | "@I[]@" ? ? | 0 ] */
     let mut aligned = rewrite_align_markup(opts, upper, lower1, lower2);
@@ -1486,9 +1371,9 @@ pub fn rewrite_cp_markup(
 pub fn rewrite_cp_transducer(
     opts: &FomaOptions,
     rb: &mut RewriteBatch,
-    t: Box<Fsm>,
+    t: Fsm,
     rule_number: i32,
-) -> Box<Fsm> {
+) -> Fsm {
     /* C: fsm_flatten's NULL return is a dead branch (see the fsm-flatten
     sem rule) — unwrap here */
     let mut aligned = fsm_flatten(opts, t, fsm_symbol("@0@"))
@@ -1516,10 +1401,10 @@ pub fn rewrite_cp_transducer(
 pub fn rewrite_cp(
     opts: &FomaOptions,
     rb: &mut RewriteBatch,
-    upper: Box<Fsm>,
-    lower: Box<Fsm>,
+    upper: Fsm,
+    lower: Fsm,
     rule_number: i32,
-) -> Box<Fsm> {
+) -> Fsm {
     /* define CP(X,Y) Tape23of3(Align2(X,Y)) & [ "@I[@"  ? ? ["@I@" ? ?]* "@I]@" ? ? | "@I[]@" ? ? | 0 ] */
     let mut aligned = rewrite_align(opts, upper, lower);
     aligned = rewrite_tape_m_to_n_of_k(opts, aligned, 3, 4, 4);
@@ -1603,7 +1488,7 @@ pub fn rewr_context_restrict(
     rb: &mut RewriteBatch,
     x: &mut Fsm,
     lr: Option<&mut Fsmcontexts>,
-) -> Box<Fsm> {
+) -> Fsm {
     let mut var = fsm_symbol("@VARX@");
     //Notvar = fsm_minimize(fsm_kleene_star(fsm_term_negation(fsm_symbol("@VARX@"))));
     let mut notvar = fsm_minus(
@@ -1626,11 +1511,7 @@ pub fn rewr_context_restrict(
         let left = if p.left.is_none() {
             fsm_empty_string()
         } else {
-            let mut l = fsm_copy(
-                p.cpleft
-                    .as_deref_mut()
-                    .expect("context cpleft built for this op"),
-            );
+            let mut l = fsm_copy(p.cpleft.as_mut().expect("context cpleft built for this op"));
             sigma_add("@VARX@", &mut l.sigma);
             sigma_sort(&mut l);
             l
@@ -1640,7 +1521,7 @@ pub fn rewr_context_restrict(
         } else {
             let mut r = fsm_copy(
                 p.cpright
-                    .as_deref_mut()
+                    .as_mut()
                     .expect("context cpright built for this op"),
             );
             sigma_add("@VARX@", &mut r.sigma);
@@ -1706,7 +1587,7 @@ pub fn rewr_context_restrict(
 
 // [spec:foma:def:rewrite.rewrite-epextend-fn]
 // [spec:foma:sem:rewrite.rewrite-epextend-fn]
-pub fn rewrite_epextend(opts: &FomaOptions, rb: &mut RewriteBatch) -> Box<Fsm> {
+pub fn rewrite_epextend(opts: &FomaOptions, rb: &mut RewriteBatch) -> Fsm {
     /* 1.  @O@   @0@     [ANY|@#@] @ID@           */
     /* 2.  @I[]@ @#Rule@ [ANY]     [@ID@|@0@|ANY] */
     /* 3a. @I[@  @#Rule@ [ANY]     [@ID@|@0@|ANY] */
@@ -1729,11 +1610,7 @@ pub fn rewrite_epextend(opts: &FomaOptions, rb: &mut RewriteBatch) -> Box<Fsm> {
                         opts,
                         fsm_union(
                             opts,
-                            fsm_copy(
-                                rb.any
-                                    .as_deref_mut()
-                                    .expect("rb.any built at fsm_rewrite start"),
-                            ),
+                            fsm_copy(rb.any.as_mut().expect("rb.any built at fsm_rewrite start")),
                             fsm_symbol("@#@"),
                         ),
                         fsm_symbol("@ID@"),
@@ -1750,16 +1627,12 @@ pub fn rewrite_epextend(opts: &FomaOptions, rb: &mut RewriteBatch) -> Box<Fsm> {
                     opts,
                     fsm_copy(
                         rb.rulenames
-                            .as_deref_mut()
+                            .as_mut()
                             .expect("rb.rulenames built at fsm_rewrite start"),
                     ),
                     fsm_concat(
                         opts,
-                        fsm_copy(
-                            rb.any
-                                .as_deref_mut()
-                                .expect("rb.any built at fsm_rewrite start"),
-                        ),
+                        fsm_copy(rb.any.as_mut().expect("rb.any built at fsm_rewrite start")),
                         fsm_union(
                             opts,
                             fsm_symbol("@0@"),
@@ -1767,9 +1640,7 @@ pub fn rewrite_epextend(opts: &FomaOptions, rb: &mut RewriteBatch) -> Box<Fsm> {
                                 opts,
                                 fsm_symbol("@ID@"),
                                 fsm_copy(
-                                    rb.any
-                                        .as_deref_mut()
-                                        .expect("rb.any built at fsm_rewrite start"),
+                                    rb.any.as_mut().expect("rb.any built at fsm_rewrite start"),
                                 ),
                             ),
                         ),
@@ -1788,18 +1659,14 @@ pub fn rewrite_epextend(opts: &FomaOptions, rb: &mut RewriteBatch) -> Box<Fsm> {
                     opts,
                     fsm_copy(
                         rb.rulenames
-                            .as_deref_mut()
+                            .as_mut()
                             .expect("rb.rulenames built at fsm_rewrite start"),
                     ),
                     fsm_concat(
                         opts,
                         fsm_union(
                             opts,
-                            fsm_copy(
-                                rb.any
-                                    .as_deref_mut()
-                                    .expect("rb.any built at fsm_rewrite start"),
-                            ),
+                            fsm_copy(rb.any.as_mut().expect("rb.any built at fsm_rewrite start")),
                             fsm_symbol("@0@"),
                         ),
                         fsm_union(
@@ -1809,9 +1676,7 @@ pub fn rewrite_epextend(opts: &FomaOptions, rb: &mut RewriteBatch) -> Box<Fsm> {
                                 opts,
                                 fsm_symbol("@ID@"),
                                 fsm_copy(
-                                    rb.any
-                                        .as_deref_mut()
-                                        .expect("rb.any built at fsm_rewrite start"),
+                                    rb.any.as_mut().expect("rb.any built at fsm_rewrite start"),
                                 ),
                             ),
                         ),
@@ -1830,7 +1695,7 @@ pub fn rewrite_epextend(opts: &FomaOptions, rb: &mut RewriteBatch) -> Box<Fsm> {
                         opts,
                         fsm_copy(
                             rb.rulenames
-                                .as_deref_mut()
+                                .as_mut()
                                 .expect("rb.rulenames built at fsm_rewrite start"),
                         ),
                         fsm_concat(
@@ -1838,9 +1703,7 @@ pub fn rewrite_epextend(opts: &FomaOptions, rb: &mut RewriteBatch) -> Box<Fsm> {
                             fsm_union(
                                 opts,
                                 fsm_copy(
-                                    rb.any
-                                        .as_deref_mut()
-                                        .expect("rb.any built at fsm_rewrite start"),
+                                    rb.any.as_mut().expect("rb.any built at fsm_rewrite start"),
                                 ),
                                 fsm_symbol("@0@"),
                             ),
@@ -1851,9 +1714,7 @@ pub fn rewrite_epextend(opts: &FomaOptions, rb: &mut RewriteBatch) -> Box<Fsm> {
                                     opts,
                                     fsm_symbol("@ID@"),
                                     fsm_copy(
-                                        rb.any
-                                            .as_deref_mut()
-                                            .expect("rb.any built at fsm_rewrite start"),
+                                        rb.any.as_mut().expect("rb.any built at fsm_rewrite start"),
                                     ),
                                 ),
                             ),
@@ -1871,18 +1732,14 @@ pub fn rewrite_epextend(opts: &FomaOptions, rb: &mut RewriteBatch) -> Box<Fsm> {
                     opts,
                     fsm_copy(
                         rb.rulenames
-                            .as_deref_mut()
+                            .as_mut()
                             .expect("rb.rulenames built at fsm_rewrite start"),
                     ),
                     fsm_concat(
                         opts,
                         fsm_union(
                             opts,
-                            fsm_copy(
-                                rb.any
-                                    .as_deref_mut()
-                                    .expect("rb.any built at fsm_rewrite start"),
-                            ),
+                            fsm_copy(rb.any.as_mut().expect("rb.any built at fsm_rewrite start")),
                             fsm_symbol("@0@"),
                         ),
                         fsm_union(
@@ -1892,9 +1749,7 @@ pub fn rewrite_epextend(opts: &FomaOptions, rb: &mut RewriteBatch) -> Box<Fsm> {
                                 opts,
                                 fsm_symbol("@ID@"),
                                 fsm_copy(
-                                    rb.any
-                                        .as_deref_mut()
-                                        .expect("rb.any built at fsm_rewrite start"),
+                                    rb.any.as_mut().expect("rb.any built at fsm_rewrite start"),
                                 ),
                             ),
                         ),
@@ -1912,11 +1767,7 @@ pub fn rewrite_epextend(opts: &FomaOptions, rb: &mut RewriteBatch) -> Box<Fsm> {
             fsm_union(opts, fsm_union(opts, one, two), three),
         ));
     }
-    fsm_copy(
-        rb.epextend
-            .as_deref_mut()
-            .expect("rb.epextend built before use"),
-    )
+    fsm_copy(rb.epextend.as_mut().expect("rb.epextend built before use"))
 }
 
 #[cfg(test)]

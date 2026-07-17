@@ -543,7 +543,7 @@ pub fn apply_init(net: &Fsm) -> Box<ApplyHandle> {
     h.epsilon_symbol = Some("0".into());
     // C: h->last_net = net (borrowed). DEVIATION from C (owns a clone; the
     // handle never mutates it, so observably equivalent for application).
-    h.last_net = Some(Box::new(net.clone()));
+    h.last_net = Some(net.clone());
     h.outstring = String::new();
     // *(h->outstring) = '\0' — already 0.
     h.gstates = 0; // net->states base
@@ -2009,7 +2009,7 @@ mod tests {
     use crate::types::{APPLY_INDEX_INPUT, APPLY_INDEX_OUTPUT};
 
     /* Build a fresh, minimized net from a regex (the Wave-2 pipeline). */
-    fn parse(rx: &str) -> Box<Fsm> {
+    fn parse(rx: &str) -> Fsm {
         let opts = &FomaOptions::default();
         fsm_parse_regex(opts, rx, None, None).expect("regex should compile")
     }

@@ -151,7 +151,7 @@ static void single_symbol_to_symbol_pair(int symbol, int *symbol_in, int *symbol
 // [spec:foma:sem:minimize.fsm-minimize-fn]
 // [spec:foma:def:fomalib.fsm-minimize-fn]
 // [spec:foma:sem:fomalib.fsm-minimize-fn]
-pub fn fsm_minimize(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_minimize(opts: &FomaOptions, net: Fsm) -> Fsm {
     /* C: extern int g_minimal; extern int g_minimize_hopcroft; — the session
     options threaded in as `opts` */
 
@@ -178,13 +178,13 @@ pub fn fsm_minimize(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
 
 // [spec:foma:def:minimize.fsm-minimize-brz-fn]
 // [spec:foma:sem:minimize.fsm-minimize-brz-fn]
-pub(crate) fn fsm_minimize_brz(net: Box<Fsm>) -> Box<Fsm> {
+pub(crate) fn fsm_minimize_brz(net: Fsm) -> Fsm {
     fsm_determinize(fsm_reverse(fsm_determinize(fsm_reverse(net))))
 }
 
 // [spec:foma:def:minimize.fsm-minimize-hop-fn]
 // [spec:foma:sem:minimize.fsm-minimize-hop-fn]
-pub(crate) fn fsm_minimize_hop(net: Box<Fsm>) -> Box<Fsm> {
+pub(crate) fn fsm_minimize_hop(net: Fsm) -> Fsm {
     let mut net = net;
 
     fsm_count(&mut net);
@@ -321,7 +321,7 @@ pub(crate) fn fsm_minimize_hop(net: Box<Fsm>) -> Box<Fsm> {
 
 // [spec:foma:def:minimize.rebuild-machine-fn]
 // [spec:foma:sem:minimize.rebuild-machine-fn]
-pub(crate) fn rebuild_machine(m: &mut Minimizer, net: Box<Fsm>) -> Box<Fsm> {
+pub(crate) fn rebuild_machine(m: &mut Minimizer, net: Fsm) -> Fsm {
     let mut net = net;
     let mut new_linecount: i32 = 0;
     let mut arccount: i32 = 0;
@@ -879,7 +879,7 @@ mod tests {
 
     /* Deterministic 3-state input for (a|b)+: states {1,2} are equivalent and
     must merge, exercising rebuild_machine's compaction. */
-    fn build_ab_plus() -> Box<Fsm> {
+    fn build_ab_plus() -> Fsm {
         let mut hc = fsm_construct_init("m");
         fsm_construct_set_initial(&mut hc, 0);
         fsm_construct_add_arc(&mut hc, 0, 1, "a", "a");
@@ -894,7 +894,7 @@ mod tests {
     }
 
     /* NFA over {a}: L = a^n, n >= 2. */
-    fn build_a_ge2() -> Box<Fsm> {
+    fn build_a_ge2() -> Fsm {
         let mut hc = fsm_construct_init("d");
         fsm_construct_set_initial(&mut hc, 0);
         fsm_construct_add_arc(&mut hc, 0, 0, "a", "a");
@@ -905,7 +905,7 @@ mod tests {
     }
 
     /* NFA over {a,b}: strings ending in 'a' (0-a->0, 0-b->0, 0-a->1 final). */
-    fn build_ends_a() -> Box<Fsm> {
+    fn build_ends_a() -> Fsm {
         let mut hc = fsm_construct_init("t");
         fsm_construct_set_initial(&mut hc, 0);
         fsm_construct_add_arc(&mut hc, 0, 0, "a", "a");
@@ -1016,7 +1016,7 @@ mod tests {
     // [spec:foma:sem:fomalib.fsm-minimize-fn/test]
     #[test]
     fn minimize_determinize_language_equivalence() {
-        fn check(net: Box<Fsm>, samples: &[(&str, bool)]) {
+        fn check(net: Fsm, samples: &[(&str, bool)]) {
             let opts = &FomaOptions::default();
             let d = fsm_determinize(net.clone());
             let m = fsm_minimize(opts, net);

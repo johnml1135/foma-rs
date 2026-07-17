@@ -19,7 +19,7 @@ use crate::types::{Fsm, FsmState, PATHCOUNT_CYCLIC, PATHCOUNT_OVERFLOW, Tern};
 // [spec:foma:sem:topsort.fsm-topsort-fn+1]
 // [spec:foma:def:fomalib.fsm-topsort-fn+1]
 // [spec:foma:sem:fomalib.fsm-topsort-fn+1]
-pub fn fsm_topsort(net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_topsort(net: Fsm) -> Fsm {
     let mut int_stack = IntStack::new();
     /* We topologically sort the network by looking for a state          */
     /* with inverse count 0. We then examine all the arcs from that      */

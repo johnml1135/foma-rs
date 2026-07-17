@@ -9,7 +9,7 @@ use crate::regex::fsm_parse_regex;
 
 /* ---- fixtures & helpers ------------------------------------------- */
 
-fn re(s: &str) -> Box<Fsm> {
+fn re(s: &str) -> Fsm {
     let opts = &FomaOptions::default();
     fsm_parse_regex(opts, s, None, None).unwrap_or_else(|| panic!("regex failed to compile: {s:?}"))
 }
@@ -65,7 +65,7 @@ fn sigma_nums(net: &Fsm) -> Vec<i32> {
 /// literal epsilon symbol in the apply enumerator.
 fn words(net: &Fsm) -> Vec<String> {
     let opts = &FomaOptions::default();
-    let m = fsm_minimize(opts, Box::new(net.clone()));
+    let m = fsm_minimize(opts, net.clone());
     let mut h = apply_init(&m);
     apply_reset_enumerator(&mut h);
     let mut out = Vec::new();

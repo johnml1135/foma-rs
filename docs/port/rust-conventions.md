@@ -53,9 +53,13 @@ sign-extension (`sh_hashf`, `trie_hashf`, `lexc_symbol_hash`,
 - Handles (`apply_handle`, `fsm_construct_handle`, …) → owned structs
   passed `&mut`.
 - C functions that *consume* (free) their `struct fsm *` arguments take
-  `Box<Fsm>` by value; functions that borrow take `&Fsm`/`&mut Fsm`.
-  The per-function sem rule states which convention each function uses —
-  follow it exactly.
+  `Fsm` by value; functions that borrow take `&Fsm`/`&mut Fsm`. The
+  per-function sem rule states which convention each function uses —
+  follow it exactly. (`Fsm` is passed unboxed: a move is a shallow copy of
+  the struct header, the `Vec`/`LineTable` heap buffers transfer in place,
+  and there is no per-net heap allocation. `Box` is reserved for the
+  recursive linked-list nodes above and for nullable owning slots that
+  genuinely need pointer indirection, not for `Fsm` itself.)
 - File-static mutable globals → module-level
   `thread_local! { static NAME: RefCell<T> = ... }`. Keep the C names
   (upper-cased). Non-reentrancy is part of the contract; do not
@@ -95,7 +99,7 @@ Above every ported item, carry its manifest ids as line comments:
 ```rust
 // [spec:foma:def:structures.fsm-create-fn]
 // [spec:foma:sem:structures.fsm-create-fn]
-pub fn fsm_create(name: &str) -> Box<Fsm> { ... }
+pub fn fsm_create(name: &str) -> Fsm { ... }
 ```
 
 Header prototypes got their own rule ids (they did NOT dedup with the

@@ -48,7 +48,7 @@ pub fn find_defined<'a>(def: &'a mut DefinedNetworks, string: &str) -> Option<&'
     let mut d = Some(def);
     while let Some(node) = d {
         if node.name.as_deref() == Some(string) {
-            return node.net.as_deref_mut();
+            return node.net.as_mut();
         }
         d = node.next.as_deref_mut();
     }
@@ -245,7 +245,7 @@ pub fn add_defined_function(
 // [spec:foma:sem:define.add-defined-fn]
 // [spec:foma:def:fomalib.add-defined-fn]
 // [spec:foma:sem:fomalib.add-defined-fn]
-pub fn add_defined(def: &mut DefinedNetworks, net: Option<Box<Fsm>>, string: &str) -> Defined {
+pub fn add_defined(def: &mut DefinedNetworks, net: Option<Fsm>, string: &str) -> Defined {
     let mut net = match net {
         None => return Defined::New,
         Some(net) => net,

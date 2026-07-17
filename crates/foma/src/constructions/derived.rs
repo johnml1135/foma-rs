@@ -7,7 +7,7 @@ use smol_str::SmolStr;
 // [spec:foma:sem:constructions.fsm-escape-fn]
 // [spec:foma:def:fomalib.fsm-escape-fn]
 // [spec:foma:sem:fomalib.fsm-escape-fn]
-pub fn fsm_escape(symbol: &str) -> Box<Fsm> {
+pub fn fsm_escape(symbol: &str) -> Fsm {
     /* C: fsm_symbol(symbol+1) — skip the first byte (the escape char) */
     fsm_symbol(&symbol[1..])
 }
@@ -20,7 +20,7 @@ pub fn fsm_escape(symbol: &str) -> Box<Fsm> {
 // [spec:foma:sem:constructions.fsm-letter-machine-fn+1]
 // [spec:foma:def:fomalib.fsm-letter-machine-fn+1]
 // [spec:foma:sem:fomalib.fsm-letter-machine-fn+1]
-pub fn fsm_letter_machine(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_letter_machine(opts: &FomaOptions, net: Fsm) -> Fsm {
     // DEVIATION from C (discarded minimize return; C reads net->statecount
     // through the original pointer after fsm_minimize and dangles under
     // Brzozowski — bind the returned Box and continue with it)
@@ -115,7 +115,7 @@ pub fn fsm_letter_machine(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
 // [spec:foma:sem:constructions.fsm-explode-fn+1]
 // [spec:foma:def:fomalib.fsm-explode-fn+1]
 // [spec:foma:sem:fomalib.fsm-explode-fn+1]
-pub fn fsm_explode(symbol: &str) -> Box<Fsm> {
+pub fn fsm_explode(symbol: &str) -> Fsm {
     let mut h = fsm_construct_init("");
     fsm_construct_set_initial(&mut h, 0);
 
@@ -136,7 +136,7 @@ pub fn fsm_explode(symbol: &str) -> Box<Fsm> {
 // [spec:foma:sem:constructions.fsm-symbol-fn]
 // [spec:foma:def:fomalib.fsm-symbol-fn]
 // [spec:foma:sem:fomalib.fsm-symbol-fn]
-pub fn fsm_symbol(symbol: &str) -> Box<Fsm> {
+pub fn fsm_symbol(symbol: &str) -> Fsm {
     let mut net = fsm_create("");
     fsm_update_flags(&mut net, YES, YES, YES, YES, YES, NO);
     if symbol == "@_EPSILON_SYMBOL_@" {
@@ -219,7 +219,7 @@ pub fn fsm_substitute_label(
     net: &mut Fsm,
     original: &str,
     substitute: &mut Fsm,
-) -> Box<Fsm> {
+) -> Fsm {
     fsm_merge_sigma(opts, net, substitute);
     let mut addstate1 = net.statecount;
     let addstate2 = substitute.statecount;
@@ -227,13 +227,13 @@ pub fn fsm_substitute_label(
     /* C: the read handles borrow net and substitute (NEITHER is consumed
     on any path); the Rust handles own deep copies — read-only, observably
     equivalent */
-    let mut inh = fsm_read_init(Box::new(net.clone()));
-    let mut subh = fsm_read_init(Box::new(substitute.clone()));
+    let mut inh = fsm_read_init(net.clone());
+    let mut subh = fsm_read_init(substitute.clone());
     let repsym = fsm_get_symbol_number(&inh, original);
     if repsym == -1 {
         let _ = fsm_read_done(inh);
         // DEVIATION from C (C returns the input net aliased; a deep copy here)
-        return Box::new(net.clone());
+        return net.clone();
     }
     let name = net.name.clone();
     let mut outh = fsm_construct_init(&name);
@@ -344,7 +344,7 @@ pub fn fsm_substitute_label(
 // [spec:foma:sem:constructions.fsm-substitute-symbol-fn]
 // [spec:foma:def:fomalib.fsm-substitute-symbol-fn]
 // [spec:foma:sem:fomalib.fsm-substitute-symbol-fn]
-pub fn fsm_substitute_symbol(net: Box<Fsm>, original: &str, substitute: &str) -> Box<Fsm> {
+pub fn fsm_substitute_symbol(net: Fsm, original: &str, substitute: &str) -> Fsm {
     let mut net = net;
     if original == substitute {
         return net;
@@ -392,7 +392,7 @@ pub fn fsm_substitute_symbol(net: Box<Fsm>, original: &str, substitute: &str) ->
 // [spec:foma:sem:constructions.fsm-precedes-fn]
 // [spec:foma:def:fomalib.fsm-precedes-fn]
 // [spec:foma:sem:fomalib.fsm-precedes-fn]
-pub fn fsm_precedes(opts: &FomaOptions, net1: &mut Fsm, net2: &mut Fsm) -> Box<Fsm> {
+pub fn fsm_precedes(opts: &FomaOptions, net1: &mut Fsm, net2: &mut Fsm) -> Fsm {
     /* Neither net1 nor net2 is consumed (copies only) */
     fsm_complement(
         opts,
@@ -417,7 +417,7 @@ pub fn fsm_precedes(opts: &FomaOptions, net1: &mut Fsm, net2: &mut Fsm) -> Box<F
 // [spec:foma:sem:constructions.fsm-follows-fn]
 // [spec:foma:def:fomalib.fsm-follows-fn]
 // [spec:foma:sem:fomalib.fsm-follows-fn]
-pub fn fsm_follows(opts: &FomaOptions, net1: &mut Fsm, net2: &mut Fsm) -> Box<Fsm> {
+pub fn fsm_follows(opts: &FomaOptions, net1: &mut Fsm, net2: &mut Fsm) -> Fsm {
     /* Neither net1 nor net2 is consumed (copies only) */
     fsm_complement(
         opts,
@@ -442,12 +442,7 @@ pub fn fsm_follows(opts: &FomaOptions, net1: &mut Fsm, net2: &mut Fsm) -> Box<Fs
 // [spec:foma:sem:constructions.fsm-unflatten-fn]
 // [spec:foma:def:fomalib.fsm-unflatten-fn]
 // [spec:foma:sem:fomalib.fsm-unflatten-fn]
-pub fn fsm_unflatten(
-    opts: &FomaOptions,
-    net: Box<Fsm>,
-    epsilon_sym: &str,
-    repeat_sym: &str,
-) -> Box<Fsm> {
+pub fn fsm_unflatten(opts: &FomaOptions, net: Fsm, epsilon_sym: &str, repeat_sym: &str) -> Fsm {
     let mut int_stack = IntStack::new();
     // DEVIATION from C (discarded minimize return; C dangles under Brzozowski)
     let mut net = fsm_minimize(opts, net);
@@ -557,7 +552,7 @@ pub fn fsm_unflatten(
 // [spec:foma:sem:constructions.fsm-shuffle-fn]
 // [spec:foma:def:fomalib.fsm-shuffle-fn]
 // [spec:foma:sem:fomalib.fsm-shuffle-fn]
-pub fn fsm_shuffle(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_shuffle(opts: &FomaOptions, net1: Fsm, net2: Fsm) -> Fsm {
     let mut int_stack = IntStack::new();
     /* Shuffle A and B by making alternatively A move and B stay at each or */
     /* vice versa at each step */
@@ -692,7 +687,7 @@ pub fn fsm_shuffle(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
 // [spec:foma:sem:constructions.fsm-equivalent-fn]
 // [spec:foma:def:fomalib.fsm-equivalent-fn]
 // [spec:foma:sem:fomalib.fsm-equivalent-fn]
-pub fn fsm_equivalent(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> bool {
+pub fn fsm_equivalent(opts: &FomaOptions, net1: Fsm, net2: Fsm) -> bool {
     let mut int_stack = IntStack::new();
     /* Test path equivalence of two FSMs by traversing both in parallel */
     let mut net1 = net1;
@@ -795,7 +790,7 @@ pub fn fsm_equivalent(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> boo
 // [spec:foma:sem:constructions.fsm-contains-fn]
 // [spec:foma:def:fomalib.fsm-contains-fn]
 // [spec:foma:sem:fomalib.fsm-contains-fn]
-pub fn fsm_contains(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_contains(opts: &FomaOptions, net: Fsm) -> Fsm {
     /* [?* A ?*] */
     fsm_concat(
         opts,
@@ -808,7 +803,7 @@ pub fn fsm_contains(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
 // [spec:foma:sem:constructions.fsm-universal-fn]
 // [spec:foma:def:fomalib.fsm-universal-fn]
 // [spec:foma:sem:fomalib.fsm-universal-fn]
-pub fn fsm_universal() -> Box<Fsm> {
+pub fn fsm_universal() -> Fsm {
     let mut net = fsm_create("");
     fsm_update_flags(&mut net, YES, YES, YES, YES, NO, NO);
     /* C: malloc(2 lines), uninitialized; written by add_fsm_arc below */
@@ -839,7 +834,7 @@ pub fn fsm_universal() -> Box<Fsm> {
 // [spec:foma:sem:constructions.fsm-contains-one-fn]
 // [spec:foma:def:fomalib.fsm-contains-one-fn]
 // [spec:foma:sem:fomalib.fsm-contains-one-fn]
-pub fn fsm_contains_one(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_contains_one(opts: &FomaOptions, net: Fsm) -> Fsm {
     /* $A - $[[?+ A ?* & A ?*] | [A ?+ & A]] */
     let mut net = net;
     let ret = fsm_minus(
@@ -878,7 +873,7 @@ pub fn fsm_contains_one(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
 // [spec:foma:sem:constructions.fsm-contains-opt-one-fn]
 // [spec:foma:def:fomalib.fsm-contains-opt-one-fn]
 // [spec:foma:sem:fomalib.fsm-contains-opt-one-fn]
-pub fn fsm_contains_opt_one(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_contains_opt_one(opts: &FomaOptions, net: Fsm) -> Fsm {
     /* $.A | ~$A */
     let mut net = net;
     let ret = fsm_union(
@@ -894,7 +889,7 @@ pub fn fsm_contains_opt_one(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
 // [spec:foma:sem:constructions.fsm-simple-replace-fn]
 // [spec:foma:def:fomalib.fsm-simple-replace-fn]
 // [spec:foma:sem:fomalib.fsm-simple-replace-fn]
-pub fn fsm_simple_replace(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_simple_replace(opts: &FomaOptions, net1: Fsm, net2: Fsm) -> Fsm {
     /* [~[?* [A-0] ?*] [A.x.B]]* ~[?* [A-0] ?*] */
 
     let mut net1 = net1;
@@ -969,7 +964,7 @@ pub fn fsm_simple_replace(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) ->
 // [spec:foma:sem:constructions.fsm-priority-union-upper-fn]
 // [spec:foma:def:fomalib.fsm-priority-union-upper-fn]
 // [spec:foma:sem:fomalib.fsm-priority-union-upper-fn]
-pub fn fsm_priority_union_upper(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_priority_union_upper(opts: &FomaOptions, net1: Fsm, net2: Fsm) -> Fsm {
     /* A .P. B = A | [~[A.u] .o. B] */
     let mut net1 = net1;
     let ret = fsm_union(
@@ -989,7 +984,7 @@ pub fn fsm_priority_union_upper(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fs
 // [spec:foma:sem:constructions.fsm-priority-union-lower-fn]
 // [spec:foma:def:fomalib.fsm-priority-union-lower-fn]
 // [spec:foma:sem:fomalib.fsm-priority-union-lower-fn]
-pub fn fsm_priority_union_lower(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_priority_union_lower(opts: &FomaOptions, net1: Fsm, net2: Fsm) -> Fsm {
     /* A .p. B = A | B .o. ~[A.l] */
     let mut net1 = net1;
     let ret = fsm_union(
@@ -1009,7 +1004,7 @@ pub fn fsm_priority_union_lower(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fs
 // [spec:foma:sem:constructions.fsm-lenient-compose-fn]
 // [spec:foma:def:fomalib.fsm-lenient-compose-fn]
 // [spec:foma:sem:fomalib.fsm-lenient-compose-fn]
-pub fn fsm_lenient_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_lenient_compose(opts: &FomaOptions, net1: Fsm, net2: Fsm) -> Fsm {
     /* A .O. B = [A .o. B] .P. A — lenient composition, with A (net1) as the
     priority-union fallback for inputs outside dom([A .o. B]). (The upstream
     C source comment read ".P. B", but its code passes a copy of A as the
@@ -1028,7 +1023,7 @@ pub fn fsm_lenient_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -
 // [spec:foma:sem:constructions.fsm-quotient-interleave-fn]
 // [spec:foma:def:fomalib.fsm-quotient-interleave-fn]
 // [spec:foma:sem:fomalib.fsm-quotient-interleave-fn]
-pub fn fsm_quotient_interleave(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_quotient_interleave(opts: &FomaOptions, net1: Fsm, net2: Fsm) -> Fsm {
     /* A/\/B = The set of strings you can interleave in B and get a string from A */
     /* [B/[x \x* x] & A/x .o. [[[\x]:0]* (x:0 \x* x:0)]*].l */
     let mut result = fsm_lower(fsm_compose(
@@ -1088,7 +1083,7 @@ pub fn fsm_quotient_interleave(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm
 // [spec:foma:sem:constructions.fsm-quotient-left-fn]
 // [spec:foma:def:fomalib.fsm-quotient-left-fn]
 // [spec:foma:sem:fomalib.fsm-quotient-left-fn]
-pub fn fsm_quotient_left(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_quotient_left(opts: &FomaOptions, net1: Fsm, net2: Fsm) -> Fsm {
     /* A\\\B = [B .o. A:0 ?*].l; */
     /* A\\\B = the set of suffixes you can add to A to get a string in B */
     fsm_lower(fsm_compose(
@@ -1106,7 +1101,7 @@ pub fn fsm_quotient_left(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> 
 // [spec:foma:sem:constructions.fsm-quotient-right-fn]
 // [spec:foma:def:fomalib.fsm-quotient-right-fn]
 // [spec:foma:sem:fomalib.fsm-quotient-right-fn]
-pub fn fsm_quotient_right(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_quotient_right(opts: &FomaOptions, net1: Fsm, net2: Fsm) -> Fsm {
     /* A///B = [A .o. ?* B:0].l; */
     /* A///B = the set of prefixes you can add to B to get strings in A */
     fsm_lower(fsm_compose(
@@ -1124,7 +1119,7 @@ pub fn fsm_quotient_right(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) ->
 // [spec:foma:sem:constructions.fsm-ignore-fn+1]
 // [spec:foma:def:fomalib.fsm-ignore-fn+1]
 // [spec:foma:sem:fomalib.fsm-ignore-fn+1]
-pub fn fsm_ignore(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>, operation: i32) -> Box<Fsm> {
+pub fn fsm_ignore(opts: &FomaOptions, net1: Fsm, net2: Fsm, operation: i32) -> Fsm {
     let mut net1 = fsm_minimize(opts, net1);
     let mut net2 = fsm_minimize(opts, net2);
 
@@ -1556,12 +1551,7 @@ pub fn fsm_symbol_occurs(net: &Fsm, symbol: &str, side: Sides) -> bool {
 // [spec:foma:sem:constructions.fsm-equal-substrings-fn]
 // [spec:foma:def:fomalib.fsm-equal-substrings-fn]
 // [spec:foma:sem:fomalib.fsm-equal-substrings-fn]
-pub fn fsm_equal_substrings(
-    opts: &FomaOptions,
-    net: Box<Fsm>,
-    left: &mut Fsm,
-    right: &mut Fsm,
-) -> Box<Fsm> {
+pub fn fsm_equal_substrings(opts: &FomaOptions, net: Fsm, left: &mut Fsm, right: &mut Fsm) -> Fsm {
     /* The algorithm extracts from the lower side all and only those strings where   */
     /* every X occurring in different substrings ... left X right ... is identical.  */
 
@@ -1834,7 +1824,7 @@ pub fn fsm_equal_substrings(
 // [spec:foma:sem:constructions.fsm-sequentialize-fn]
 // [spec:foma:def:fomalib.fsm-sequentialize-fn]
 // [spec:foma:sem:fomalib.fsm-sequentialize-fn]
-pub fn fsm_sequentialize(net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_sequentialize(net: Fsm) -> Fsm {
     /* C: unimplemented stub — warns and returns the input unchanged */
     tracing::warn!("Implementation pending");
     net
@@ -1844,7 +1834,7 @@ pub fn fsm_sequentialize(net: Box<Fsm>) -> Box<Fsm> {
 // [spec:foma:sem:constructions.fsm-bimachine-fn]
 // [spec:foma:def:fomalib.fsm-bimachine-fn]
 // [spec:foma:sem:fomalib.fsm-bimachine-fn]
-pub fn fsm_bimachine(net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_bimachine(net: Fsm) -> Fsm {
     /* C: unimplemented stub — warns and returns the input unchanged */
     tracing::warn!("implementation pending");
     net
@@ -1858,7 +1848,7 @@ pub fn fsm_bimachine(net: Box<Fsm>) -> Box<Fsm> {
 // [spec:foma:sem:constructions.fsm-left-rewr-fn]
 // [spec:foma:def:fomalib.fsm-left-rewr-fn]
 // [spec:foma:sem:fomalib.fsm-left-rewr-fn]
-pub fn fsm_left_rewr(opts: &FomaOptions, net: Box<Fsm>, rewr: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_left_rewr(opts: &FomaOptions, net: Fsm, rewr: Fsm) -> Fsm {
     let mut net = net;
     let mut rewr = rewr;
     fsm_merge_sigma(opts, &mut net, &mut rewr);
@@ -1960,7 +1950,7 @@ pub fn fsm_left_rewr(opts: &FomaOptions, net: Box<Fsm>, rewr: Box<Fsm>) -> Box<F
 // [spec:foma:sem:constructions.fsm-add-sink-fn]
 // [spec:foma:def:fomalib.fsm-add-sink-fn]
 // [spec:foma:sem:fomalib.fsm-add-sink-fn]
-pub fn fsm_add_sink(net: Box<Fsm>, r#final: i32) -> Box<Fsm> {
+pub fn fsm_add_sink(net: Fsm, r#final: i32) -> Fsm {
     let mut inh = fsm_read_init(net);
     let sinkstate = fsm_get_num_states(&inh);
     let name = inh
@@ -2037,11 +2027,11 @@ pub fn fsm_add_sink(net: Box<Fsm>, r#final: i32) -> Box<Fsm> {
 // [spec:foma:sem:constructions.fsm-add-loop-fn]
 // [spec:foma:def:fomalib.fsm-add-loop-fn]
 // [spec:foma:sem:fomalib.fsm-add-loop-fn]
-pub fn fsm_add_loop(net: Box<Fsm>, marker: &Fsm, finals: i32) -> Box<Fsm> {
+pub fn fsm_add_loop(net: Fsm, marker: &Fsm, finals: i32) -> Fsm {
     let mut inh = fsm_read_init(net);
     /* C: the read handle borrows marker (which is NOT destroyed); the
     Rust handle owns a deep copy — read-only, observably equivalent */
-    let mut minh = fsm_read_init(Box::new(marker.clone()));
+    let mut minh = fsm_read_init(marker.clone());
 
     let name = inh
         .net
@@ -2125,11 +2115,7 @@ pub fn fsm_add_loop(net: Box<Fsm>, marker: &Fsm, finals: i32) -> Box<Fsm> {
 // [spec:foma:sem:constructions.fsm-context-restrict-fn]
 // [spec:foma:def:fomalib.fsm-context-restrict-fn]
 // [spec:foma:sem:fomalib.fsm-context-restrict-fn]
-pub fn fsm_context_restrict(
-    opts: &FomaOptions,
-    x: Box<Fsm>,
-    lr: Option<Box<Fsmcontexts>>,
-) -> Box<Fsm> {
+pub fn fsm_context_restrict(opts: &FomaOptions, x: Fsm, lr: Option<Box<Fsmcontexts>>) -> Fsm {
     /* [.#. \.#.* .#.]-'[[ [\X* X C X \X*]&~[\X* [L1 X \X* X R1|...|Ln X \X* X Rn] \X*]],X,0] */
     /* Where X = variable symbol */
 
@@ -2150,14 +2136,14 @@ pub fn fsm_context_restrict(
     /* Also, if any L or R is undeclared we add 0 */
     let mut pairs = lr.as_deref_mut();
     while let Some(p) = pairs {
-        if let Some(left) = p.left.as_deref_mut() {
+        if let Some(left) = p.left.as_mut() {
             sigma_add("@VARX@", &mut left.sigma);
             let _ = sigma_substitute(".#.", "@#@", &mut left.sigma);
             sigma_sort(left);
         } else {
             p.left = Some(fsm_empty_string());
         }
-        if let Some(right) = p.right.as_deref_mut() {
+        if let Some(right) = p.right.as_mut() {
             sigma_add("@VARX@", &mut right.sigma);
             let _ = sigma_substitute(".#.", "@#@", &mut right.sigma);
             sigma_sort(right);
@@ -2179,11 +2165,7 @@ pub fn fsm_context_restrict(
                     opts,
                     fsm_concat(
                         opts,
-                        fsm_copy(
-                            p.left
-                                .as_deref_mut()
-                                .expect("left filled by the preceding pass"),
-                        ),
+                        fsm_copy(p.left.as_mut().expect("left filled by the preceding pass")),
                         fsm_concat(
                             opts,
                             fsm_copy(&mut var),
@@ -2195,7 +2177,7 @@ pub fn fsm_context_restrict(
                                     fsm_copy(&mut var),
                                     fsm_copy(
                                         p.right
-                                            .as_deref_mut()
+                                            .as_mut()
                                             .expect("right filled by the preceding pass"),
                                     ),
                                 ),
@@ -2282,7 +2264,7 @@ pub fn fsm_context_restrict(
 // [spec:foma:sem:constructions.fsm-flatten-fn+1]
 // [spec:foma:def:fomalib.fsm-flatten-fn+1]
 // [spec:foma:sem:fomalib.fsm-flatten-fn+1]
-pub fn fsm_flatten(opts: &FomaOptions, net: Box<Fsm>, epsilon: Box<Fsm>) -> Option<Box<Fsm>> {
+pub fn fsm_flatten(opts: &FomaOptions, net: Fsm, epsilon: Fsm) -> Option<Fsm> {
     let net = fsm_minimize(opts, net);
 
     let mut inh = fsm_read_init(net);
@@ -2374,7 +2356,7 @@ pub fn fsm_flatten(opts: &FomaOptions, net: Box<Fsm>, epsilon: Box<Fsm>) -> Opti
 // [spec:foma:sem:constructions.fsm-close-sigma-fn]
 // [spec:foma:def:fomalib.fsm-close-sigma-fn]
 // [spec:foma:sem:fomalib.fsm-close-sigma-fn]
-pub fn fsm_close_sigma(opts: &FomaOptions, net: Box<Fsm>, mode: i32) -> Box<Fsm> {
+pub fn fsm_close_sigma(opts: &FomaOptions, net: Fsm, mode: i32) -> Fsm {
     let mut inh = fsm_read_init(net);
     let name = inh
         .net

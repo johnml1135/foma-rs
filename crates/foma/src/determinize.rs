@@ -186,7 +186,7 @@ pub use crate::constructions::add_fsm_arc;
 // [spec:foma:sem:determinize.fsm-epsilon-remove-fn]
 // [spec:foma:def:fomalib.fsm-epsilon-remove-fn]
 // [spec:foma:sem:fomalib.fsm-epsilon-remove-fn]
-pub fn fsm_epsilon_remove(net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_epsilon_remove(net: Fsm) -> Fsm {
     fsm_subset(net, SubsetOp::EpsilonRemove)
 }
 
@@ -194,13 +194,13 @@ pub fn fsm_epsilon_remove(net: Box<Fsm>) -> Box<Fsm> {
 // [spec:foma:sem:determinize.fsm-determinize-fn]
 // [spec:foma:def:fomalib.fsm-determinize-fn]
 // [spec:foma:sem:fomalib.fsm-determinize-fn]
-pub fn fsm_determinize(net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_determinize(net: Fsm) -> Fsm {
     fsm_subset(net, SubsetOp::Determinize)
 }
 
 // [spec:foma:def:determinize.fsm-subset-fn]
 // [spec:foma:sem:determinize.fsm-subset-fn]
-pub(crate) fn fsm_subset(net: Box<Fsm>, operation: SubsetOp) -> Box<Fsm> {
+pub(crate) fn fsm_subset(net: Fsm, operation: SubsetOp) -> Fsm {
     let mut net = net;
     let mut t: i32;
     let mut u: i32;
@@ -1075,7 +1075,7 @@ mod tests {
     }
 
     /* NFA over {a}: 0 start, 0-a->0, 0-a->1, 1-a->2 (final). L = a^n, n >= 2. */
-    fn build_a_ge2() -> Box<Fsm> {
+    fn build_a_ge2() -> Fsm {
         let mut hc = fsm_construct_init("d");
         fsm_construct_set_initial(&mut hc, 0);
         fsm_construct_add_arc(&mut hc, 0, 0, "a", "a");

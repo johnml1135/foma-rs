@@ -6,7 +6,7 @@ use super::*;
 // [spec:foma:sem:constructions.fsm-intersect-fn]
 // [spec:foma:def:fomalib.fsm-intersect-fn]
 // [spec:foma:sem:fomalib.fsm-intersect-fn]
-pub fn fsm_intersect(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_intersect(opts: &FomaOptions, net1: Fsm, net2: Fsm) -> Fsm {
     let mut int_stack = IntStack::new();
     /* C: struct blookup {int mainloop; int target; } *array, *bptr; —
     function-local type */
@@ -164,7 +164,7 @@ pub fn fsm_intersect(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<
 // [spec:foma:sem:constructions.fsm-compose-fn]
 // [spec:foma:def:fomalib.fsm-compose-fn]
 // [spec:foma:sem:fomalib.fsm-compose-fn]
-pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_compose(opts: &FomaOptions, net1: Fsm, net2: Fsm) -> Fsm {
     let mut int_stack = IntStack::new();
     /* The composition algorithm is the basic naive composition where we lazily      */
     /* take the cross-product of states P and Q and move to a new state with symbols */
@@ -639,7 +639,7 @@ pub fn fsm_compose(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fs
 // [spec:foma:sem:constructions.fsm-cross-product-fn]
 // [spec:foma:def:fomalib.fsm-cross-product-fn]
 // [spec:foma:sem:fomalib.fsm-cross-product-fn]
-pub fn fsm_cross_product(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_cross_product(opts: &FomaOptions, net1: Fsm, net2: Fsm) -> Fsm {
     let mut int_stack = IntStack::new();
     /* Perform a cross product by running two machines in parallel */
     /* The approach here allows a state to stay, creating a a:0 or 0:b transition */

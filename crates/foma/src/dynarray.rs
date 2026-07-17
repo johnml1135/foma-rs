@@ -716,7 +716,7 @@ pub fn fsm_construct_convert_sigma(handle: &FsmConstructHandle) -> Vec<Sigma> {
 // [spec:foma:sem:dynarray.fsm-construct-done-fn+1]
 // [spec:foma:def:fomalib.fsm-construct-done-fn+1]
 // [spec:foma:sem:fomalib.fsm-construct-done-fn+1]
-pub fn fsm_construct_done(handle: Box<FsmConstructHandle>) -> Box<Fsm> {
+pub fn fsm_construct_done(handle: Box<FsmConstructHandle>) -> Fsm {
     let mut handle = handle;
     if handle.maxstate == -1 || handle.numfinals == 0 || handle.hasinitial == 0 {
         // C leaked the handle and its contents on this early-return path;
@@ -812,7 +812,7 @@ pub fn fsm_read_is_initial(h: &FsmReadHandle, state: i32) -> bool {
 // [spec:foma:sem:dynarray.fsm-read-init-fn]
 // [spec:foma:def:fomalib.fsm-read-init-fn]
 // [spec:foma:sem:fomalib.fsm-read-init-fn]
-pub fn fsm_read_init(net: Box<Fsm>) -> Box<FsmReadHandle> {
+pub fn fsm_read_init(net: Fsm) -> Box<FsmReadHandle> {
     // DEVIATION from C (the C handle borrows the caller's net pointer; the
     // Rust handle owns the net for its lifetime and fsm_read_done returns it)
     let num_states = net.statecount;
@@ -1205,7 +1205,7 @@ pub fn fsm_get_next_state(handle: &mut FsmReadHandle) -> i32 {
 // [spec:foma:sem:dynarray.fsm-read-done-fn]
 // [spec:foma:def:fomalib.fsm-read-done-fn]
 // [spec:foma:sem:fomalib.fsm-read-done-fn]
-pub fn fsm_read_done(handle: Box<FsmReadHandle>) -> Box<Fsm> {
+pub fn fsm_read_done(handle: Box<FsmReadHandle>) -> Fsm {
     /* frees lookuptable, fsm_sigma_list (array only — the symbol strings
     are copies here where C borrows net->sigma's), finals_head,
     initials_head, states_head, and the handle — all dropped here.
@@ -1667,7 +1667,7 @@ mod tests {
 
     /* Builds a 3-state net directly: state 0 initial with arcs 0-3:3->1 and
     0-4:4->2; states 1 and 2 final. sigma: 3="a", 4="b". */
-    fn build_read_net() -> Box<Fsm> {
+    fn build_read_net() -> Fsm {
         let mut b = fsm_state_init(4);
         fsm_state_set_current_state(&mut b, 0, 0, 1);
         fsm_state_add_arc(&mut b, 0, 3, 3, 1, 0, 1);

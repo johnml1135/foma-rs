@@ -4,7 +4,7 @@
 //!
 //! The fsm line table is the sentinel-terminated `Vec<FsmState>` of types.rs;
 //! C pointer walks become index walks with identical stop conditions.
-//! Consuming (`Box<Fsm>`) vs borrowing (`&Fsm`/`&mut Fsm`) conventions follow
+//! Consuming (`Fsm`) vs borrowing (`&Fsm`/`&mut Fsm`) conventions follow
 //! each function's sem rule. Wave 4 fixed four documented bugs (fsm_isuniversal,
 //! purge_quantifier, union_quantifiers' linecount, fsm_copy's stale counts —
 //! each `+1`-bumped) and pruned obsolete memory-hazard DEVIATION notes.
@@ -184,7 +184,7 @@ pub fn map_firstlines(net: &Fsm) -> Vec<StateArray> {
 // [spec:foma:sem:structures.fsm-boolean-fn]
 // [spec:foma:def:fomalib.fsm-boolean-fn]
 // [spec:foma:sem:fomalib.fsm-boolean-fn]
-pub fn fsm_boolean(value: i32) -> Box<Fsm> {
+pub fn fsm_boolean(value: i32) -> Fsm {
     if value == 0 {
         fsm_empty_set()
     } else {
@@ -196,7 +196,7 @@ pub fn fsm_boolean(value: i32) -> Box<Fsm> {
 // [spec:foma:sem:structures.fsm-sigma-net-fn]
 // [spec:foma:def:fomalib.fsm-sigma-net-fn]
 // [spec:foma:sem:fomalib.fsm-sigma-net-fn]
-pub fn fsm_sigma_net(net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_sigma_net(net: Fsm) -> Fsm {
     /* Extract sigma and create net with one arc            */
     /* from state 0 to state 1 with each (state 1 is final) */
     let mut net = net;
@@ -232,7 +232,7 @@ pub fn fsm_sigma_net(net: Box<Fsm>) -> Box<Fsm> {
 // [spec:foma:sem:structures.fsm-sigma-pairs-net-fn]
 // [spec:foma:def:fomalib.fsm-sigma-pairs-net-fn]
 // [spec:foma:sem:fomalib.fsm-sigma-pairs-net-fn]
-pub fn fsm_sigma_pairs_net(net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_sigma_pairs_net(net: Fsm) -> Fsm {
     /* Create FSM of attested pairs */
     let mut net = net;
 
@@ -295,7 +295,7 @@ pub fn fsm_sigma_destroy(sigma: Vec<Sigma>) {
 // [spec:foma:sem:structures.fsm-destroy-fn+1]
 // [spec:foma:def:fomalib.fsm-destroy-fn+1]
 // [spec:foma:sem:fomalib.fsm-destroy-fn+1]
-pub fn fsm_destroy(net: Box<Fsm>) {
+pub fn fsm_destroy(net: Fsm) {
     /* C: returns 0 without doing anything when net == NULL; a Box argument
     is never NULL — NULL-able callers keep the check at the call site */
     let mut net = net;
@@ -315,13 +315,13 @@ pub fn fsm_destroy(net: Box<Fsm>) {
 // [spec:foma:sem:structures.fsm-create-fn+1]
 // [spec:foma:def:fomalib.fsm-create-fn+1]
 // [spec:foma:sem:fomalib.fsm-create-fn+1]
-pub fn fsm_create(name: &str) -> Box<Fsm> {
+pub fn fsm_create(name: &str) -> Fsm {
     // [spec:foma:sem:structures.fsm-create-fn+1] the in-memory net name is stored
     // in full. C used a fixed char[40] field (strncpy without a NUL terminator for
     // names >= 40 bytes), truncating longer names and printing a warning. (The
     // binary file format still caps names at 40 bytes on read/write.)
     let name: SmolStr = name.into();
-    Box::new(Fsm {
+    Fsm {
         name,
         arity: 1,
         arccount: 0,
@@ -342,14 +342,14 @@ pub fn fsm_create(name: &str) -> Box<Fsm> {
         sigma: sigma_create(),
         states: crate::line_table::LineTable::new(),
         medlookup: None,
-    })
+    }
 }
 
 // [spec:foma:def:structures.fsm-empty-string-fn]
 // [spec:foma:sem:structures.fsm-empty-string-fn]
 // [spec:foma:def:fomalib.fsm-empty-string-fn]
 // [spec:foma:sem:fomalib.fsm-empty-string-fn]
-pub fn fsm_empty_string() -> Box<Fsm> {
+pub fn fsm_empty_string() -> Fsm {
     let mut net = fsm_create("");
     /* C: malloc(2 lines), uninitialized; every line is written by the
     add_fsm_arc calls below */
@@ -380,7 +380,7 @@ pub fn fsm_empty_string() -> Box<Fsm> {
 // [spec:foma:sem:structures.fsm-identity-fn]
 // [spec:foma:def:fomalib.fsm-identity-fn]
 // [spec:foma:sem:fomalib.fsm-identity-fn]
-pub fn fsm_identity() -> Box<Fsm> {
+pub fn fsm_identity() -> Fsm {
     let mut net = fsm_create("");
     /* C: malloc(3 lines), uninitialized; written by add_fsm_arc below */
     let mut v = vec![
@@ -415,7 +415,7 @@ pub fn fsm_identity() -> Box<Fsm> {
 // [spec:foma:sem:structures.fsm-empty-set-fn]
 // [spec:foma:def:fomalib.fsm-empty-set-fn]
 // [spec:foma:sem:fomalib.fsm-empty-set-fn]
-pub fn fsm_empty_set() -> Box<Fsm> {
+pub fn fsm_empty_set() -> Fsm {
     let mut net = fsm_create("");
     net.states = fsm_empty().into();
     fsm_update_flags(&mut net, YES, YES, YES, YES, YES, NO);
@@ -453,7 +453,7 @@ pub fn fsm_empty() -> Vec<FsmState> {
 // [spec:foma:sem:structures.fsm-isuniversal-fn+1]
 // [spec:foma:def:fomalib.fsm-isuniversal-fn+1]
 // [spec:foma:sem:fomalib.fsm-isuniversal-fn+1]
-pub fn fsm_isuniversal(opts: &FomaOptions, net: Box<Fsm>) -> bool {
+pub fn fsm_isuniversal(opts: &FomaOptions, net: Fsm) -> bool {
     /* destructive: consumes/replaces the argument; the minimized+compacted
     net is dropped (C leaked it, neither returning nor destroying it).
 
@@ -578,7 +578,7 @@ pub fn fsm_isunambiguous(opts: &FomaOptions, net: &mut Fsm) -> bool {
 // [spec:foma:sem:structures.fsm-extract-ambiguous-domain-fn]
 // [spec:foma:def:fomalib.fsm-extract-ambiguous-domain-fn]
 // [spec:foma:sem:fomalib.fsm-extract-ambiguous-domain-fn]
-pub fn fsm_extract_ambiguous_domain(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_extract_ambiguous_domain(opts: &FomaOptions, net: Fsm) -> Fsm {
     // define AmbiguousDom(T) [_loweruniq(T) .o. _notid(_loweruniq(T).i .o. _loweruniq(T))].u;
     let mut loweruniqnet = fsm_lowerdet(opts, net);
     let mut result = fsm_topsort(fsm_minimize(
@@ -607,7 +607,7 @@ pub fn fsm_extract_ambiguous_domain(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fs
 // [spec:foma:sem:structures.fsm-extract-ambiguous-fn]
 // [spec:foma:def:fomalib.fsm-extract-ambiguous-fn]
 // [spec:foma:sem:fomalib.fsm-extract-ambiguous-fn]
-pub fn fsm_extract_ambiguous(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_extract_ambiguous(opts: &FomaOptions, net: Fsm) -> Fsm {
     /* the ambiguous domain is computed from a copy; net itself is consumed
     as the second compose operand */
     let mut net = net;
@@ -625,7 +625,7 @@ pub fn fsm_extract_ambiguous(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
 // [spec:foma:sem:structures.fsm-extract-unambiguous-fn]
 // [spec:foma:def:fomalib.fsm-extract-unambiguous-fn]
 // [spec:foma:sem:fomalib.fsm-extract-unambiguous-fn]
-pub fn fsm_extract_unambiguous(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_extract_unambiguous(opts: &FomaOptions, net: Fsm) -> Fsm {
     let mut net = net;
     fsm_topsort(fsm_minimize(
         opts,
@@ -854,7 +854,7 @@ pub fn fsm_isidentity(opts: &FomaOptions, net: &mut Fsm) -> bool {
 // [spec:foma:sem:structures.fsm-markallfinal-fn]
 // [spec:foma:def:fomalib.fsm-markallfinal-fn]
 // [spec:foma:sem:fomalib.fsm-markallfinal-fn]
-pub fn fsm_markallfinal(net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_markallfinal(net: Fsm) -> Fsm {
     let mut net = net;
     {
         let mut fsm = net.states.rows_mut();
@@ -871,7 +871,7 @@ pub fn fsm_markallfinal(net: Box<Fsm>) -> Box<Fsm> {
 // [spec:foma:sem:structures.fsm-lowerdet-fn]
 // [spec:foma:def:fomalib.fsm-lowerdet-fn]
 // [spec:foma:sem:fomalib.fsm-lowerdet-fn]
-pub fn fsm_lowerdet(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_lowerdet(opts: &FomaOptions, net: Fsm) -> Fsm {
     let mut newsym: u32; /* Running number for new syms */
     let mut net = fsm_minimize(opts, net);
     fsm_count(&mut net);
@@ -933,7 +933,7 @@ pub fn fsm_lowerdet(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
 // [spec:foma:sem:structures.fsm-lowerdeteps-fn]
 // [spec:foma:def:fomalib.fsm-lowerdeteps-fn]
 // [spec:foma:sem:fomalib.fsm-lowerdeteps-fn]
-pub fn fsm_lowerdeteps(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_lowerdeteps(opts: &FomaOptions, net: Fsm) -> Fsm {
     let mut newsym: u32; /* Running number for new syms */
     let mut net = fsm_minimize(opts, net);
     fsm_count(&mut net);
@@ -995,7 +995,7 @@ pub fn fsm_lowerdeteps(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
 // [spec:foma:sem:structures.fsm-extract-nonidentity-fn]
 // [spec:foma:def:fomalib.fsm-extract-nonidentity-fn]
 // [spec:foma:sem:fomalib.fsm-extract-nonidentity-fn]
-pub fn fsm_extract_nonidentity(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_extract_nonidentity(opts: &FomaOptions, net: Fsm) -> Fsm {
     /* Same algorithm as for test identity, except we mark the arcs that cause nonidentity */
     /* Experimental. */
 
@@ -1209,7 +1209,7 @@ pub fn fsm_extract_nonidentity(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
 // [spec:foma:sem:structures.fsm-copy-fn+1]
 // [spec:foma:def:fomalib.fsm-copy-fn+1]
 // [spec:foma:sem:fomalib.fsm-copy-fn+1]
-pub fn fsm_copy(net: &mut Fsm) -> Box<Fsm> {
+pub fn fsm_copy(net: &mut Fsm) -> Fsm {
     /* Borrows (does not consume) but mutates the SOURCE: fsm_count refreshes
     its counts. A &mut borrow is never NULL — NULL-able callers keep the
     check at the call site.
@@ -1218,7 +1218,7 @@ pub fn fsm_copy(net: &mut Fsm) -> Box<Fsm> {
     so the copy captured stale statecount/linecount/arccount/finalcount. Here
     fsm_count runs first, so the copy gets the same fresh counts as the source. */
     fsm_count(net);
-    let mut net_copy = Box::new(Fsm {
+    let mut net_copy = Fsm {
         name: net.name.clone(),
         arity: net.arity,
         arccount: net.arccount,
@@ -1240,7 +1240,7 @@ pub fn fsm_copy(net: &mut Fsm) -> Box<Fsm> {
         // double-free hazard); a deep clone here keeps them independent, as
         // recorded in types.rs.
         medlookup: net.medlookup.clone(),
-    });
+    };
 
     net_copy.sigma = sigma_copy(&net.sigma);
     net_copy.states = fsm_state_copy(&net.states.rows(), net.linecount).into();
@@ -1316,7 +1316,7 @@ pub fn add_quantifier(quantifiers: &mut Quantifiers, string: &str) {
 // [spec:foma:sem:structures.union-quantifiers-fn+1]
 // [spec:foma:def:foma.union-quantifiers-fn+1]
 // [spec:foma:sem:foma.union-quantifiers-fn+1]
-pub fn union_quantifiers(quantifiers: &Quantifiers) -> Box<Fsm> {
+pub fn union_quantifiers(quantifiers: &Quantifiers) -> Fsm {
     /*     We create a FSM that simply accepts the union of all */
     /*     quantifier symbols */
 
@@ -1417,7 +1417,7 @@ pub fn purge_quantifier(quantifiers: &mut Quantifiers, string: &str) {
 // [spec:foma:sem:structures.fsm-quantifier-fn]
 // [spec:foma:def:fomalib.fsm-quantifier-fn]
 // [spec:foma:sem:fomalib.fsm-quantifier-fn]
-pub fn fsm_quantifier(opts: &FomaOptions, string: &str) -> Box<Fsm> {
+pub fn fsm_quantifier(opts: &FomaOptions, string: &str) -> Fsm {
     /* \x* x \x* x \x* */
     fsm_concat(
         opts,
@@ -1447,7 +1447,7 @@ pub fn fsm_logical_precedence(
     quantifiers: &Quantifiers,
     string1: &str,
     string2: &str,
-) -> Box<Fsm> {
+) -> Fsm {
     /* x < y = \y* x \y* [x | y Q* x] ?* */
     /*          1  2  3        4           5 */
 
@@ -1494,7 +1494,7 @@ pub fn fsm_logical_eq(
     quantifiers: &Quantifiers,
     string1: &str,
     string2: &str,
-) -> Box<Fsm> {
+) -> Fsm {
     fsm_concat(
         opts,
         fsm_universal(),
@@ -1538,7 +1538,7 @@ mod tests {
     use crate::constructions::fsm_count;
 
     /* Build a fresh, minimized net from a regex (the Wave-2 pipeline). */
-    fn parse(rx: &str) -> Box<Fsm> {
+    fn parse(rx: &str) -> Fsm {
         let opts = &FomaOptions::default();
         crate::regex::fsm_parse_regex(opts, rx, None, None).expect("regex should compile")
     }
@@ -1554,7 +1554,7 @@ mod tests {
         }
     }
 
-    fn raw_fsm(states: Vec<FsmState>, arity: i32) -> Box<Fsm> {
+    fn raw_fsm(states: Vec<FsmState>, arity: i32) -> Fsm {
         let mut net = fsm_create("");
         net.states = states.into();
         net.arity = arity;

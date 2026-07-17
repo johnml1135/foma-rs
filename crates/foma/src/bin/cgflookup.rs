@@ -49,7 +49,7 @@ static HELPSTRING: &str = concat!(
 // struct lookup_chain { net; ah; next; prev; } — owned net/ah here; the
 // `next`/`prev` pointer fields become Vec indices (None <-> NULL).
 struct LookupChain {
-    net: Option<Box<Fsm>>,
+    net: Option<Fsm>,
     ah: Option<Box<ApplyHandle>>,
     next: Option<usize>,
     prev: Option<usize>,

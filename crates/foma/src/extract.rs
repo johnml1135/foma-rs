@@ -21,7 +21,7 @@ use crate::types::{Fsm, IDENTITY, NO, UNK, UNKNOWN};
 // [spec:foma:sem:extract.fsm-lower-fn]
 // [spec:foma:def:fomalib.fsm-lower-fn]
 // [spec:foma:sem:fomalib.fsm-lower-fn]
-pub fn fsm_lower(net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_lower(net: Fsm) -> Fsm {
     let mut net = net;
     /* C: fsm = net->states — reads below index net.states directly */
     let mut builder = fsm_state_init(sigma_max(&net.sigma));
@@ -75,7 +75,7 @@ pub fn fsm_lower(net: Box<Fsm>) -> Box<Fsm> {
 // [spec:foma:sem:extract.fsm-upper-fn]
 // [spec:foma:def:fomalib.fsm-upper-fn]
 // [spec:foma:sem:fomalib.fsm-upper-fn]
-pub fn fsm_upper(net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_upper(net: Fsm) -> Fsm {
     let mut net = net;
     /* C: fsm = net->states — reads below index net.states directly */
     let mut builder = fsm_state_init(sigma_max(&net.sigma));

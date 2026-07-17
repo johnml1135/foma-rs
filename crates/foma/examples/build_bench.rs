@@ -25,7 +25,7 @@ fn opts() -> FomaOptions {
     FomaOptions::default()
 }
 
-fn compile(rx: &str) -> Box<Fsm> {
+fn compile(rx: &str) -> Fsm {
     fsm_parse_regex(&opts(), rx, None, None)
         .unwrap_or_else(|| panic!("regex failed to compile: {rx:?}"))
 }
@@ -75,8 +75,8 @@ fn bench_compile(rows: &mut Vec<Row>, name: &'static str, rx: &str) {
 fn bench_op(
     rows: &mut Vec<Row>,
     name: &'static str,
-    build: impl Fn() -> Box<Fsm>,
-    op: impl Fn(Box<Fsm>) -> Box<Fsm>,
+    build: impl Fn() -> Fsm,
+    op: impl Fn(Fsm) -> Fsm,
 ) {
     let sample = op(build());
     let (states, arcs) = (sample.statecount, sample.arccount);
@@ -230,7 +230,7 @@ fn main() {
 /// benches a non-minimal machine. `fsm_parse_regex` always minimizes, so we
 /// approximate by compiling then un-minimizing via a self-union (cheap, keeps
 /// the language, leaves a non-minimal NFA-ish net for the op to chew on).
-fn compile_nfa(rx: &str) -> Box<Fsm> {
+fn compile_nfa(rx: &str) -> Fsm {
     let o = opts();
     let a = compile(rx);
     let b = compile(rx);

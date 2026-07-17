@@ -655,7 +655,7 @@ pub fn apply_med_init(net: &Fsm) -> Box<ApplyMedHandle> {
         curr_ptr: None,
         hascm: false,
     });
-    medh.net = Some(Box::new(net.clone())); /* DEVIATION: owned copy of borrowed net */
+    medh.net = Some(net.clone()); /* DEVIATION: owned copy of borrowed net */
     /* One flat snapshot backs the cur_* line accessors through the MED walk. */
     medh.net_rows = net.states.rows().to_vec();
     medh.agenda = vec![
@@ -1225,7 +1225,7 @@ mod tests {
 
     /* Minimized net from a regex, arcs sorted so each state's lines are
     contiguous (apply_med requires it). */
-    fn parse_sorted(rx: &str) -> Box<Fsm> {
+    fn parse_sorted(rx: &str) -> Fsm {
         let opts = &FomaOptions::default();
         let mut net = fsm_parse_regex(opts, rx, None, None).expect("regex should compile");
         fsm_sort_arcs(&mut net, 1);

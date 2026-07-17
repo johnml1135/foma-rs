@@ -121,7 +121,7 @@ impl Session {
     fn set_previous(&mut self, i: usize, v: Option<usize>) {
         self.stack_arena[i].previous = v;
     }
-    fn take_fsm(&mut self, i: usize) -> Option<Box<Fsm>> {
+    fn take_fsm(&mut self, i: usize) -> Option<Fsm> {
         self.stack_arena[i].fsm.take()
     }
     fn take_ah(&mut self, i: usize) -> Option<Box<ApplyHandle>> {
@@ -146,7 +146,7 @@ impl Session {
     pub fn stack_entry_fsm<R>(&mut self, index: usize, f: impl FnOnce(&mut Fsm) -> R) -> R {
         f(self.stack_arena[index]
             .fsm
-            .as_deref_mut()
+            .as_mut()
             .expect("stack entry has no fsm"))
     }
 
@@ -162,7 +162,7 @@ impl Session {
             &self.opts,
             self.stack_arena[index]
                 .fsm
-                .as_deref_mut()
+                .as_mut()
                 .expect("stack entry has no fsm"),
         )
     }
@@ -257,7 +257,7 @@ impl Session {
     // [spec:foma:sem:stack.stack-add-fn]
     // [spec:foma:def:foma.stack-add-fn]
     // [spec:foma:sem:foma.stack-add-fn]
-    pub fn stack_add(&mut self, mut fsm: Box<Fsm>) -> i32 {
+    pub fn stack_add(&mut self, mut fsm: Fsm) -> i32 {
         let mut i = 0;
         let mut stack_ptr_previous: Option<usize> = None;
 
@@ -289,7 +289,7 @@ impl Session {
             print_stats(
                 self.stack_arena[stack_ptr]
                     .fsm
-                    .as_deref()
+                    .as_ref()
                     .expect("fsm just set on this entry above"),
             );
         }
@@ -307,7 +307,7 @@ impl Session {
             let mut amedh = apply_med_init(
                 self.stack_arena[se]
                     .fsm
-                    .as_deref()
+                    .as_ref()
                     .expect("top real entry always carries an fsm"),
             );
             apply_med_set_align_symbol(&mut amedh, "-");
@@ -328,7 +328,7 @@ impl Session {
             let ah = apply_init(
                 self.stack_arena[se]
                     .fsm
-                    .as_deref()
+                    .as_ref()
                     .expect("top real entry always carries an fsm"),
             );
             self.stack_arena[se].ah = Some(ah);
@@ -341,7 +341,7 @@ impl Session {
     // [spec:foma:sem:stack.stack-pop-fn]
     // [spec:foma:def:foma.stack-pop-fn]
     // [spec:foma:sem:foma.stack-pop-fn]
-    pub fn stack_pop(&mut self) -> Option<Box<Fsm>> {
+    pub fn stack_pop(&mut self) -> Option<Fsm> {
         if self.stack_size() == 1 {
             // fsm = main_stack->fsm; main_stack->fsm = NULL; stack_clear();
             let fsm = self.take_fsm(self.main_stack());

@@ -150,7 +150,7 @@ struct LexcCompiler {
     /* C: static struct lexc_hashtable *hashtable — 3079 calloc'd bucket heads */
     hashtable: Vec<LexcHashtable>,
     /* C: static struct fsm *current_regex_network */
-    current_regex_network: Option<Box<Fsm>>,
+    current_regex_network: Option<Fsm>,
 
     /* C: static int cwordin[1000], cwordout[1000], medcwordin[2000],
     medcwordout[2000]. Wave 4: growable Vecs (the C fixed buffers overflowed —
@@ -593,7 +593,7 @@ fn lexc_add_network(lx: &mut LexcCompiler) {
 // [spec:foma:sem:lexcread.lexc-set-network-fn]
 // [spec:foma:def:lexc.lexc-set-network-fn]
 // [spec:foma:sem:lexc.lexc-set-network-fn]
-fn lexc_set_network(lx: &mut LexcCompiler, net: Box<Fsm>) {
+fn lexc_set_network(lx: &mut LexcCompiler, net: Fsm) {
     lx.current_regex_network = Some(net);
     lx.current_entry = REGEX_ENTRY;
 }
@@ -1474,7 +1474,7 @@ fn lexc_merge_states(lx: &mut LexcCompiler) {
 // [spec:foma:sem:lexcread.lexc-to-fsm-fn]
 // [spec:foma:def:lexc.lexc-to-fsm-fn]
 // [spec:foma:sem:lexc.lexc-to-fsm-fn]
-fn lexc_to_fsm(lx: &mut LexcCompiler) -> Box<Fsm> {
+fn lexc_to_fsm(lx: &mut LexcCompiler) -> Fsm {
     if lx.opts.verbose {
         tracing::info!("Building lexicon...");
     }
@@ -1645,7 +1645,7 @@ pub fn fsm_lexc_parse_string(
     opts: &FomaOptions,
     mut defines: Option<&mut DefinedNetworks>,
     string: &str,
-) -> Option<Box<Fsm>> {
+) -> Option<Fsm> {
     /* C took an (ignored) `verbose` int parameter; the warnings keyed off the
     global g_verbose instead. Both collapse into `opts.verbose` here. C read the
     `g_defines` registry global ("olddefines"); it is the `defines` parameter
@@ -1773,7 +1773,7 @@ pub fn fsm_lexc_parse_file(
     opts: &FomaOptions,
     defines: Option<&mut DefinedNetworks>,
     filename: &str,
-) -> Option<Box<Fsm>> {
+) -> Option<Fsm> {
     /* mystring = file_to_mem(filename); return fsm_lexc_parse_string(mystring,
     verbose). The C never frees mystring (documented leak); here the buffer is a
     Vec that drops at scope end — an observable no-op. */
@@ -1799,7 +1799,7 @@ mod tests {
 
     /// Compile a lexc source string (verbose off is irrelevant — g_verbose is a
     /// separate global; the parse string ignores its own `verbose` arg).
-    fn compile(src: &str) -> Box<Fsm> {
+    fn compile(src: &str) -> Fsm {
         fsm_lexc_parse_string(&FomaOptions::default(), None, src).expect("compile produced a net")
     }
 

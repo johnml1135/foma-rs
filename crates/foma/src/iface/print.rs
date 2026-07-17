@@ -1122,7 +1122,7 @@ pub fn iface_print_defined(session: &mut Session) {
             print!("{}\t", name);
             print_stats(
                 node.net
-                    .as_deref()
+                    .as_ref()
                     .expect("a named define always carries a net (name/net set together)"),
             );
         }

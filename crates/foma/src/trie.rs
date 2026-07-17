@@ -59,7 +59,7 @@ pub fn fsm_trie_init_sized(hash_tablesize: u32) -> FsmTrieHandle {
 // [spec:foma:sem:trie.fsm-trie-done-fn]
 // [spec:foma:def:fomalib.fsm-trie-done-fn]
 // [spec:foma:sem:fomalib.fsm-trie-done-fn]
-pub fn fsm_trie_done(th: FsmTrieHandle) -> Box<Fsm> {
+pub fn fsm_trie_done(th: FsmTrieHandle) -> Fsm {
     let mut newh = fsm_construct_init("name");
     for i in 0..th.trie_hash.len() {
         let mut thash: Option<&TrieHash> = Some(&th.trie_hash[i]);

@@ -22,7 +22,7 @@ use crate::types::{EPSILON, Fsm, Tern};
 // [spec:foma:sem:reverse.fsm-reverse-fn]
 // [spec:foma:def:fomalib.fsm-reverse-fn]
 // [spec:foma:sem:fomalib.fsm-reverse-fn]
-pub fn fsm_reverse(net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_reverse(net: Fsm) -> Fsm {
     /* C: net stays a caller pointer alongside the read handle; here the
     handle owns the net until fsm_read_done returns it, so net->name /
     net->sigma are reached through inh (observably equivalent) */

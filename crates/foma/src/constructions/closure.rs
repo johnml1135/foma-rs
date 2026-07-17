@@ -10,7 +10,7 @@ pub const OPTIONALITY: i32 = 2;
 // [spec:foma:sem:constructions.fsm-kleene-star-fn]
 // [spec:foma:def:fomalib.fsm-kleene-star-fn]
 // [spec:foma:sem:fomalib.fsm-kleene-star-fn]
-pub fn fsm_kleene_star(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_kleene_star(opts: &FomaOptions, net: Fsm) -> Fsm {
     fsm_kleene_closure(opts, net, KLEENE_STAR)
 }
 
@@ -18,7 +18,7 @@ pub fn fsm_kleene_star(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
 // [spec:foma:sem:constructions.fsm-kleene-plus-fn]
 // [spec:foma:def:fomalib.fsm-kleene-plus-fn]
 // [spec:foma:sem:fomalib.fsm-kleene-plus-fn]
-pub fn fsm_kleene_plus(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_kleene_plus(opts: &FomaOptions, net: Fsm) -> Fsm {
     fsm_kleene_closure(opts, net, KLEENE_PLUS)
 }
 
@@ -26,13 +26,13 @@ pub fn fsm_kleene_plus(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
 // [spec:foma:sem:constructions.fsm-optionality-fn]
 // [spec:foma:def:fomalib.fsm-optionality-fn]
 // [spec:foma:sem:fomalib.fsm-optionality-fn]
-pub fn fsm_optionality(opts: &FomaOptions, net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_optionality(opts: &FomaOptions, net: Fsm) -> Fsm {
     fsm_kleene_closure(opts, net, OPTIONALITY)
 }
 
 // [spec:foma:def:constructions.fsm-kleene-closure-fn]
 // [spec:foma:sem:constructions.fsm-kleene-closure-fn]
-pub fn fsm_kleene_closure(opts: &FomaOptions, net: Box<Fsm>, operation: i32) -> Box<Fsm> {
+pub fn fsm_kleene_closure(opts: &FomaOptions, net: Fsm, operation: i32) -> Fsm {
     if operation == OPTIONALITY {
         return fsm_union(opts, net, fsm_empty_string());
     }

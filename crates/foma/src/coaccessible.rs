@@ -36,7 +36,7 @@ pub struct Invtable {
 // [spec:foma:sem:coaccessible.fsm-coaccessible-fn+2]
 // [spec:foma:def:fomalib.fsm-coaccessible-fn+2]
 // [spec:foma:sem:fomalib.fsm-coaccessible-fn+2]
-pub fn fsm_coaccessible(net: Box<Fsm>) -> Box<Fsm> {
+pub fn fsm_coaccessible(net: Fsm) -> Fsm {
     let mut int_stack = IntStack::new();
     let mut net = net;
 
