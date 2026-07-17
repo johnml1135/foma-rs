@@ -139,79 +139,16 @@ pub fn fsm_union(opts: &FomaOptions, net1: Box<Fsm>, net2: Box<Fsm>) -> Box<Fsm>
 
     let net1_offset = 1;
     let net2_offset = net1.statecount + 1;
-    let real1 = (net1.linecount - 1) as usize;
-    let real2 = (net2.linecount - 1) as usize;
 
-    /* Build the union by reusing (and growing) net1's own line table rather
-    than allocating a fresh one each call: the incremental-union fold would
-    otherwise reallocate and zero-fill the whole accumulator on every step.
-    The output is byte-identical to the fresh-array build —
-    [start1, start2, net1 lines +net1_offset, net2 lines +net2_offset, term]. */
-    let mut arccount = 2;
-    {
-        let mut fsm1 = net1.states.rows_mut();
-        let fsm2 = net2.states.rows();
-        fsm1.truncate(real1); /* drop net1's terminator line */
-        for line in fsm1.iter_mut() {
-            line.state_no += net1_offset;
-            if line.target != -1 {
-                line.target += net1_offset;
-                arccount += 1;
-            }
-            line.start_state = 0;
-        }
-        fsm1.reserve(real2 + 3);
-        /* prepend the shared start state's two epsilon arcs */
-        fsm1.splice(
-            0..0,
-            [
-                FsmState {
-                    state_no: 0,
-                    r#in: EPSILON as i16,
-                    out: EPSILON as i16,
-                    target: net1_offset,
-                    final_state: 0,
-                    start_state: 1,
-                },
-                FsmState {
-                    state_no: 0,
-                    r#in: EPSILON as i16,
-                    out: EPSILON as i16,
-                    target: net2_offset,
-                    final_state: 0,
-                    start_state: 1,
-                },
-            ],
-        );
-        for i in 0..real2 {
-            let src = fsm2[i];
-            let new_target = if src.target == -1 {
-                -1
-            } else {
-                arccount += 1;
-                src.target + net2_offset
-            };
-            fsm1.push(FsmState {
-                state_no: src.state_no + net2_offset,
-                r#in: src.r#in,
-                out: src.out,
-                target: new_target,
-                final_state: src.final_state,
-                start_state: 0,
-            });
-        }
-        fsm1.push(FsmState {
-            state_no: -1,
-            r#in: -1,
-            out: -1,
-            target: -1,
-            final_state: -1,
-            start_state: -1,
-        });
-    }
+    /* Build the union directly in the compressed representation — no operand is
+    materialized to flat rows. The result is byte-identical to the flat build
+    [start1, start2, net1 lines +net1_offset, net2 lines +net2_offset, term]:
+    the two shared-start epsilon arcs plus every real arc of both machines. */
+    let arccount = 2 + net1.states.arc_count() as i32 + net2.states.arc_count() as i32;
+    net1.states = net1.states.union(&net2.states, net1_offset, net2_offset);
 
     net1.statecount = net1.statecount + net2.statecount + 1;
-    net1.linecount = (real1 + real2 + 3) as i32;
+    net1.linecount = net1.states.len() as i32;
     net1.arccount = arccount;
     net1.finalcount += net2.finalcount;
     fsm_destroy(net2);

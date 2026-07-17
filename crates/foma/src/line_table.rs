@@ -17,7 +17,7 @@
 
 use core::ops::{Deref, DerefMut};
 
-use crate::types::FsmState;
+use crate::types::{EPSILON, FsmState};
 
 /// The line table of an [`Fsm`](crate::types::Fsm), stored compressed.
 ///
@@ -68,9 +68,25 @@ impl LineTable {
         self.csr.blocks()
     }
 
-    /// The arcs of one block (native, no materialization).
-    pub fn block_arcs(&self, b: &StateBlock) -> &[CsrArc] {
-        self.csr.block_arcs(b)
+    /// Each block paired with its arc slice, in order (native).
+    pub fn iter_blocks(&self) -> impl Iterator<Item = (&StateBlock, &[CsrArc])> {
+        self.csr.iter_blocks()
+    }
+
+    /// Total real arcs (markers excluded).
+    pub fn arc_count(&self) -> usize {
+        self.csr.arc_count()
+    }
+
+    /// The epsilon-union table, built directly in compressed form (no operand is
+    /// materialized to flat rows). `self`'s states are shifted by `self_offset`,
+    /// `other`'s by `other_offset`, and a shared start state 0 (with epsilon arcs
+    /// into each operand's shifted start) is prepended — the same shape the flat
+    /// union produced.
+    pub fn union(&self, other: &LineTable, self_offset: i32, other_offset: i32) -> LineTable {
+        LineTable {
+            csr: self.csr.union(&other.csr, self_offset, other_offset),
+        }
     }
 
     /// Logical row count including the terminator — the C `linecount`.
@@ -141,16 +157,17 @@ impl Drop for RowsMut<'_> {
 /// only from a state's first row, and the builders write them uniformly), so
 /// they are stored once here instead of once per arc. `arc_len == 0` marks a
 /// state with no outgoing arcs — the flat table's single `target == -1` marker
-/// row.
+/// row. Blocks store their arc *count*, not a start offset: [`Csr::arcs`] is
+/// grouped by block in order, so a block's arcs begin where the previous
+/// block's ended (a running cursor over `arc_len`). Field order packs to 12
+/// bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StateBlock {
     pub state_no: i32,
-    pub final_state: i8,
-    pub start_state: i8,
-    /// First arc index in [`Csr::arcs`].
-    pub arc_start: u32,
     /// Number of arcs (0 ↔ a marker/arc-less state).
     pub arc_len: u32,
+    pub final_state: i8,
+    pub start_state: i8,
 }
 
 /// The only per-arc data the flat row genuinely varies: label and target.
@@ -220,7 +237,6 @@ impl Csr {
                 state_no: sno,
                 final_state: fin,
                 start_state: start,
-                arc_start,
                 arc_len: arcs.len() as u32 - arc_start,
             });
             i = j;
@@ -238,8 +254,8 @@ impl Csr {
             return Vec::new();
         };
         let mut rows = Vec::with_capacity(self.arcs.len() + self.blocks.len() + 1);
-        for b in &self.blocks {
-            if b.arc_len == 0 {
+        for (b, block_arcs) in self.iter_blocks() {
+            if block_arcs.is_empty() {
                 rows.push(FsmState {
                     state_no: b.state_no,
                     r#in: -1,
@@ -249,9 +265,7 @@ impl Csr {
                     start_state: b.start_state,
                 });
             } else {
-                let lo = b.arc_start as usize;
-                let hi = lo + b.arc_len as usize;
-                for a in &self.arcs[lo..hi] {
+                for a in block_arcs {
                     rows.push(FsmState {
                         state_no: b.state_no,
                         r#in: a.r#in,
@@ -272,10 +286,22 @@ impl Csr {
         &self.blocks
     }
 
-    /// The arcs of one block, in order.
-    pub fn block_arcs(&self, b: &StateBlock) -> &[CsrArc] {
-        let lo = b.arc_start as usize;
-        &self.arcs[lo..lo + b.arc_len as usize]
+    /// Total real arcs (markers excluded) — the C `arccount` minus any that a
+    /// caller adds itself.
+    pub fn arc_count(&self) -> usize {
+        self.arcs.len()
+    }
+
+    /// Each block paired with its arc slice, in order. `arcs` is grouped by
+    /// block, so a running cursor over `arc_len` recovers each block's slice
+    /// without storing a per-block start offset.
+    pub fn iter_blocks(&self) -> impl Iterator<Item = (&StateBlock, &[CsrArc])> {
+        let mut cursor = 0usize;
+        self.blocks.iter().map(move |b| {
+            let lo = cursor;
+            cursor += b.arc_len as usize;
+            (b, &self.arcs[lo..cursor])
+        })
     }
 
     /// Logical flat-row count including the terminator (the C `linecount`): one
@@ -296,6 +322,61 @@ impl Csr {
     /// True for the empty (C `NULL`) table — no terminator, no rows.
     pub fn is_null(&self) -> bool {
         self.terminator.is_none()
+    }
+
+    /// Build the epsilon-union of two compressed tables directly. See
+    /// [`LineTable::union`].
+    pub fn union(&self, other: &Csr, self_offset: i32, other_offset: i32) -> Csr {
+        let mut blocks = Vec::with_capacity(1 + self.blocks.len() + other.blocks.len());
+        let mut arcs = Vec::with_capacity(2 + self.arcs.len() + other.arcs.len());
+        // Shared start state 0: an epsilon arc into each operand's shifted start.
+        arcs.push(CsrArc {
+            r#in: EPSILON as i16,
+            out: EPSILON as i16,
+            target: self_offset,
+        });
+        arcs.push(CsrArc {
+            r#in: EPSILON as i16,
+            out: EPSILON as i16,
+            target: other_offset,
+        });
+        blocks.push(StateBlock {
+            state_no: 0,
+            arc_len: 2,
+            final_state: 0,
+            start_state: 1,
+        });
+        // Operand blocks/arcs shifted, self before other — the flat layout.
+        for (src, off) in [(self, self_offset), (other, other_offset)] {
+            for b in &src.blocks {
+                blocks.push(StateBlock {
+                    state_no: b.state_no + off,
+                    arc_len: b.arc_len,
+                    final_state: b.final_state,
+                    start_state: 0,
+                });
+            }
+            for a in &src.arcs {
+                arcs.push(CsrArc {
+                    r#in: a.r#in,
+                    out: a.out,
+                    target: a.target + off,
+                });
+            }
+        }
+        Csr {
+            blocks,
+            arcs,
+            // Both operands carry the canonical all -1 terminator.
+            terminator: Some(FsmState {
+                state_no: -1,
+                r#in: -1,
+                out: -1,
+                target: -1,
+                final_state: -1,
+                start_state: -1,
+            }),
+        }
     }
 }
 
@@ -348,11 +429,31 @@ mod tests {
         let rows = [row(0, 2, 2, 1, 0, 1), row(1, -1, -1, -1, 1, 0), term()];
         assert_roundtrip(&rows);
         let csr = Csr::from_rows(&rows);
-        assert_eq!(csr.blocks().len(), 2);
-        assert_eq!(csr.block_arcs(&csr.blocks()[0]).len(), 1);
-        assert_eq!(csr.block_arcs(&csr.blocks()[0])[0].target, 1);
-        assert!(csr.block_arcs(&csr.blocks()[1]).is_empty());
-        assert_eq!(csr.blocks()[1].final_state, 1);
+        let bs: Vec<_> = csr.iter_blocks().collect();
+        assert_eq!(bs.len(), 2);
+        assert_eq!(bs[0].1.len(), 1);
+        assert_eq!(bs[0].1[0].target, 1);
+        assert!(bs[1].1.is_empty());
+        assert_eq!(bs[1].0.final_state, 1);
+    }
+
+    #[test]
+    fn native_union_matches_flat_build() {
+        // net1: 0 -a-> 1(final). net2: 0 -b-> 1(final). Union with offsets 1 and
+        // (net1.statecount+1)=3 must equal the flat [start eps, net1+1, net2+3, term].
+        let n1 = Csr::from_rows(&[row(0, 3, 3, 1, 0, 1), row(1, -1, -1, -1, 1, 0), term()]);
+        let n2 = Csr::from_rows(&[row(0, 4, 4, 1, 0, 1), row(1, -1, -1, -1, 1, 0), term()]);
+        let u = n1.union(&n2, 1, 3);
+        let expected = [
+            row(0, 0, 0, 1, 0, 1),    // eps -> net1 start (shifted +1)
+            row(0, 0, 0, 3, 0, 1),    // eps -> net2 start (shifted +3)
+            row(1, 3, 3, 2, 0, 0),    // net1 0 -a-> 1, +1
+            row(2, -1, -1, -1, 1, 0), // net1 final marker, +1
+            row(3, 4, 4, 4, 0, 0),    // net2 0 -b-> 1, +3
+            row(4, -1, -1, -1, 1, 0), // net2 final marker, +3
+            term(),
+        ];
+        assert_eq!(u.to_rows().as_slice(), &expected);
     }
 
     #[test]
@@ -370,11 +471,8 @@ mod tests {
         assert_eq!(csr.blocks().len(), 2);
         assert_eq!(csr.blocks()[0].arc_len, 3);
         // arc labels preserved in order.
-        let labels: Vec<i16> = csr
-            .block_arcs(&csr.blocks()[0])
-            .iter()
-            .map(|a| a.r#in)
-            .collect();
+        let (_, arcs0) = csr.iter_blocks().next().unwrap();
+        let labels: Vec<i16> = arcs0.iter().map(|a| a.r#in).collect();
         assert_eq!(labels, vec![3, 4, 5]);
     }
 
