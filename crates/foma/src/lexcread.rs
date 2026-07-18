@@ -29,6 +29,7 @@ use crate::sigma::{
 use crate::structures::{fsm_create, fsm_empty_set};
 use crate::topsort::fsm_topsort;
 use crate::types::{DefinedNetworks, EPSILON, Fsm, FsmState, IDENTITY, Sigma, UNK, UNKNOWN};
+use crate::utf8::is_combining;
 
 const SIGMA_HASH_TABLESIZE: usize = 3079;
 
@@ -889,8 +890,8 @@ fn lexc_pad(lx: &mut LexcCompiler) {
     }
 }
 
-// [spec:foma:def:lexcread.lexc-string-to-tokens-fn+1]
-// [spec:foma:sem:lexcread.lexc-string-to-tokens-fn+1]
+// [spec:foma:def:lexcread.lexc-string-to-tokens-fn+2]
+// [spec:foma:sem:lexcread.lexc-string-to-tokens-fn+2]
 fn lexc_string_to_tokens(lx: &mut LexcCompiler, string: &str, intarr: &mut Vec<i32>) {
     let mut pos = 0usize;
     let mut rest = string;
@@ -923,12 +924,46 @@ fn lexc_string_to_tokens(lx: &mut LexcCompiler, string: &str, intarr: &mut Vec<i
             rest = &rest[mclen..];
             continue;
         }
-        // A single character.
-        let sym = &rest[..c.len_utf8()];
+        // DEVIATION from C (deliberate divergence, not a memory-safety
+        // workaround): a single character, extended to swallow any
+        // immediately-following run of Unicode combining marks (the same
+        // `crate::utf8::is_combining` check `apply.rs`'s tokenizer uses to
+        // merge such a run into one query-side token forced to `IDENTITY`,
+        // see that module's "Merge trailing Unicode combining characters into
+        // one ? (IDENTITY)" comment). Without this, an NFD-decomposed
+        // precomposed letter (e.g. "e" + COMBINING ACUTE ACCENT = NFD "é")
+        // compiled as two separate one-codepoint arcs here while apply.rs
+        // unconditionally merged the same run into one IDENTITY-tagged query
+        // token -- which only ever matches a `?` (UNKNOWN) wildcard arc. A
+        // network with two literal arcs and no wildcard therefore had nothing
+        // that token could match: total, silent non-match for any word
+        // containing a base+combining-mark run, regardless of affixation, on
+        // ordinary NFD-normalized diacritic text. Grouping the run into one
+        // symbol here makes `apply.rs`'s initial sigma-trie match (which runs
+        // BEFORE its combining-merge check) consume the whole run as one
+        // already-known symbol, so the merge-check finds nothing left over
+        // and never downgrades it to IDENTITY -- both sides then agree on one
+        // token for the pair. Upstream C foma and foma-rs 0.1.1-0.4.0 both
+        // reproduce the original asymmetry faithfully (confirmed against
+        // foma/apply.c and foma/lexcread.c); this fork intentionally diverges
+        // here because upstream's bug-for-bug policy won't.
+        // An explicit `Multichar_Symbols` declaration for the same run (or
+        // for the base character alone) is still checked first via
+        // `first_mc_prefix` above and takes priority unchanged; this fallback
+        // only fires when nothing was declared.
+        let mut end = c.len_utf8();
+        loop {
+            let cons = is_combining(&rest.as_bytes()[end..]);
+            if cons == 0 {
+                break;
+            }
+            end += cons as usize;
+        }
+        let sym = &rest[..end];
         let n = intern_symbol(lx, sym);
         vset(intarr, pos, n);
         pos += 1;
-        rest = &rest[c.len_utf8()..];
+        rest = &rest[end..];
     }
     vset(intarr, pos, -1);
 }
@@ -1906,6 +1941,35 @@ mod tests {
         assert_eq!(upper_all(&net), vec!["x+Pl", "y+PlPoss"]);
     }
 
+    // NFD-decomposed diacritic (e.g. é as e + COMBINING ACUTE ACCENT, U+0301):
+    // without an explicit Multichar_Symbols declaration, `lexc_string_to_tokens`
+    // compiled the base and the combining mark as two separate one-codepoint
+    // arcs, while `apply.rs`'s tokenizer unconditionally merges any base +
+    // trailing-combining-mark run in the QUERY string into one token forced to
+    // `IDENTITY` (`apply.rs`'s "Merge trailing Unicode combining characters into
+    // one ? (IDENTITY)" comment) -- which only ever matches a `?` (UNKNOWN)
+    // wildcard arc. A network with two literal arcs and no wildcard therefore
+    // has nothing that IDENTITY token can match: total non-match for any word
+    // containing a base+combining-mark run, independent of affixation. Any
+    // caller that NFD-normalizes text before compiling lexc source (as
+    // PanGloss/hc-foma's emitter does, mirroring HermitCrab's own
+    // `Normalize(FormD)`) hits this on ordinary precomposed Latin/Greek/Cyrillic
+    // diacritics.
+    // [spec:foma:sem:lexcread.lexc-string-to-tokens-fn+2/test]
+    #[test]
+    fn e2e_nfd_combining_mark_round_trips() {
+        // "e" + COMBINING ACUTE ACCENT (U+0301) = NFD "é", no explicit
+        // Multichar_Symbols declaration.
+        let net = compile("LEXICON Root\ncafe\u{0301} # ;\n");
+        assert_eq!(upper_all(&net), vec!["cafe\u{0301}"]);
+        assert_eq!(
+            up_one(&net, "cafe\u{0301}").as_deref(),
+            Some("cafe\u{0301}"),
+            "apply_up on the exact NFD word that was compiled into the lexicon must not be a \
+             silent zero-match"
+        );
+    }
+
     // `%`-escape: `a%:b` is the literal three-symbol string a : b (identity),
     // not a pair split at the colon.
     // [spec:foma:sem:lexcread.lexc-find-delim-fn/test]
@@ -1918,7 +1982,7 @@ mod tests {
     }
 
     // `0` as epsilon: `a:0` = a:eps, `0:b` = eps:b — projections drop epsilon.
-    // [spec:foma:sem:lexcread.lexc-string-to-tokens-fn+1/test]
+    // [spec:foma:sem:lexcread.lexc-string-to-tokens-fn+2/test]
     #[test]
     fn e2e_zero_is_epsilon() {
         let net = compile("LEXICON Root\na:0 # ;\n0:b # ;\n");
@@ -2085,7 +2149,7 @@ mod tests {
 
     // Multichar longest-first, a bare '0' -> alignment EPSILON, and fresh-sigma
     // numbering (first regular symbol = 3).
-    // [spec:foma:sem:lexcread.lexc-string-to-tokens-fn+1/test]
+    // [spec:foma:sem:lexcread.lexc-string-to-tokens-fn+2/test]
     // [spec:foma:sem:lexcread.lexc-find-mc-fn+1/test]
     // [spec:foma:sem:lexc.lexc-find-mc-fn+1/test]
     #[test]
